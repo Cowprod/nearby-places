@@ -54,7 +54,12 @@ async function main() {
   h.api.wire();
   await h.callbacks.deviceready();
   assert.equal(h.state.geofences.length, 1, 'seules les zones actives et non visitées sont enregistrées');
-  assert.equal(h.state.geofences[0].radius, 1000);
+  assert.equal(h.state.geofences[0].radius, 500);
+  assert.equal(h.api.radius(), 500);
+  await h.api.setRadius(750);
+  assert.equal(h.state.geofences[0].radius, 750);
+  assert.equal(await h.api.setRadius(50), false);
+  assert.equal(h.api.radius(), 750);
 
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
   assert.equal(h.scheduled.length, 0, 'pas de notification avant consentement explicite');
