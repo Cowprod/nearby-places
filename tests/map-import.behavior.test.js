@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync('www/js/app.js', 'utf8');
 function harness() {
   const store = new Map(), elements = new Map();
+  let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
       append(...items){this.children.push(...items);},
@@ -22,7 +23,7 @@ function harness() {
     setItem(key,value){store.set(key,String(value));},
     removeItem(key){store.delete(key);}
   };
-  const context={window:{},document,localStorage,URL,URLSearchParams,AbortController,
+  const context={window:{confirm(){return confirmAllowed;}},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0)fn();return 1;},clearTimeout(){},
     fetch(){return new Promise(()=>{});},Promise,Date,Math,Number,Blob,console,Set,Map};
   vm.runInNewContext(source,context,{filename:'www/js/app.js'});
@@ -32,7 +33,9 @@ function harness() {
     return JSON.parse(store.get('nearby-places-v1')||'[]');
   }
   function status(){return document.getElementById('status').textContent;}
-  return {importURL,status,store,window:context.window};
+  return {importURL,status,store,window:context.window,
+    setConfirm(value){confirmAllowed=value;},
+    reset(){document.getElementById('reset').onclick();}};
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
 const h=harness();
@@ -52,13 +55,30 @@ list=h.importURL('nearbyplaces://import?ll=35.705,139.777&name=Lieu+ChatGPT');
 assert.equal(list.length,4);
 checkPlace(list[3],35.705,139.777);
 assert.equal(list[3].name,'Lieu ChatGPT');
+list=h.importURL('https://maps.apple.com/?q=35.709%2C139.780');
+assert.equal(list.length,5,'lien Apple q=latitude,longitude');
+checkPlace(list[4],35.709,139.780);
+list=h.importURL('https://www.google.com/maps/place/Good+Shop/@35.11,139.11,15z/data=!4m2!3d35.710!4d139.781?q=Good+Shop');
+assert.equal(list.length,6,'Google Maps avec q textuel et marqueur POI');
+checkPlace(list[5],35.710,139.781);
+assert.equal(list[5].name,'Good Shop');
+list=h.importURL('Voici mon lien de partage : https://maps.apple.com/?ll=35.711,139.782&q=Good%20Cafe');
+assert.equal(list.length,7,'URL de partage extraite du texte');
+checkPlace(list[6],35.711,139.782);
 list=h.importURL('https://maps.app.goo.gl/shortCode');
-assert.equal(list.length,4,'lien court non résolu ne crée rien');
+assert.equal(list.length,7,'lien court non résolu ne crée rien');
 assert.match(h.status(),/raccourci/);
 list=h.importURL('https://evil.example/redirect?ll=35.7,139.7');
-assert.equal(list.length,4,'hôte non autorisé');
+assert.equal(list.length,7,'hôte non autorisé');
 h.window.handleOpenURL('nearbyplaces://import?ll=35.706,139.778&name=Transmis');
 list=JSON.parse(h.store.get('nearby-places-v1'));
-assert.equal(list.length,5);
-assert.equal(list[4].name,'Transmis');
-console.log('PASS imports simulés : Apple Plans, Google Maps, ChatGPT, dédoublonnage, validation d’hôte, URL scheme');
+assert.equal(list.length,8);
+assert.equal(list[7].name,'Transmis');
+h.setConfirm(false);
+h.reset();
+assert.equal(JSON.parse(h.store.get('nearby-places-v1')).length,8,'annulation du reset préserve les lieux');
+h.setConfirm(true);
+h.reset();
+assert.equal(h.store.has('nearby-places-v1'),false,'réinitialisation explicite seulement');
+assert.equal(h.store.has('nearby-places-catalogue-v1'),false,'cache réinitialisé explicitement');
+console.log('PASS imports simulés : Apple q/ll, Google POI, ChatGPT, texte partagé, anti-doublon, host, reset confirmé');
