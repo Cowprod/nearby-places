@@ -68,6 +68,14 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 3. Ajouter éventuellement une synchronisation montante via un endpoint authentifié si l'ajout depuis l'app doit modifier Git.
 4. Ajouter recherche MapKit, extension Partager iOS et imports Takeout Google Maps en V2/V3.
 
+## Contrôles de robustesse avant le premier build iPhone
+
+- **Notification native à +10 secondes** : le bouton demande l'autorisation puis planifie une notification locale. Le journal distingue désormais la demande de planification, le callback natif `add`, le callback `trigger` et le clic utilisateur `click`. Seul un essai réel sur l'écran verrouillé établira que la bannière est effectivement affichée ; un callback `trigger` JavaScript peut ne pas arriver lorsque la WebView est suspendue.
+- **Import Maps** : les URL Apple Plans comportant `ll`, `coordinate`, `daddr` ou des coordonnées dans `q` sont interprétées. Pour Google Maps, les coordonnées `!3d...!4d...` du lieu priment sur les coordonnées `@latitude,longitude` du viewport et sur une recherche textuelle `q`. Les liens sans coordonnées exploitables restent refusés : aucun géocodage inventé.
+- **Préservation locale** : « Réinitialiser les lieux » exige désormais une confirmation explicite, car cette opération efface aussi les ajouts manuels et le cache du catalogue. Le paramètre local de rayon et le journal de diagnostic ne sont pas concernés. En cas de doute, conserver les données et utiliser l'export JSON ; l'export lui-même doit encore être confirmé dans WKWebView iOS.
+- **Premier build** : sur Mac, exécuter `npm install`, puis `npm run ios:add` uniquement si la plateforme iOS n'est pas encore installée ; ensuite ouvrir le workspace Xcode. Un build de validation sans installation sur iPhone peut être effectué sur macOS. **Aucun test natif, signature Xcode, notification écran verrouillé ni partage iOS ne sont attestés par les tests Node sur TouchDeck.**
+- **Partager** : en attendant une Share Extension native, l'option Raccourcis iOS décrite ci-dessous reste la voie proposée. Les URL courtes `maps.apple/p/...` et `maps.app.goo.gl/...` doivent être développées en une URL complète portant des coordonnées, faute de quoi leur import échoue proprement.
+
 ## Tests hors appareil
 `npm test` exécute les contrôles du catalogue et les tests comportementaux simulés. Cela ne constitue pas un build Xcode ni un essai sur iPhone.
 
