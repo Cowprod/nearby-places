@@ -74,7 +74,7 @@ function testNotification(){
  });
 }
 function onGeofence(event){
- logEvent('geofence',event&&event.action+' '+event.identifier);
+ logEvent('geofence',event ? (event.action+' '+event.identifier) : 'événement absent');
  if(!active || !event || event.action!=='ENTER')return;
  var place=catalogue.find(function(p){return p.id===event.identifier;});
  if(place && !place.visited && (!place.alert || place.alert.enabled!==false))notify(place);
@@ -106,18 +106,31 @@ function enable(){
    if(!granted){status('Permission notifications refusée');return false;}
    return sync().then(function(ok){
      if(!ok)return false;
-     return sdk.startGeofences().then(function(){active=true;storeSet(STORAGE,{enabled:true});status('Surveillance activée · rayon '+radius()+' m');logEvent('start',radius()+' m');return true;});
+     return sdk.startGeofences().then(function(){active=true;storeSet(STORAGE,{enabled:true,radiusMeters:RADIUS});status('Surveillance activée · rayon '+radius()+' m');logEvent('start',radius()+' m');return true;});
    });
  }).catch(function(error){status('Surveillance refusée : '+String(error));return false;});
 }
 function disable(){
  if(!sdk || !ready){status('Module natif absent');return Promise.resolve(false);}
- return sdk.stop().then(function(){active=false;storeSet(STORAGE,{enabled:false});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;})
+ return sdk.stop().then(function(){active=false;storeSet(STORAGE,{enabled:false,radiusMeters:RADIUS});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;})
  .catch(function(error){status('Arrêt impossible : '+String(error));return false;});
+}
+function setRadius(value){
+ var radius=Number(value);
+ if(!RADII.includes(radius)){status('Distance non autorisée');return Promise.resolve(false);}
+ if(RADIUS===radius){diagnostics();return Promise.resolve(true);}
+ RADIUS=radius;
+ storeSet(STORAGE,{enabled:active,radiusMeters:RADIUS});
+ status('Distance de déclenchement : '+RADIUS+' m (à vol d’oiseau)');
+ logEvent('rayon',RADIUS+' m');
+ return ready ? sync() : Promise.resolve(true);
 }
 function setPlaces(places){catalogue=Array.isArray(places)?places.slice():[];if(ready)return sync();return Promise.resolve(false);}
 function wire(){
- var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop'), test=document.getElementById('notification-test');
+ var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop'), test=document.getElementById('notification-test'), radius=document.getElementById('proximity-radius');
+ var prefs=storeGet(STORAGE,{});
+ if(RADII.includes(Number(prefs.radiusMeters)))RADIUS=Number(prefs.radiusMeters);
+ if(radius){radius.value=String(RADIUS);radius.onchange=function(){setRadius(radius.value);};}
  if(start)start.onclick=enable;
  if(stop)stop.onclick=disable;
  if(test)test.onclick=testNotification;
