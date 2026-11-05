@@ -102,21 +102,25 @@
     places.push(place);save();render();return place;
   }
   function parseMapsLink(raw){
-    var url=new URL(raw.trim()), host=url.hostname.toLowerCase(), coords=null, name='';
+    var input=String(raw||'').trim();
+    var extracted=input.match(/(?:nearbyplaces:\/\/|https:\/\/)[^\s<>]+/i);
+    if(extracted)input=extracted[0].replace(/[),.;]+$/,'');
+    var url=new URL(input), host=url.hostname.toLowerCase(), coords=null, name='';
     if(url.protocol==='nearbyplaces:' && url.hostname==='import'){
       var embedded=url.searchParams.get('url');
       if(embedded)return parseMapsLink(embedded);
       coords=url.searchParams.get('ll');
       name=url.searchParams.get('name')||'Lieu ChatGPT';
     }else if(url.protocol==='https:' && (host==='maps.apple.com'||host==='www.maps.apple.com')){
-      coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr');
+      coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr')||url.searchParams.get('sll');
       name=url.searchParams.get('q')||url.searchParams.get('name')||'Lieu Apple Plans';
     }else if(url.protocol==='https:' && (host==='www.google.com'||host==='google.com'||host==='maps.google.com'||host==='maps.app.goo.gl')){
       if(host==='maps.app.goo.gl')throw Error('Lien Google Maps raccourci : ouvrir dans le navigateur et copier l’URL complète.');
       var at=url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
       var marker=url.pathname.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
       coords=url.searchParams.get('q')||url.searchParams.get('query')||url.searchParams.get('ll')||(marker?marker[1]+','+marker[2]:null)||(at?at[1]+','+at[2]:null);
-      name=url.searchParams.get('q')||'Lieu Google Maps';
+      var pathName=url.pathname.match(/\/maps\/place\/([^/]+)/);
+      name=pathName?decodeURIComponent(pathName[1].replace(/\+/g,' ')):'Lieu Google Maps';
       if(!coords)throw Error('Coordonnées Google Maps absentes. Utiliser un lien complet avec latitude et longitude.');
     }else throw Error('Lien Apple Plans, Google Maps ou Nearby Places requis');
     if(!coords)throw Error('Ce lien ne contient pas de coordonnées.');
@@ -132,7 +136,7 @@
       Math.abs(p.longitude-parsed.longitude)<0.00001;});
     if(duplicate){status('Ce lieu existe déjà dans le catalogue');return false;}
     addManual(parsed.name,parsed.latitude,parsed.longitude,$('category').value);
-    status('Lieu Apple Plans ajouté localement');return true;
+    status('Lieu importé localement');return true;
   }
   function receiveSharedURL(value){
     try{return importMapsURL(value);}catch(error){
@@ -156,7 +160,7 @@
   $('maps-add').onclick=function(){
     try{
       if(importMapsURL($('maps-url').value))$('maps-url').value='';
-    }catch(error){status('Import Plans : '+error.message);}
+    }catch(error){status('Import du lieu : '+error.message);}
   };
   $('export').onclick=function(){
     var payload={schemaVersion:1,exportedAt:new Date().toISOString(),places:places.filter(function(p){return p.source&&p.source.type==='manual';}),
