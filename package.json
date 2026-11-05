@@ -1,6 +1,6 @@
 {
   "name": "nearby-places",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Cordova prototype for offline places and foreground GPS",
   "scripts": {
@@ -12,12 +12,16 @@
   },
   "devDependencies": {
     "cordova": "13.0.0",
-    "cordova-plugin-geolocation": "5.0.0"
+    "cordova-plugin-geolocation": "5.0.0",
+    "cordova-background-geolocation-lt": "5.5.1",
+    "cordova-plugin-local-notification": "1.2.3"
   },
   "cordova": {
     "platforms": [],
     "plugins": {
-      "cordova-plugin-geolocation": {}
+      "cordova-plugin-geolocation": {},
+      "cordova-background-geolocation-lt": {},
+      "cordova-plugin-local-notification": {}
     }
   }
 }
