@@ -17,7 +17,8 @@
     "cordova-plugin-local-notification": "1.2.3",
     "cordova-plugin-customurlscheme": "5.0.2",
     "cordova-ios": "8.1.1",
-    "cordova-plugin-device": "^3.0.0"
+    "cordova-plugin-device": "^3.0.0",
+    "cordova-plugin-openwith-ios": "2.0.0"
   },
   "cordova": {
     "platforms": [
@@ -34,7 +35,10 @@
       "cordova-plugin-customurlscheme": {
         "URL_SCHEME": "nearbyplaces"
       },
-      "cordova-plugin-device": {}
+      "cordova-plugin-device": {},
+      "cordova-plugin-openwith-ios": {
+        "IOS_URL_SCHEME": "nearbyplacesshare"
+      }
     }
   }
 }
