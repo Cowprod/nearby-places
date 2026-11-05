@@ -21,9 +21,29 @@
     });
   }
   function load(){
-    var local=localStorage.getItem(KEY);
-    if(local){try{places=JSON.parse(local);if(!Array.isArray(places))throw Error('invalid');render();status(places.length+' lieux chargés localement');return;}catch(e){localStorage.removeItem(KEY);}}
-    fetch('../data/places.sample.json').then(function(r){if(!r.ok)throw Error('HTTP '+r.status);return r.json();}).catch(function(){return fetch('data/places.sample.json').then(function(r){if(!r.ok)throw Error('HTTP '+r.status);return r.json();});}).then(function(d){places=d.places;save();render();status(places.length+' lieux de démonstration');}).catch(function(){places=[];render();status('Catalogue absent : ajouter un lieu manuellement.');});
+    var local=[];
+    try {
+      var raw=localStorage.getItem(KEY);
+      if(raw){local=JSON.parse(raw);if(!Array.isArray(local))local=[];}
+    } catch(e){local=[];}
+    fetch('data/places.sample.json',{cache:'no-store'}).then(function(r){
+      if(!r.ok)throw Error('HTTP '+r.status);
+      return r.json();
+    }).then(function(d){
+      if(!Array.isArray(d.places))throw Error('Catalogue invalide');
+      var byId=new Map(local.filter(function(p){return p && p.id;}).map(function(p){return [p.id,p];}));
+      var seeded=d.places.map(function(p){
+        var previous=byId.get(p.id);
+        if(previous)byId.delete(p.id);
+        return previous ? Object.assign({},p,{visited:!!previous.visited}) : p;
+      });
+      places=seeded.concat(Array.from(byId.values()));
+      save();render();
+      status(places.length+' lieux disponibles ('+d.places.length+' dans le catalogue Git)');
+    }).catch(function(){
+      places=local;render();
+      status(places.length+' lieux locaux — catalogue embarqué indisponible');
+    });
   }
   $('locate').onclick=function(){if(!navigator.geolocation){status('GPS indisponible');return;}status('Recherche GPS…');navigator.geolocation.getCurrentPosition(function(p){var c=p.coords;status('Position reçue ; précision '+Math.round(c.accuracy)+' m');render({latitude:c.latitude,longitude:c.longitude});},function(e){status('GPS : '+e.message);},{enableHighAccuracy:true,timeout:20000,maximumAge:0});};
   $('add').onclick=function(){var name=$('name').value.trim(),lat=Number($('lat').value),lon=Number($('lon').value);if(!name||!$('lat').value||!$('lon').value||!validPosition(lat,lon)){status('Nom et coordonnées valides obligatoires');return;}places.push({id:'manual-'+Date.now(),name:name,latitude:lat,longitude:lon,categories:[$('category').value],visited:false,alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}});save();render();status('Lieu ajouté localement');$('name').value='';};
