@@ -23,7 +23,8 @@ function harness(allowNotifications = true) {
   const root = {
     cordova: { plugins: { notification: { local: {
       requestPermission(callback) { callback(allowNotifications); },
-      schedule(payload) { scheduled.push(payload); }
+      schedule(payload) { scheduled.push(payload); },
+      on(name,callback) { callbacks['notification.'+name] = callback; }
     } } } },
     BackgroundGeolocation: sdk
   };
@@ -37,7 +38,7 @@ function harness(allowNotifications = true) {
     removeItem(key) { storage.delete(key); }
   };
   vm.runInNewContext(script, { window: root, document, localStorage, console, Promise, Date, Math });
-  return { api: root.NearbyProximity, callbacks, elements, scheduled, state };
+  return { api: root.NearbyProximity, callbacks, elements, scheduled, state, storage };
 }
 
 const place = {
@@ -84,6 +85,16 @@ async function main() {
   assert.equal(h.scheduled[1].trigger.in, 10);
   assert.equal(h.scheduled[1].trigger.unit, 'second');
   assert.equal(h.scheduled[1].id, 1999999999);
+  assert.equal(typeof h.callbacks['notification.add'], 'function');
+  assert.equal(typeof h.callbacks['notification.trigger'], 'function');
+  assert.equal(typeof h.callbacks['notification.click'], 'function');
+  h.callbacks['notification.add']({ id:1999999999 });
+  h.callbacks['notification.trigger']({ id:1999999999 });
+  h.callbacks['notification.click']({ id:1999999999 });
+  const events = JSON.parse(h.storage.get('nearby-places-events-v1') || '[]');
+  assert.ok(events.some(e => e.details.includes('événement natif trigger reçu')), 'événement trigger journalisé séparément de la programmation');
+  assert.ok(events.some(e => e.details.includes('ouverte par utilisateur')), 'clic utilisateur journalisé');
+  assert.equal(h.scheduled.length, 2, 'écouter les événements ne doit pas programmer d’autres notifications');
   const refused = harness(false);
   refused.api.setPlaces([place]);
   refused.api.wire();
@@ -92,6 +103,6 @@ async function main() {
   assert.equal(refused.state.starts, 0, 'permissions refusées : surveillance non démarrée');
   assert.equal(await refused.api.testNotification(), false, 'test notification sans permission refusé');
   assert.equal(refused.scheduled.length, 0);
-  console.log('PASS proximité (simulée) : rayon 500m/200m min, opt-in, filtres, notification +10s, refus, arrêt');
+  console.log('PASS proximité (simulée) : rayon 500m/200m min, opt-in, notification +10s, événements natifs fictifs, refus, arrêt');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
