@@ -28,6 +28,14 @@ for (const file of ['index.html', 'js/app.js', 'data/places.sample.json']) {
   assert.equal(read('public/' + file), read('www/' + file), 'preview différente de Cordova: ' + file);
 }
 new vm.Script(read('www/js/app.js'), {filename: 'www/js/app.js'});
+const appScript = read('www/js/app.js');
+assert.match(appScript, /https:\/\/raw\.githubusercontent\.com\/Cowprod\/nearby-places\/main\/data\/places\.sample\.json/);
+assert.match(appScript, /CATALOGUE_KEY/, 'cache distant persistant');
+assert.match(appScript, /function validCatalogue\(/, 'validation du catalogue distant');
+assert.match(appScript, /source\.type==='manual'/, 'préservation des lieux ajoutés manuellement');
+assert.match(appScript, /GitHub synchronisé/, 'état de synchronisation');
+assert.match(config, /<access origin="https:\/\/raw\.githubusercontent\.com"\s*\/>/, 'accès distant limité à GitHub');
+
 assert.match(read('www/index.html'), /src="js\/app\.js"/);
 assert.match(read('www/index.html'), /src="cordova\.js"/);
 assert.match(config, /NSLocationWhenInUseUsageDescription/);
@@ -40,3 +48,4 @@ assert.ok(pkg.cordova.plugins['cordova-plugin-geolocation']);
 console.log('PASS catalogue:', fixtures.places.length, 'lieux');
 console.log('PASS Cordova:', 'configuration iOS, GPS au premier plan, JS syntaxe');
 console.log('PASS preview:', 'public et www identiques (3 fichiers)');
+console.log('PASS synchronisation:', 'GitHub Raw, cache local, fusion des lieux manuels, accès restreint');
