@@ -6,7 +6,7 @@
   <description>Catalogue personnel de lieux et rappels de proximité</description>
   <author>Cowprod</author>
   <content src="index.html"/>
-  <access origin="*"/>
+  <access origin="https://raw.githubusercontent.com" />
   <allow-intent href="https://*/*"/>
   <preference name="Orientation" value="default"/>
   <preference name="scheme" value="app"/>
