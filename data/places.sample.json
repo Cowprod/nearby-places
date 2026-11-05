@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "collection": {
-    "id": "japan-2026-demo",
-    "name": "Japon - demonstration",
+    "id": "tokyo-2026",
+    "name": "Tokyo — lieux évoqués",
     "active": true
   },
   "categories": [
@@ -21,6 +21,14 @@
     {
       "id": "resto",
       "name": "Restaurant"
+    },
+    {
+      "id": "modelisme",
+      "name": "Modélisme"
+    },
+    {
+      "id": "occasion",
+      "name": "Occasion"
     }
   ],
   "places": [
@@ -61,6 +69,70 @@
       "source": {
         "type": "fixture"
       }
+    },
+    {
+      "id": "hardoff-kinshicho-marui",
+      "name": "HARD OFF Kinshichō Marui",
+      "latitude": 35.69485,
+      "longitude": 139.8133,
+      "categories": [
+        "musique",
+        "occasion"
+      ],
+      "notes": "5e étage de Marui. Pédales d'effets, guitares et matériel d'occasion. Coordonnées approximatives du bâtiment.",
+      "address": "3-9-10 Kōtōbashi, Sumida-ku, Tokyo (Marui 5F)",
+      "source": {
+        "type": "discussion",
+        "url": "https://www.hardoff.co.jp/shop/detail/?p=101131"
+      },
+      "alert": {
+        "enabled": true,
+        "walkingMinutes": 15,
+        "cooldownHours": 24
+      },
+      "visited": false
+    },
+    {
+      "id": "fender-flagship-tokyo",
+      "name": "Fender Flagship Tokyo",
+      "latitude": 35.66959,
+      "longitude": 139.70607,
+      "categories": [
+        "musique"
+      ],
+      "notes": "Flagship Fender à Harajuku, déjà évoqué comme visite réalisée.",
+      "address": "1-8-10 Jingūmae, Shibuya-ku, Tokyo",
+      "source": {
+        "type": "discussion",
+        "url": "https://www.fisforfender.com/en-us/store-information"
+      },
+      "alert": {
+        "enabled": true,
+        "walkingMinutes": 15,
+        "cooldownHours": 24
+      },
+      "visited": false
+    },
+    {
+      "id": "tamiya-plamodel-factory-tokyo",
+      "name": "Tamiya Plamodel Factory Tokyo",
+      "latitude": 35.66476,
+      "longitude": 139.75493,
+      "categories": [
+        "modelisme"
+      ],
+      "notes": "Flagship Tamiya à Shimbashi, déjà évoqué comme visite réalisée. Point GPS proche du site officiel.",
+      "address": "4-3-1 Shimbashi, Minato-ku, Tokyo",
+      "source": {
+        "type": "discussion",
+        "url": "https://www.tamiya-plamodelfactory.co.jp/"
+      },
+      "alert": {
+        "enabled": true,
+        "walkingMinutes": 15,
+        "cooldownHours": 24
+      },
+      "visited": false
     }
   ]
 }
