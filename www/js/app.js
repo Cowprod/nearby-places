@@ -106,7 +106,7 @@
     if(url.protocol!=='https:' || !['maps.apple.com','www.maps.apple.com'].includes(url.hostname))throw Error('Lien Apple Plans HTTPS requis');
     var coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr');
     if(!coords)throw Error('Ce lien ne contient pas de coordonnées. Les liens courts nécessitent une résolution supplémentaire.');
-    var match=coords.match(/^\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*$/);
+    var match=coords.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
     if(!match)throw Error('Coordonnées absentes ou non reconnues');
     var lat=Number(match[1]),lon=Number(match[2]);
     if(!validPosition(lat,lon))throw Error('Coordonnées invalides');
