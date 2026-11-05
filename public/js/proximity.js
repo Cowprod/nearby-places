@@ -1,7 +1,7 @@
 (function(root){
 'use strict';
 var STORAGE='nearby-places-proximity-v1', COOLDOWN='nearby-places-alerts-v1', EVENTS='nearby-places-events-v1';
-var RADIUS=1000, ready=false, active=false, catalogue=[], sdk=null;
+var RADIUS=500, ready=false, active=false, catalogue=[], sdk=null;
 function storeGet(key,fallback){try {return JSON.parse(localStorage.getItem(key))||fallback;}catch(e){return fallback;}}
 function storeSet(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch(e){console.warn('storage',e);}}
 function status(message){var e=document.getElementById('proximity-status');if(e)e.textContent=message;}
@@ -20,7 +20,20 @@ function diagnostics(){
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
 function notificationId(id){var n=7;for(var i=0;i<id.length;i++)n=(Math.imul(n,31)+id.charCodeAt(i))|0;return (n>>>0)%2000000000+1;}
 function currentPlaces(){return catalogue.filter(function(p){return !p.visited && (!p.alert || p.alert.enabled!==false) && typeof p.latitude==='number' && typeof p.longitude==='number';});}
-function fences(){return currentPlaces().map(function(p){return {identifier:p.id,latitude:p.latitude,longitude:p.longitude,radius:RADIUS,notifyOnEntry:true,notifyOnExit:false,extras:{name:p.name}};});}
+function radius(){
+ var saved=storeGet('nearby-places-radius-m',500);
+ var n=Number(saved);
+ return Number.isFinite(n)&&n>=100&&n<=2000?n:500;
+}
+function setRadius(value){
+ var n=Number(value);
+ if(!Number.isInteger(n)||n<100||n>2000){status('Rayon invalide (100 à 2000 m)');return Promise.resolve(false);}
+ storeSet('nearby-places-radius-m',n);
+ status('Rayon enregistré : '+n+' m');
+ logEvent('rayon',n+' m');
+ return sync();
+}
+function fences(){return currentPlaces().map(function(p){return {identifier:p.id,latitude:p.latitude,longitude:p.longitude,radius:radius(),notifyOnEntry:true,notifyOnExit:false,extras:{name:p.name}};});}
 function notify(place){
  var local=notificationPlugin(), history=storeGet(COOLDOWN,{}), now=Date.now();
  if(!place || !local)return;
@@ -93,7 +106,7 @@ function enable(){
    if(!granted){status('Permission notifications refusée');return false;}
    return sync().then(function(ok){
      if(!ok)return false;
-     return sdk.startGeofences().then(function(){active=true;storeSet(STORAGE,{enabled:true});status('Surveillance activée · rayon '+RADIUS+' m');logEvent('start',RADIUS+' m');return true;});
+     return sdk.startGeofences().then(function(){active=true;storeSet(STORAGE,{enabled:true});status('Surveillance activée · rayon '+radius()+' m');logEvent('start',radius()+' m');return true;});
    });
  }).catch(function(error){status('Surveillance refusée : '+String(error));return false;});
 }
@@ -108,9 +121,11 @@ function wire(){
  if(start)start.onclick=enable;
  if(stop)stop.onclick=disable;
  if(test)test.onclick=testNotification;
+ var input=document.getElementById('proximity-radius');
+ if(input){input.value=String(radius());input.onchange=function(){setRadius(input.value);};}
  diagnostics();
  if(!root.cordova){status('Mode web : uniquement la consultation et le GPS au premier plan');return;}
  document.addEventListener('deviceready',init,{once:true});
 }
-root.NearbyProximity={wire:wire,setPlaces:setPlaces,enable:enable,disable:disable,testNotification:testNotification,onGeofence:onGeofence,fences:fences};
+root.NearbyProximity={wire:wire,setPlaces:setPlaces,enable:enable,disable:disable,testNotification:testNotification,radius:radius,setRadius:setRadius,onGeofence:onGeofence,fences:fences};
 })(window);
