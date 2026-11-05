@@ -23,9 +23,9 @@ function notify(place){
  }catch(error){status('Erreur notification : '+String(error));}
 }
 function onGeofence(event){
- if(!event || event.action!=='ENTER')return;
+ if(!active || !event || event.action!=='ENTER')return;
  var place=catalogue.find(function(p){return p.id===event.identifier;});
- if(place && !place.visited)notify(place);
+ if(place && !place.visited && (!place.alert || place.alert.enabled!==false))notify(place);
 }
 function sync(){
  if(!ready || !sdk)return Promise.resolve(false);
