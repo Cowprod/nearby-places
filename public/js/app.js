@@ -113,14 +113,14 @@
       name=url.searchParams.get('q')||url.searchParams.get('name')||'Lieu Apple Plans';
     }else if(url.protocol==='https:' && (host==='www.google.com'||host==='google.com'||host==='maps.google.com'||host==='maps.app.goo.gl')){
       if(host==='maps.app.goo.gl')throw Error('Lien Google Maps raccourci : ouvrir dans le navigateur et copier l’URL complète.');
-      var at=url.pathname.match(/@(-?\\d+(?:\\.\\d+)?),(-?\\d+(?:\\.\\d+)?)/);
-      var marker=url.pathname.match(/!3d(-?\\d+(?:\\.\\d+)?)!4d(-?\\d+(?:\\.\\d+)?)/);
+      var at=url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+      var marker=url.pathname.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
       coords=url.searchParams.get('q')||url.searchParams.get('query')||url.searchParams.get('ll')||(marker?marker[1]+','+marker[2]:null)||(at?at[1]+','+at[2]:null);
       name=url.searchParams.get('q')||'Lieu Google Maps';
       if(!coords)throw Error('Coordonnées Google Maps absentes. Utiliser un lien complet avec latitude et longitude.');
     }else throw Error('Lien Apple Plans, Google Maps ou Nearby Places requis');
     if(!coords)throw Error('Ce lien ne contient pas de coordonnées.');
-    var match=coords.match(/^\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*$/);
+    var match=coords.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
     if(!match)throw Error('Coordonnées absentes ou non reconnues');
     var lat=Number(match[1]),lon=Number(match[2]);
     if(!validPosition(lat,lon))throw Error('Coordonnées invalides');
