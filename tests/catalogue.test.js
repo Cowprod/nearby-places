@@ -24,10 +24,11 @@ for (const p of fixtures.places) {
   assert.ok(typeof p.visited === 'boolean');
 }
 assert.deepEqual(JSON.parse(read('www/data/places.sample.json')), fixtures, 'catalogue Cordova vs source');
-for (const file of ['index.html', 'js/app.js', 'data/places.sample.json']) {
+for (const file of ['index.html', 'js/app.js', 'js/proximity.js', 'data/places.sample.json']) {
   assert.equal(read('public/' + file), read('www/' + file), 'preview différente de Cordova: ' + file);
 }
 new vm.Script(read('www/js/app.js'), {filename: 'www/js/app.js'});
+new vm.Script(read('www/js/proximity.js'), {filename: 'www/js/proximity.js'});
 const appScript = read('www/js/app.js');
 assert.match(appScript, /https:\/\/raw\.githubusercontent\.com\/Cowprod\/nearby-places\/main\/data\/places\.sample\.json/);
 assert.match(appScript, /CATALOGUE_KEY/, 'cache distant persistant');
@@ -42,7 +43,17 @@ assert.match(config, /<access origin="https:\/\/raw\.githubusercontent\.com"\s*\
 assert.match(read('www/index.html'), /src="js\/app\.js"/);
 assert.match(read('www/index.html'), /src="cordova\.js"/);
 assert.match(config, /NSLocationWhenInUseUsageDescription/);
-assert.doesNotMatch(config, /NSLocationAlwaysAndWhenInUseUsageDescription|UIBackgroundModes/);
+assert.match(config, /NSLocationAlwaysAndWhenInUseUsageDescription/);
+assert.match(config, /UIBackgroundModes/);
+assert.match(config, /NSMotionUsageDescription/);
+assert.equal(pkg.devDependencies['cordova-background-geolocation-lt'], '5.5.1');
+assert.equal(pkg.devDependencies['cordova-plugin-local-notification'], '1.2.3');
+assert.match(read('www/index.html'), /id="proximity-start"/);
+assert.match(read('www/index.html'), /id="proximity-stop"/);
+assert.match(read('www/index.html'), /src="js\/proximity\.js"/);
+assert.match(read('www/js/proximity.js'), /startGeofences\(/);
+assert.match(read('www/js/proximity.js'), /stopOnTerminate:false/);
+assert.match(read('www/js/proximity.js'), /requestPermission\(/);
 assert.match(config, /<content src="index\.html"\s*\/>/);
 assert.equal(pkg.devDependencies.cordova, '13.0.0');
 assert.equal(pkg.devDependencies['cordova-plugin-geolocation'], '5.0.0');
@@ -50,5 +61,6 @@ assert.equal(pkg.scripts['ios:add'], 'cordova platform add ios@8.1.1');
 assert.ok(pkg.cordova.plugins['cordova-plugin-geolocation']);
 console.log('PASS catalogue:', fixtures.places.length, 'lieux');
 console.log('PASS Cordova:', 'configuration iOS, GPS au premier plan, JS syntaxe');
-console.log('PASS preview:', 'public et www identiques (3 fichiers)');
+console.log('PASS preview:', 'public et www identiques (4 fichiers)');
+console.log('PASS géofencing:', 'plugins déclarés, permissions iOS, commandes de surveillance');
 console.log('PASS synchronisation:', 'GitHub Raw, cache local, fusion des lieux manuels, accès restreint');
