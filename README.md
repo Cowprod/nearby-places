@@ -72,3 +72,15 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 `npm test` exécute les contrôles du catalogue et les tests comportementaux simulés. Cela ne constitue pas un build Xcode ni un essai sur iPhone.
 
 La surveillance ne démarre que depuis « Activer la surveillance » sur un téléphone réel. Une prévisualisation web n'active pas de géofencing. Ne pas utiliser d'appareil physique sans instruction.
+
+## Partage depuis iOS sans extension native (Raccourcis)
+
+Pour éviter d'installer un plugin de Share Extension non vérifié dans le projet iOS existant, utiliser provisoirement un raccourci iOS visible dans la feuille Partager d'Apple Plans et Google Maps :
+
+1. Créer un raccourci « Ajouter à Nearby Places », activer « Afficher dans la feuille de partage », accepter les URL et le texte.
+2. Ajouter l'action « Obtenir les URL de l'entrée » (si l'entrée est du texte, utiliser son URL).
+3. Ajouter l'action « Encoder l'URL » avec l'URL reçue.
+4. Ajouter une action Texte : `nearbyplaces://import?url=[URL encodée]` (remplacer le segment entre crochets par la variable magique issue de l'étape 3).
+5. Ajouter « Ouvrir les URL » sur le texte précédent.
+
+Ce flux affiche le raccourci dans Partager mais **pas l'app elle-même**. La réception des liens courts Google Maps reste à valider : le raccourci peut avoir besoin de l'action « Développer l'URL » avant l'encodage, suivant la version iOS. Les liens dépourvus de coordonnées ne peuvent pas être ajoutés sans géocodage. Une extension native reste un chantier distinct, nécessitant une cible Xcode, un App Group et une validation de signature sur Mac.
