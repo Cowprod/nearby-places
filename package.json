@@ -14,14 +14,18 @@
     "cordova": "13.0.0",
     "cordova-plugin-geolocation": "5.0.0",
     "cordova-background-geolocation-lt": "5.5.1",
-    "cordova-plugin-local-notification": "1.2.3"
+    "cordova-plugin-local-notification": "1.2.3",
+    "cordova-plugin-customurlscheme": "5.0.2"
   },
   "cordova": {
     "platforms": [],
     "plugins": {
       "cordova-plugin-geolocation": {},
       "cordova-background-geolocation-lt": {},
-      "cordova-plugin-local-notification": {}
+      "cordova-plugin-local-notification": {},
+      "cordova-plugin-customurlscheme": {
+        "URL_SCHEME": "nearbyplaces"
+      }
     }
   }
 }
