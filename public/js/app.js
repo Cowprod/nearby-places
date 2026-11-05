@@ -18,6 +18,13 @@
       var meta=document.createElement('p');meta.className='tag';meta.textContent=(p.categories||[]).join(', ')+' · '+p.latitude.toFixed(5)+', '+p.longitude.toFixed(5);
       card.append(meta);
       if(position){var km=distanceMeters(position.latitude,position.longitude,p.latitude,p.longitude)/1000;var t=document.createElement('p');t.textContent=km.toFixed(2)+' km à vol d’oiseau (pas un temps de marche)';card.append(t);}
+      var directions=document.createElement('a');
+      directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(p.latitude+','+p.longitude)+'&dirflg=w';
+      directions.textContent='Itinéraire à pied (Plans)';
+      directions.target='_blank';
+      directions.rel='noopener noreferrer';
+      directions.style.color='#5bd7bb';
+      card.append(directions);
       $('places').append(card);
     });
   }
@@ -71,22 +78,24 @@
     fetchCatalogue(REMOTE_URL,8000).then(function(data){
       localStorage.setItem(CATALOGUE_KEY,JSON.stringify(data));
       mergeCatalogue(data,'GitHub synchronisé');
-    }).catch(function(){
+    }).catch(function(error){
+      var reason=error && error.name==='AbortError' ? 'délai dépassé' : 'réseau ou réponse invalide';
       var cached=readJSON(CATALOGUE_KEY,null);
       if(validCatalogue(cached)){
-        mergeCatalogue(cached,'hors ligne · cache GitHub');
+        mergeCatalogue(cached,'cache GitHub ('+reason+')');
         return;
       }
       fetchCatalogue('data/places.sample.json',5000).then(function(data){
-        mergeCatalogue(data,'catalogue embarqué · hors ligne');
+        mergeCatalogue(data,'catalogue embarqué ('+reason+')');
       }).catch(function(){
         render();
-        status(places.length+' lieux locaux · aucun catalogue disponible');
+        status(places.length+' lieux locaux · échec GitHub et catalogue embarqué ('+reason+')');
       });
     });
   }
   $('locate').onclick=function(){if(!navigator.geolocation){status('GPS indisponible');return;}status('Recherche GPS…');navigator.geolocation.getCurrentPosition(function(p){var c=p.coords;status('Position reçue ; précision '+Math.round(c.accuracy)+' m');render({latitude:c.latitude,longitude:c.longitude});},function(e){status('GPS : '+e.message);},{enableHighAccuracy:true,timeout:20000,maximumAge:0});};
   $('add').onclick=function(){var name=$('name').value.trim(),lat=Number($('lat').value),lon=Number($('lon').value);if(!name||!$('lat').value||!$('lon').value||!validPosition(lat,lon)){status('Nom et coordonnées valides obligatoires');return;}places.push({id:'manual-'+Date.now(),name:name,latitude:lat,longitude:lon,categories:[$('category').value],visited:false,alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}});save();render();status('Lieu ajouté localement');$('name').value='';};
-  $('reset').onclick=function(){localStorage.removeItem(KEY);load();};
+  $('refresh').onclick=load;
+  $('reset').onclick=function(){localStorage.removeItem(KEY);localStorage.removeItem(CATALOGUE_KEY);load();};
   document.addEventListener('deviceready',function(){status('Cordova prêt');},{once:true});load();
 }());
