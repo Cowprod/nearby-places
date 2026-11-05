@@ -125,11 +125,19 @@
       $('maps-url').value=value;status('Lien reçu : '+error.message);return false;
     }
   }
+  var pendingSharedURL=null;
+  window.handleOpenURL=function(url){
+    try{
+      var incoming=new URL(url);
+      if(incoming.protocol!=='nearbyplaces:' || incoming.hostname!=='import')return;
+      var shared=incoming.searchParams.get('url');
+      if(!shared)return;
+      pendingSharedURL=shared;
+      setTimeout(function(){if(pendingSharedURL){receiveSharedURL(pendingSharedURL);pendingSharedURL=null;}},0);
+    }catch(error){status('Lien partagé invalide');}
+  };
   document.addEventListener('resume',function(){
-    if(window.NearbyShareBridge && window.NearbyShareBridge.consume)window.NearbyShareBridge.consume(receiveSharedURL);
-  });
-  document.addEventListener('deviceready',function(){
-    if(window.NearbyShareBridge && window.NearbyShareBridge.consume)window.NearbyShareBridge.consume(receiveSharedURL);
+    if(pendingSharedURL){receiveSharedURL(pendingSharedURL);pendingSharedURL=null;}
   });
   $('maps-add').onclick=function(){
     try{
