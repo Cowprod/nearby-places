@@ -34,6 +34,9 @@ assert.match(appScript, /CATALOGUE_KEY/, 'cache distant persistant');
 assert.match(appScript, /function validCatalogue\(/, 'validation du catalogue distant');
 assert.match(appScript, /source\.type==='manual'/, 'préservation des lieux ajoutés manuellement');
 assert.match(appScript, /GitHub synchronisé/, 'état de synchronisation');
+assert.match(read('www/index.html'), /id="refresh"/, 'bouton actualisation');
+assert.match(appScript, /\$\('refresh'\)\.onclick=load/, 'rafraîchissement manuel');
+assert.match(appScript, /maps\.apple\.com/, 'itinéraire piéton via Plans');
 assert.match(config, /<access origin="https:\/\/raw\.githubusercontent\.com"\s*\/>/, 'accès distant limité à GitHub');
 
 assert.match(read('www/index.html'), /src="js\/app\.js"/);
