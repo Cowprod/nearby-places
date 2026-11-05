@@ -1,7 +1,7 @@
 (function(root){
 'use strict';
 var STORAGE='nearby-places-proximity-v1', COOLDOWN='nearby-places-alerts-v1', EVENTS='nearby-places-events-v1';
-var RADIUS=500, ready=false, active=false, catalogue=[], sdk=null;
+var ready=false, active=false, catalogue=[], sdk=null;
 function storeGet(key,fallback){try {return JSON.parse(localStorage.getItem(key))||fallback;}catch(e){return fallback;}}
 function storeSet(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch(e){console.warn('storage',e);}}
 function status(message){var e=document.getElementById('proximity-status');if(e)e.textContent=message;}
@@ -14,8 +14,8 @@ function diagnostics(){
  var el=document.getElementById('proximity-diagnostics');if(!el)return;
  var events=storeGet(EVENTS,[]);
  el.textContent='Module : '+(ready?'prêt':'indisponible')+' · surveillance : '+(active?'active':'inactive')+
-   ' · zones configurées : '+fences().length+'\\n'+
-   (Array.isArray(events)?events.slice(0,12).map(function(e){return e.at+' · '+e.kind+' · '+e.details;}).join('\\n'):'');
+   ' · rayon : '+radius()+' m · zones configurées : '+fences().length+'\n'+
+   (Array.isArray(events)?events.slice(0,12).map(function(e){return e.at+' · '+e.kind+' · '+e.details;}).join('\n'):'');
 }
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
 function notificationId(id){var n=7;for(var i=0;i<id.length;i++)n=(Math.imul(n,31)+id.charCodeAt(i))|0;return (n>>>0)%2000000000+1;}
@@ -23,11 +23,11 @@ function currentPlaces(){return catalogue.filter(function(p){return !p.visited &
 function radius(){
  var saved=storeGet('nearby-places-radius-m',500);
  var n=Number(saved);
- return Number.isFinite(n)&&n>=100&&n<=2000?n:500;
+ return Number.isFinite(n)&&n>=200&&n<=2000?n:500;
 }
 function setRadius(value){
  var n=Number(value);
- if(!Number.isInteger(n)||n<100||n>2000){status('Rayon invalide (100 à 2000 m)');return Promise.resolve(false);}
+ if(!Number.isInteger(n)||n<200||n>2000){status('Rayon invalide (200 à 2000 m)');return Promise.resolve(false);}
  storeSet('nearby-places-radius-m',n);
  status('Rayon enregistré : '+n+' m');
  logEvent('rayon',n+' m');
@@ -106,36 +106,22 @@ function enable(){
    if(!granted){status('Permission notifications refusée');return false;}
    return sync().then(function(ok){
      if(!ok)return false;
-     return sdk.startGeofences().then(function(){active=true;storeSet(STORAGE,{enabled:true,radiusMeters:RADIUS});status('Surveillance activée · rayon '+radius()+' m');logEvent('start',radius()+' m');return true;});
+     return sdk.startGeofences().then(function(){active=true;storeSet(STORAGE,{enabled:true});status('Surveillance activée · rayon '+radius()+' m');logEvent('start',radius()+' m');return true;});
    });
  }).catch(function(error){status('Surveillance refusée : '+String(error));return false;});
 }
 function disable(){
  if(!sdk || !ready){status('Module natif absent');return Promise.resolve(false);}
- return sdk.stop().then(function(){active=false;storeSet(STORAGE,{enabled:false,radiusMeters:RADIUS});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;})
+ return sdk.stop().then(function(){active=false;storeSet(STORAGE,{enabled:false});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;})
  .catch(function(error){status('Arrêt impossible : '+String(error));return false;});
-}
-function setRadius(value){
- var radius=Number(value);
- if(!RADII.includes(radius)){status('Distance non autorisée');return Promise.resolve(false);}
- if(RADIUS===radius){diagnostics();return Promise.resolve(true);}
- RADIUS=radius;
- storeSet(STORAGE,{enabled:active,radiusMeters:RADIUS});
- status('Distance de déclenchement : '+RADIUS+' m (à vol d’oiseau)');
- logEvent('rayon',RADIUS+' m');
- return ready ? sync() : Promise.resolve(true);
 }
 function setPlaces(places){catalogue=Array.isArray(places)?places.slice():[];if(ready)return sync();return Promise.resolve(false);}
 function wire(){
- var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop'), test=document.getElementById('notification-test'), radius=document.getElementById('proximity-radius');
- var prefs=storeGet(STORAGE,{});
- if(RADII.includes(Number(prefs.radiusMeters)))RADIUS=Number(prefs.radiusMeters);
- if(radius){radius.value=String(RADIUS);radius.onchange=function(){setRadius(radius.value);};}
+ var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop'), test=document.getElementById('notification-test'), input=document.getElementById('proximity-radius');
+ if(input){input.value=String(radius());input.onchange=function(){setRadius(input.value);};}
  if(start)start.onclick=enable;
  if(stop)stop.onclick=disable;
  if(test)test.onclick=testNotification;
- var input=document.getElementById('proximity-radius');
- if(input){input.value=String(radius());input.onchange=function(){setRadius(input.value);};}
  diagnostics();
  if(!root.cordova){status('Mode web : uniquement la consultation et le GPS au premier plan');return;}
  document.addEventListener('deviceready',init,{once:true});
