@@ -35,16 +35,16 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 - Le plugin Transistor Software fonctionne sans licence en **build DEBUG**, une licence est nécessaire pour RELEASE (y compris iOS avec la version 5). La compilation sur Mac et les plugins CocoaPods ne sont pas validés ici.
 - Le catalogue téléchargé et les nouvelles entrées sont stockés localement dans `localStorage` : désinstaller l'application peut effacer les modifications. Synchronisation **descendante uniquement**, de GitHub vers l'app ; elle est tentée à chaque ouverture.
 - Le client doit disposer d'un accès Internet pour la mise à jour. Aucune authentification et aucun secret GitHub embarqué. Le JSON est public : ne pas y mettre de données privées.
-- Le GPS et les notifications en arrière-plan ne sont pas encore disponibles. La requête réseau sur iOS doit être validée sur un appareil/simulateur Mac réel.
+- Le GPS ponctuel est câblé ; le géofencing natif et l'émission de notifications sont **implémentés mais uniquement testés en simulation JavaScript**. Leur fiabilité en arrière-plan et les autorisations iOS restent à valider sur iPhone. La requête réseau doit aussi être vérifiée en WebView iOS.
 - Les lieux de démonstration sont des fixtures (coordonnées indicatives), pas des recommandations touristiques.
 
 ## Arborescence
-- `config.xml` : configuration mobile et permission iOS au premier plan.
-- `package.json` : CLI Cordova et plugin GPS.
+- `config.xml` : configuration iOS, autorisations GPS Toujours/Pendant l'utilisation, mouvement et mode arrière-plan.
+- `package.json` : CLI Cordova, GPS, géofencing et notifications locales.
 - `www/` : interface Cordova et catalogue embarqué.
 - `public/` : prévisualisation statique devMcp.
 - `data/` : source de référence JSON.
-- `tests/` : tests de structure de données.
+- `tests/` : tests de structure et simulation des événements de géofencing (opt-in, anti-doublon, arrêt, refus de permission).
 
 ## Suite
 1. Compiler le projet dans Xcode puis tester les permissions « Toujours », la notification à l'entrée d'une zone, et les limites iOS écran verrouillé/terminaison. Si les callbacks JavaScript ne peuvent pas notifier après terminaison, déclencher la notification native iOS plutôt que prétendre à une fiabilité inexistante.
@@ -52,7 +52,7 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 3. Ajouter éventuellement une synchronisation montante via un endpoint authentifié si l'ajout depuis l'app doit modifier Git.
 4. Ajouter recherche MapKit, extension Partager iOS et imports Takeout Google Maps en V2/V3.
 
-## Test de catalogue
-`npm test`
+## Tests hors appareil
+`npm test` exécute les contrôles du catalogue et les tests comportementaux simulés. Cela ne constitue pas un build Xcode ni un essai sur iPhone.
 
 La surveillance ne démarre que depuis « Activer la surveillance » sur un téléphone réel. Une prévisualisation web n'active pas de géofencing. Ne pas utiliser d'appareil physique sans instruction.
