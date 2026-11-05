@@ -37,7 +37,7 @@ assert.match(appScript, /source\.type==='manual'/, 'préservation des lieux ajou
 assert.match(appScript, /GitHub synchronisé/, 'état de synchronisation');
 assert.match(read('www/index.html'), /id="refresh"/, 'bouton actualisation');
 assert.match(appScript, /\$\('refresh'\)\.onclick=load/, 'rafraîchissement manuel');
-assert.match(appScript, /maps\\.apple\\.com/, 'itinéraire piéton via Plans');
+assert.ok(appScript.includes('maps.apple.com'), 'itinéraire piéton via Plans');
 assert.match(config, /<access origin="https:\/\/raw\.githubusercontent\.com"\s*\/>/, 'accès distant limité à GitHub');
 
 assert.match(read('www/index.html'), /src="js\/app\.js"/);
