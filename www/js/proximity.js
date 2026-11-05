@@ -34,6 +34,32 @@ function notify(place){
    status('Notification de proximité : '+place.name);logEvent('notification',place.name);
  }catch(error){status('Erreur notification : '+String(error));}
 }
+function testNotification(){
+ var local=notificationPlugin();
+ if(!local){status('Test impossible : plugin de notifications indisponible');logEvent('test-notification','plugin absent');return Promise.resolve(false);}
+ return new Promise(function(resolve){
+   try{local.requestPermission(function(granted){resolve(!!granted);});}
+   catch(error){status('Permission notifications : '+String(error));resolve(false);}
+ }).then(function(granted){
+   if(!granted){status('Test annulé : notifications non autorisées');logEvent('test-notification','permission refusée');return false;}
+   try{
+     local.schedule({
+       id:1999999999,
+       title:'Nearby Places · test',
+       text:'Notification de test après 10 secondes, sans géofencing.',
+       trigger:{in:10,unit:'second'},
+       foreground:true
+     });
+     status('Notification programmée dans 10 s · verrouille l’iPhone');
+     logEvent('test-notification','programmée à +10 s (natif)');
+     return true;
+   }catch(error){
+     status('Échec programmation notification : '+String(error));
+     logEvent('test-notification','erreur '+String(error));
+     return false;
+   }
+ });
+}
 function onGeofence(event){
  logEvent('geofence',event&&event.action+' '+event.identifier);
  if(!active || !event || event.action!=='ENTER')return;
@@ -78,12 +104,13 @@ function disable(){
 }
 function setPlaces(places){catalogue=Array.isArray(places)?places.slice():[];if(ready)return sync();return Promise.resolve(false);}
 function wire(){
- var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop');
+ var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop'), test=document.getElementById('notification-test');
  if(start)start.onclick=enable;
  if(stop)stop.onclick=disable;
+ if(test)test.onclick=testNotification;
  diagnostics();
  if(!root.cordova){status('Mode web : uniquement la consultation et le GPS au premier plan');return;}
  document.addEventListener('deviceready',init,{once:true});
 }
-root.NearbyProximity={wire:wire,setPlaces:setPlaces,enable:enable,disable:disable,onGeofence:onGeofence,fences:fences};
+root.NearbyProximity={wire:wire,setPlaces:setPlaces,enable:enable,disable:disable,testNotification:testNotification,onGeofence:onGeofence,fences:fences};
 })(window);
