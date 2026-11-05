@@ -11,14 +11,13 @@
     "ios:requirements": "cordova requirements ios"
   },
   "devDependencies": {
-    "cordova": "13.0.0"
+    "cordova": "13.0.0",
+    "cordova-plugin-geolocation": "5.0.0"
   },
   "cordova": {
     "platforms": [],
     "plugins": {
-      "cordova-plugin-geolocation": {
-        "GEOLOCATION_USAGE_DESCRIPTION": "Votre position sert à afficher les lieux proches lorsque vous appuyez sur le bouton de localisation."
-      }
+      "cordova-plugin-geolocation": {}
     }
   }
 }
