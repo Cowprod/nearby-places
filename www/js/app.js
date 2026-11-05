@@ -112,11 +112,28 @@
     if(!validPosition(lat,lon))throw Error('Coordonnées invalides');
     return {name:url.searchParams.get('q')||url.searchParams.get('name')||'Lieu Apple Plans',latitude:lat,longitude:lon};
   }
+  function importMapsURL(value){
+    var parsed=parseMapsLink(value);
+    var duplicate=places.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 &&
+      Math.abs(p.longitude-parsed.longitude)<0.00001;});
+    if(duplicate){status('Ce lieu existe déjà dans le catalogue');return false;}
+    addManual(parsed.name,parsed.latitude,parsed.longitude,$('category').value);
+    status('Lieu Apple Plans ajouté localement');return true;
+  }
+  function receiveSharedURL(value){
+    try{return importMapsURL(value);}catch(error){
+      $('maps-url').value=value;status('Lien reçu : '+error.message);return false;
+    }
+  }
+  document.addEventListener('resume',function(){
+    if(window.NearbyShareBridge && window.NearbyShareBridge.consume)window.NearbyShareBridge.consume(receiveSharedURL);
+  });
+  document.addEventListener('deviceready',function(){
+    if(window.NearbyShareBridge && window.NearbyShareBridge.consume)window.NearbyShareBridge.consume(receiveSharedURL);
+  });
   $('maps-add').onclick=function(){
     try{
-      var parsed=parseMapsLink($('maps-url').value);
-      addManual(parsed.name,parsed.latitude,parsed.longitude,$('category').value);
-      status('Lieu importé depuis Apple Plans (local)');$('maps-url').value='';
+      if(importMapsURL($('maps-url').value))$('maps-url').value='';
     }catch(error){status('Import Plans : '+error.message);}
   };
   $('export').onclick=function(){
