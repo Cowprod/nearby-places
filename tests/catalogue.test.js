@@ -73,3 +73,6 @@ console.log('PASS Cordova:', 'configuration iOS, GPS au premier plan, JS syntaxe
 console.log('PASS preview:', 'public et www identiques (4 fichiers)');
 console.log('PASS géofencing:', 'plugins déclarés, permissions iOS, commandes de surveillance');
 console.log('PASS synchronisation:', 'GitHub Raw, cache local, fusion des lieux manuels, accès restreint');
+
+assert.match(require('fs').readFileSync('www/js/proximity.js','utf8'), /trigger:\\{in:10,unit:'second'\\}/);
+assert.match(require('fs').readFileSync('www/index.html','utf8'), /id="notification-test"/);
