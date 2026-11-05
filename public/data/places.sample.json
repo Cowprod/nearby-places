@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "collection": {
+    "id": "japan-2026-demo",
+    "name": "Japon - demonstration",
+    "active": true
+  },
+  "categories": [
+    {
+      "id": "transport",
+      "name": "Transport"
+    },
+    {
+      "id": "culture",
+      "name": "Culture"
+    },
+    {
+      "id": "musique",
+      "name": "Musique"
+    },
+    {
+      "id": "resto",
+      "name": "Restaurant"
+    }
+  ],
+  "places": [
+    {
+      "id": "tokyo-station",
+      "name": "Tokyo Station",
+      "latitude": 35.681236,
+      "longitude": 139.767125,
+      "categories": [
+        "transport"
+      ],
+      "notes": "Point de test - coordonnees approximatives",
+      "alert": {
+        "enabled": true,
+        "walkingMinutes": 15,
+        "cooldownHours": 24
+      },
+      "visited": false,
+      "source": {
+        "type": "fixture"
+      }
+    },
+    {
+      "id": "sensoji",
+      "name": "Senso-ji",
+      "latitude": 35.714765,
+      "longitude": 139.796655,
+      "categories": [
+        "culture"
+      ],
+      "notes": "Point de test - verifier la position avant utilisation reelle",
+      "alert": {
+        "enabled": true,
+        "walkingMinutes": 15,
+        "cooldownHours": 24
+      },
+      "visited": false,
+      "source": {
+        "type": "fixture"
+      }
+    }
+  ]
+}
