@@ -1,6 +1,7 @@
 (function () {
   'use strict';
-  var KEY = 'nearby-places-v1', places = [];
+  var KEY = 'nearby-places-v1', CATALOGUE_KEY = 'nearby-places-catalogue-v1', places = [];
+  var REMOTE_URL = 'https://raw.githubusercontent.com/Cowprod/nearby-places/main/data/places.sample.json';
   var $ = function (id) { return document.getElementById(id); };
   function validPosition(lat, lon) { return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; }
   function distanceMeters(a,b,c,d) { var r=Math.PI/180, x=(c-a)*r, y=(d-b)*r, q=Math.sin(x/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)**2;return 12742000*Math.asin(Math.min(1,Math.sqrt(q))); }
@@ -20,29 +21,68 @@
       $('places').append(card);
     });
   }
-  function load(){
-    var local=[];
+  function readJSON(key, fallback){
     try {
-      var raw=localStorage.getItem(KEY);
-      if(raw){local=JSON.parse(raw);if(!Array.isArray(local))local=[];}
-    } catch(e){local=[];}
-    fetch('data/places.sample.json',{cache:'no-store'}).then(function(r){
+      var raw=localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch(e){ return fallback; }
+  }
+  function validCatalogue(data){
+    if(!data || data.schemaVersion!==1 || !Array.isArray(data.places) || data.places.length>5000) return false;
+    var seen=new Set();
+    return data.places.every(function(p){
+      if(!p || typeof p.id!=='string' || !p.id || seen.has(p.id) ||
+         typeof p.name!=='string' || !p.name.trim() ||
+         !validPosition(p.latitude,p.longitude) || !Array.isArray(p.categories)) return false;
+      seen.add(p.id);return true;
+    });
+  }
+  function mergeCatalogue(data, label){
+    var previous=readJSON(KEY,[]);
+    if(!Array.isArray(previous))previous=[];
+    var byId=new Map(previous.filter(function(p){return p && typeof p.id==='string';}).map(function(p){return [p.id,p];}));
+    var incoming=data.places.map(function(p){
+      var old=byId.get(p.id);
+      byId.delete(p.id);
+      return Object.assign({},p,{visited:old ? !!old.visited : !!p.visited});
+    });
+    // Keep user-entered places and locally edited places when a catalogue is refreshed.
+    var manuallyAdded=Array.from(byId.values()).filter(function(p){return p.source && p.source.type==='manual';});
+    places=incoming.concat(manuallyAdded);
+    save();render();
+    status(places.length+' lieux · '+label);
+  }
+  function fetchCatalogue(url, timeoutMs){
+    var controller=new AbortController();
+    var timer=setTimeout(function(){controller.abort();},timeoutMs);
+    return fetch(url,{cache:'no-store',signal:controller.signal}).then(function(r){
       if(!r.ok)throw Error('HTTP '+r.status);
       return r.json();
-    }).then(function(d){
-      if(!Array.isArray(d.places))throw Error('Catalogue invalide');
-      var byId=new Map(local.filter(function(p){return p && p.id;}).map(function(p){return [p.id,p];}));
-      var seeded=d.places.map(function(p){
-        var previous=byId.get(p.id);
-        if(previous)byId.delete(p.id);
-        return previous ? Object.assign({},p,{visited:!!previous.visited}) : p;
-      });
-      places=seeded.concat(Array.from(byId.values()));
-      save();render();
-      status(places.length+' lieux disponibles ('+d.places.length+' dans le catalogue Git)');
+    }).then(function(data){
+      if(!validCatalogue(data))throw Error('Catalogue non valide');
+      return data;
+    }).finally(function(){clearTimeout(timer);});
+  }
+  function load(){
+    var local=readJSON(KEY,[]);
+    places=Array.isArray(local)?local:[];
+    render();
+    status(places.length+' lieux locaux · synchronisation GitHub…');
+    fetchCatalogue(REMOTE_URL,8000).then(function(data){
+      localStorage.setItem(CATALOGUE_KEY,JSON.stringify(data));
+      mergeCatalogue(data,'GitHub synchronisé');
     }).catch(function(){
-      places=local;render();
-      status(places.length+' lieux locaux — catalogue embarqué indisponible');
+      var cached=readJSON(CATALOGUE_KEY,null);
+      if(validCatalogue(cached)){
+        mergeCatalogue(cached,'hors ligne · cache GitHub');
+        return;
+      }
+      fetchCatalogue('data/places.sample.json',5000).then(function(data){
+        mergeCatalogue(data,'catalogue embarqué · hors ligne');
+      }).catch(function(){
+        render();
+        status(places.length+' lieux locaux · aucun catalogue disponible');
+      });
     });
   }
   $('locate').onclick=function(){if(!navigator.geolocation){status('GPS indisponible');return;}status('Recherche GPS…');navigator.geolocation.getCurrentPosition(function(p){var c=p.coords;status('Position reçue ; précision '+Math.round(c.accuracy)+' m');render({latitude:c.latitude,longitude:c.longitude});},function(e){status('GPS : '+e.message);},{enableHighAccuracy:true,timeout:20000,maximumAge:0});};
