@@ -92,3 +92,11 @@ Pour éviter d'installer un plugin de Share Extension non vérifié dans le proj
 5. Ajouter « Ouvrir les URL » sur le texte précédent.
 
 Ce flux affiche le raccourci dans Partager mais **pas l'app elle-même**. La réception des liens courts Google Maps reste à valider : le raccourci peut avoir besoin de l'action « Développer l'URL » avant l'encodage, suivant la version iOS. Les liens dépourvus de coordonnées ne peuvent pas être ajoutés sans géocodage. Une extension native reste un chantier distinct, nécessitant une cible Xcode, un App Group et une validation de signature sur Mac.
+
+## Extension native iOS (expérimentale, configuration Xcode requise)
+
+Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExtension` pour recevoir les URL/textes depuis la feuille Partager. `www/js/app.js` reçoit `cordova.openwith.addHandler` et transmet les URL au parseur existant. Le plugin utilise le schéma distinct `nearbyplacesshare` pour réveiller l'application, et le schéma existant `nearbyplaces` pour les liens ChatGPT.
+
+**Configuration indispensable sur Mac :** après `cordova prepare ios`, ouvrir `platforms/ios/App.xcworkspace` ; dans Signing & Capabilities, activer **App Groups** sur **App** et **ShareExtension** avec exactement `group.fr.cowprod.nearbyplaces.shareextension`, choisir la même équipe de signature, et vérifier des identifiants de bundle distincts (`fr.cowprod.nearbyplaces` et `fr.cowprod.nearbyplaces.shareextension`). Vérifier que la cible extension possède le même deployment target minimum que l'application. Le plugin n'automatise pas l'activation App Groups.
+
+**Limites :** ce plugin ancien n'est pas encore validé avec Cordova iOS 8.1.1 / iOS 26 sur iPhone ; la compilation et le lancement doivent être contrôlés dans Xcode. Les liens courts Google Maps nécessitent encore une résolution. Ne pas désinstaller l'app existante ni supprimer `platforms/ios` pour tenter une réparation sans sauvegarde.
