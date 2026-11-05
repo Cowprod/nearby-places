@@ -1,0 +1,14 @@
+{
+  "name": "nearby-places",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline-first Cordova place catalogue prototype",
+  "scripts": {
+    "test": "node tests/catalogue.test.js"
+  },
+  "devDependencies": {},
+  "cordova": {
+    "platforms": [],
+    "plugins": {}
+  }
+}
