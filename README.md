@@ -8,7 +8,7 @@ Application Cordova iOS-first (Android plus tard) pour mémoriser des lieux et r
 - Les lieux ajoutés manuellement et le statut « visité » sont conservés lors des mises à jour du catalogue distant. Les modifications manuelles restent locales : elles ne sont pas poussées sur GitHub.
 - Liste des lieux, ajout manuel, marquage « visité », stockage local navigateur.
 - Bouton **Tester ma position** : demande l'autorisation iOS **Pendant l'utilisation** et affiche une distance à vol d'oiseau.
-- Géofencing expérimental avec `cordova-background-geolocation-lt@5.5.1` en mode **startGeofences**, sans suivi GPS continu. Boutons Activer/Arrêter et rayon de test 1000 m. Notifications locales via `cordova-plugin-local-notification@1.2.3`.
+- Géofencing expérimental avec `cordova-background-geolocation-lt@5.5.1` en mode **startGeofences**, sans suivi GPS continu. Boutons Activer/Arrêter et rayon configurable (500 m par défaut, de 200 à 2000 m). Notifications locales via `cordova-plugin-local-notification@1.2.3`.
 - L'utilisateur doit autoriser la localisation « Toujours » et les notifications. Le géofencing ne se lance **pas automatiquement à la première installation**.
 - Les notifications sont émises lors des événements de géofencing reçus par JavaScript. **La notification après terminaison ou suspension complète de la WebView n'est pas garantie** : test réel iPhone indispensable.
 - L'écran de prévisualisation (devMcp) utilise `public/`, copie de `www/` : les modifications doivent être reportées dans les deux dossiers tant qu'un mécanisme de génération n'est pas en place.
@@ -32,14 +32,22 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 ## Partage Apple Plans (première étape : lien profond iOS)
 - L'app accepte désormais le schéma `nearbyplaces://import?url=...`, où `url` contient un lien Apple Plans encodé en URL.
 - Un raccourci iOS depuis la feuille de partage peut recevoir une URL, construire `nearbyplaces://import?url=<URL encodée>`, puis utiliser l'action **Ouvrir les URL**. L'application doit être installée avec le nouveau plugin et recompilée.
-- L'import accepte actuellement uniquement les URL Apple Plans contenant des coordonnées `ll`, `coordinate` ou `daddr`. Les liens courts et certaines fiches Plans ne fonctionneront pas encore.
+- L'import accepte actuellement uniquement les URL Apple Plans contenant des coordonnées `ll`, `coordinate` ou `daddr`. Les liens courts (`maps.apple`, `maps.app.goo.gl`) et certaines fiches Plans ne fonctionneront pas encore.
 - **Il ne s'agit pas encore d'une Share Extension native** : Nearby Places n'apparaît pas automatiquement comme destination de partage. Cette étape prépare le traitement et le dédoublonnage, avant l'extension native.
 - Les lieux restent dans `localStorage` avec les mêmes clés et sont immédiatement transmis au module de géofencing.
 - Ne pas supprimer l'app lors de la mise à jour. Sauvegarder les lieux personnels avec **Exporter JSON** avant toute opération risquée.
 
+## Essai des lieux pendant le séjour
+- **Rayon local** : saisir une distance de 200 à 2000 m dans « Rayon de déclenchement », valeur initiale 500 m. Ce choix est conservé localement et les zones natives sont resynchronisées si le module est prêt. iOS peut déclencher avec du retard; 500 m est une distance géographique et non une garantie de précision au mètre.
+- **Notification sur écran verrouillé** : appuyer sur « Tester une notification dans 10 s », accepter les notifications, puis verrouiller l'iPhone. Cette notification est planifiée par le plugin natif indépendamment du GPS et doit être validée sur téléphone.
+- **Depuis Apple Plans** : copier une URL longue avec `ll`, `coordinate` ou `daddr`; coller dans l'import. Une URL `https://maps.apple.com/place?coordinate=35.7,139.7&name=Exemple` est acceptée.
+- **Depuis Google Maps** : coller une URL complète contenant des coordonnées (par ex. `https://www.google.com/maps/search/?api=1&query=35.7%2C139.7` ou une URL de fiche avec `!3d...!4d...`). Une URL raccourcie `maps.app.goo.gl` n'est pas encore résolue.
+- **Depuis une conversation ChatGPT** : demander un lien au format `nearbyplaces://import?ll=LATITUDE,LONGITUDE&name=NOM_ENCODE`, puis le coller dans le champ Importer. Exemple : `nearbyplaces://import?ll=35.7001,139.7702&name=Lieu%20ChatGPT`. Pour l'ouverture automatique, un raccourci iOS peut recevoir ce lien et utiliser **Ouvrir les URL**. Cette fonction n'est pas une intégration native ChatGPT.
+- Le partage **direct** depuis le bouton Partager d'Apple Plans ou Google Maps vers l'app reste à réaliser via une Share Extension iOS. La version actuelle accepte seulement le collage ou un raccourci iOS. Ne pas annoncer ce partage comme terminé.
+
 ## Limitations
 - Le plugin officiel `cordova-plugin-geolocation` permet la mesure GPS ponctuelle. Le plugin natif Transistor Software gère la surveillance de zones à partir d'une autorisation explicite.
-- La V0.2 demande `Always` et déclare `UIBackgroundModes/location`. Le rayon de 1000 m est purement géographique : MapKit et les vraies 15 minutes à pied sont à venir. Ne pas vendre cette V0.2 comme un calcul d'itinéraire.
+- La V0.2 demande `Always` et déclare `UIBackgroundModes/location`. Le rayon local de 500 m par défaut (réglable de 200 à 2000 m) est purement géographique : MapKit et les vraies 15 minutes à pied sont à venir. Ne pas vendre cette V0.2 comme un calcul d'itinéraire.
 - Le plugin Transistor Software fonctionne sans licence en **build DEBUG**, une licence est nécessaire pour RELEASE (y compris iOS avec la version 5). La compilation sur Mac et les plugins CocoaPods ne sont pas validés ici.
 - Le catalogue téléchargé et les nouvelles entrées sont stockés localement dans `localStorage` : désinstaller l'application peut effacer les modifications. Synchronisation **descendante uniquement**, de GitHub vers l'app ; elle est tentée à chaque ouverture.
 - Le client doit disposer d'un accès Internet pour la mise à jour. Aucune authentification et aucun secret GitHub embarqué. Le JSON est public : ne pas y mettre de données privées.
