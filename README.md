@@ -1,9 +1,11 @@
 # Nearby Places
 
-Application Cordova iOS-first (Android plus tard) pour mémoriser des lieux et recevoir, à terme, une notification quand on passe à proximité. Dépôt privé `Cowprod/nearby-places`.
+Application Cordova iOS-first (Android plus tard) pour mémoriser des lieux et recevoir, à terme, une notification quand on passe à proximité. Dépôt public `Cowprod/nearby-places`.
 
 ## Première version prête à essayer sur Mac : V0.1.1
-- Catalogue hors ligne de 2 lieux de démonstration : `www/data/places.sample.json`.
+- Catalogue de 5 lieux (Tokyo Station, Sensō-ji, HARD OFF Kinshichō Marui, Fender Flagship Tokyo, Tamiya Plamodel Factory Tokyo). Le fichier `www/data/places.sample.json` est embarqué pour les utilisations hors ligne.
+- Au lancement : tentative de téléchargement depuis `https://raw.githubusercontent.com/Cowprod/nearby-places/main/data/places.sample.json` (délai maximum 8 secondes). Si échec : dernier cache GitHub, puis catalogue embarqué.
+- Les lieux ajoutés manuellement et le statut « visité » sont conservés lors des mises à jour du catalogue distant. Les modifications manuelles restent locales : elles ne sont pas poussées sur GitHub.
 - Liste des lieux, ajout manuel, marquage « visité », stockage local navigateur.
 - Bouton **Tester ma position** : demande l'autorisation iOS **Pendant l'utilisation** et affiche une distance à vol d'oiseau.
 - Pas de suivi arrière-plan, de géofencing ni de notification locale dans cette première compilation. La V0.2 ajoutera le plugin Swift approprié.
@@ -12,7 +14,7 @@ Application Cordova iOS-first (Android plus tard) pour mémoriser des lieux et r
 ## Compilation iOS sur le MacBook
 Prérequis : Xcode opérationnel, outils CLI Xcode, Node.js >=20.17, CocoaPods >=1.16, git. Le build iOS est possible **uniquement sur macOS**. Le projet utilise Cordova CLI 13.0.0 et demande cordova-ios 8.1.1.
 
-Cloner le dépôt (accès privé GitHub nécessaire), puis dans son dossier :
+Cloner le dépôt public, puis dans son dossier :
 
 ```sh
 npm install
@@ -28,7 +30,9 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 ## Limitations
 - Le plugin officiel `cordova-plugin-geolocation` est déclaré, ainsi que `NSLocationWhenInUseUsageDescription`. Le GPS ne démarre que lorsqu'on appuie sur le bouton.
 - Il ne doit pas être considéré comme un tracker de position tâche de fond. Les clés de permission `Always` et le mode `location` ne seront ajoutés qu'avec une implémentation native justifiant leur usage.
-- Le catalogue et les nouvelles entrées sont stockés localement par `localStorage` : désinstaller l'application peut effacer les modifications. Pas encore de synchronisation Git côté mobile.
+- Le catalogue téléchargé et les nouvelles entrées sont stockés localement dans `localStorage` : désinstaller l'application peut effacer les modifications. Synchronisation **descendante uniquement**, de GitHub vers l'app ; elle est tentée à chaque ouverture.
+- Le client doit disposer d'un accès Internet pour la mise à jour. Aucune authentification et aucun secret GitHub embarqué. Le JSON est public : ne pas y mettre de données privées.
+- Le GPS et les notifications en arrière-plan ne sont pas encore disponibles. La requête réseau sur iOS doit être validée sur un appareil/simulateur Mac réel.
 - Les lieux de démonstration sont des fixtures (coordonnées indicatives), pas des recommandations touristiques.
 
 ## Arborescence
@@ -42,7 +46,7 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 ## Suite
 1. Créer un vrai plugin iOS Swift Core Location pour géofencing et notifications locales, avec essais écran verrouillé.
 2. Réutiliser l'interface sur Android avec GeofencingClient et permissions modernes.
-3. Synchroniser les lieux via endpoint sécurisé devMcp/Git, sans secrets embarqués dans l'application.
+3. Ajouter éventuellement une synchronisation montante via un endpoint authentifié si l'ajout depuis l'app doit modifier Git.
 4. Ajouter recherche MapKit, extension Partager iOS et imports Takeout Google Maps en V2/V3.
 
 ## Test de catalogue
