@@ -94,8 +94,61 @@
       });
     });
   }
+  function addManual(name,lat,lon,category){
+    if(!name || !validPosition(lat,lon))throw Error('Nom et coordonnées invalides');
+    var place={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),name:name,
+      latitude:lat,longitude:lon,categories:[category||'culture'],visited:false,
+      alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}};
+    places.push(place);save();render();return place;
+  }
+  function parseMapsLink(raw){
+    var url=new URL(raw.trim());
+    if(url.protocol!=='https:' || !['maps.apple.com','www.maps.apple.com'].includes(url.hostname))throw Error('Lien Apple Plans HTTPS requis');
+    var coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr');
+    if(!coords)throw Error('Ce lien ne contient pas de coordonnées. Les liens courts nécessitent une résolution supplémentaire.');
+    var match=coords.match(/^\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*$/);
+    if(!match)throw Error('Coordonnées absentes ou non reconnues');
+    var lat=Number(match[1]),lon=Number(match[2]);
+    if(!validPosition(lat,lon))throw Error('Coordonnées invalides');
+    return {name:url.searchParams.get('q')||url.searchParams.get('name')||'Lieu Apple Plans',latitude:lat,longitude:lon};
+  }
+  $('maps-add').onclick=function(){
+    try{
+      var parsed=parseMapsLink($('maps-url').value);
+      addManual(parsed.name,parsed.latitude,parsed.longitude,$('category').value);
+      status('Lieu importé depuis Apple Plans (local)');$('maps-url').value='';
+    }catch(error){status('Import Plans : '+error.message);}
+  };
+  $('export').onclick=function(){
+    var payload={schemaVersion:1,exportedAt:new Date().toISOString(),places:places.filter(function(p){return p.source&&p.source.type==='manual';}),
+      visited:places.filter(function(p){return p.visited;}).map(function(p){return p.id;})};
+    var blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;
+    link.download='nearby-places-sauvegarde.json';document.body.append(link);link.click();link.remove();
+    setTimeout(function(){URL.revokeObjectURL(url);},30000);
+    status('Sauvegarde JSON préparée · '+payload.places.length+' lieux personnels');
+  };
+  $('import').onchange=function(event){
+    var file=event.target.files&&event.target.files[0];if(!file)return;
+    file.text().then(function(raw){
+      var data=JSON.parse(raw);
+      if(data.schemaVersion!==1||!Array.isArray(data.places)||data.places.length>5000||!Array.isArray(data.visited))throw Error('Format de sauvegarde invalide');
+      var ids=new Set();
+      data.places.forEach(function(p){
+        if(!p||typeof p.id!=='string'||!p.id.startsWith('manual-')||ids.has(p.id)||
+          typeof p.name!=='string'||!p.name.trim()||!validPosition(p.latitude,p.longitude)||
+          !Array.isArray(p.categories)||!p.source||p.source.type!=='manual')throw Error('Lieu invalide');
+        ids.add(p.id);
+      });
+      var merged=new Map(places.map(function(p){return [p.id,p];}));
+      data.places.forEach(function(p){merged.set(p.id,p);});
+      var visited=new Set(data.visited.filter(function(id){return typeof id==='string';}));
+      places=Array.from(merged.values()).map(function(p){return Object.assign({},p,{visited:!!p.visited||visited.has(p.id)});});
+      save();render();status('Sauvegarde restaurée · '+data.places.length+' lieux personnels');
+    }).catch(function(error){status('Import refusé : '+error.message);}).finally(function(){event.target.value='';});
+  };
   $('locate').onclick=function(){if(!navigator.geolocation){status('GPS indisponible');return;}status('Recherche GPS…');navigator.geolocation.getCurrentPosition(function(p){var c=p.coords;status('Position reçue ; précision '+Math.round(c.accuracy)+' m');render({latitude:c.latitude,longitude:c.longitude});},function(e){status('GPS : '+e.message);},{enableHighAccuracy:true,timeout:20000,maximumAge:0});};
-  $('add').onclick=function(){var name=$('name').value.trim(),lat=Number($('lat').value),lon=Number($('lon').value);if(!name||!$('lat').value||!$('lon').value||!validPosition(lat,lon)){status('Nom et coordonnées valides obligatoires');return;}places.push({id:'manual-'+Date.now(),name:name,latitude:lat,longitude:lon,categories:[$('category').value],visited:false,alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}});save();render();status('Lieu ajouté localement');$('name').value='';};
+  $('add').onclick=function(){var name=$('name').value.trim(),lat=Number($('lat').value),lon=Number($('lon').value);if(!name||!$('lat').value||!$('lon').value||!validPosition(lat,lon)){status('Nom et coordonnées valides obligatoires');return;}addManual(name,lat,lon,$('category').value);status('Lieu ajouté localement');$('name').value='';};
   $('refresh').onclick=load;
   $('reset').onclick=function(){localStorage.removeItem(KEY);localStorage.removeItem(CATALOGUE_KEY);load();};
   if(window.NearbyProximity)window.NearbyProximity.wire();
