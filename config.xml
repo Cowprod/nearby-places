@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<widget id="fr.cowprod.nearbyplaces" version="0.1.1"
+<widget id="fr.cowprod.nearbyplaces" version="0.2.0"
   xmlns="http://www.w3.org/ns/widgets"
   xmlns:cdv="http://cordova.apache.org/ns/1.0">
   <name>Nearby Places</name>
@@ -16,5 +16,8 @@
     <edit-config target="NSLocationWhenInUseUsageDescription" file="*-Info.plist" mode="merge">
       <string>Votre position est utilisée uniquement à votre demande pour afficher la distance des lieux enregistrés.</string>
     </edit-config>
+    <config-file target="*-Info.plist" parent="NSLocationAlwaysAndWhenInUseUsageDescription"><string>La localisation en arrière-plan permet de signaler les lieux enregistrés pendant vos déplacements, même écran verrouillé.</string></config-file>
+    <config-file target="*-Info.plist" parent="NSMotionUsageDescription"><string>Les mouvements permettent d'optimiser les alertes et la consommation de batterie.</string></config-file>
+    <config-file target="*-Info.plist" parent="UIBackgroundModes"><array><string>location</string></array></config-file>
   </platform>
 </widget>
