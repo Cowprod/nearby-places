@@ -54,6 +54,9 @@ for (const id of ['maps-url','maps-add','export','import','proximity-diagnostics
   assert.ok(read('www/index.html').includes('id="'+id+'"'), 'contrôle '+id);
 }
 assert.match(appScript, /function parseMapsLink/);
+assert.match(appScript, /window.handleOpenURL/);
+assert.ok(appScript.includes("incoming.protocol!=='nearbyplaces:'"));
+assert.equal(pkg.cordova.plugins['cordova-plugin-customurlscheme'].URL_SCHEME,'nearbyplaces');
 assert.ok(appScript.includes('nearby-places-sauvegarde.json'), 'export JSON');
 assert.match(read('www/js/proximity.js'), /nearby-places-events-v1/);
 assert.match(read('www/index.html'), /src="js\/proximity\.js"/);
