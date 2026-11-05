@@ -102,15 +102,29 @@
     places.push(place);save();render();return place;
   }
   function parseMapsLink(raw){
-    var url=new URL(raw.trim());
-    if(url.protocol!=='https:' || !['maps.apple.com','www.maps.apple.com'].includes(url.hostname))throw Error('Lien Apple Plans HTTPS requis');
-    var coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr');
-    if(!coords)throw Error('Ce lien ne contient pas de coordonnées. Les liens courts nécessitent une résolution supplémentaire.');
-    var match=coords.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    var url=new URL(raw.trim()), host=url.hostname.toLowerCase(), coords=null, name='';
+    if(url.protocol==='nearbyplaces:' && url.hostname==='import'){
+      var embedded=url.searchParams.get('url');
+      if(embedded)return parseMapsLink(embedded);
+      coords=url.searchParams.get('ll');
+      name=url.searchParams.get('name')||'Lieu ChatGPT';
+    }else if(url.protocol==='https:' && (host==='maps.apple.com'||host==='www.maps.apple.com')){
+      coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr');
+      name=url.searchParams.get('q')||url.searchParams.get('name')||'Lieu Apple Plans';
+    }else if(url.protocol==='https:' && (host==='www.google.com'||host==='google.com'||host==='maps.google.com'||host==='maps.app.goo.gl')){
+      if(host==='maps.app.goo.gl')throw Error('Lien Google Maps raccourci : ouvrir dans le navigateur et copier l’URL complète.');
+      var at=url.pathname.match(/@(-?\\d+(?:\\.\\d+)?),(-?\\d+(?:\\.\\d+)?)/);
+      var marker=url.pathname.match(/!3d(-?\\d+(?:\\.\\d+)?)!4d(-?\\d+(?:\\.\\d+)?)/);
+      coords=url.searchParams.get('q')||url.searchParams.get('query')||url.searchParams.get('ll')||(marker?marker[1]+','+marker[2]:null)||(at?at[1]+','+at[2]:null);
+      name=url.searchParams.get('q')||'Lieu Google Maps';
+      if(!coords)throw Error('Coordonnées Google Maps absentes. Utiliser un lien complet avec latitude et longitude.');
+    }else throw Error('Lien Apple Plans, Google Maps ou Nearby Places requis');
+    if(!coords)throw Error('Ce lien ne contient pas de coordonnées.');
+    var match=coords.match(/^\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*$/);
     if(!match)throw Error('Coordonnées absentes ou non reconnues');
     var lat=Number(match[1]),lon=Number(match[2]);
     if(!validPosition(lat,lon))throw Error('Coordonnées invalides');
-    return {name:url.searchParams.get('q')||url.searchParams.get('name')||'Lieu Apple Plans',latitude:lat,longitude:lon};
+    return {name:name,latitude:lat,longitude:lon};
   }
   function importMapsURL(value){
     var parsed=parseMapsLink(value);
@@ -130,7 +144,7 @@
     try{
       var incoming=new URL(url);
       if(incoming.protocol!=='nearbyplaces:' || incoming.hostname!=='import')return;
-      var shared=incoming.searchParams.get('url');
+      var shared=incoming.searchParams.get('url')||url;
       if(!shared)return;
       pendingSharedURL=shared;
       setTimeout(function(){if(pendingSharedURL){receiveSharedURL(pendingSharedURL);pendingSharedURL=null;}},0);
