@@ -59,6 +59,7 @@ async function main() {
   await h.api.setRadius(750);
   assert.equal(h.state.geofences[0].radius, 750);
   assert.equal(await h.api.setRadius(50), false);
+  assert.equal(await h.api.setRadius(150), false, 'rayon iOS inférieur à 200 m refusé');
   assert.equal(h.api.radius(), 750);
 
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
@@ -78,12 +79,19 @@ async function main() {
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
   assert.equal(h.scheduled.length, 1, 'pas de notification après arrêt');
 
+  assert.equal(await h.api.testNotification(), true, 'test +10 s même après arrêt du GPS');
+  assert.equal(h.scheduled.length, 2);
+  assert.equal(h.scheduled[1].trigger.in, 10);
+  assert.equal(h.scheduled[1].trigger.unit, 'second');
+  assert.equal(h.scheduled[1].id, 1999999999);
   const refused = harness(false);
   refused.api.setPlaces([place]);
   refused.api.wire();
   await refused.callbacks.deviceready();
   assert.equal(await refused.api.enable(), false);
   assert.equal(refused.state.starts, 0, 'permissions refusées : surveillance non démarrée');
-  console.log('PASS proximité (simulée) : opt-in, filtres, anti-doublon, arrêt, refus notifications');
+  assert.equal(await refused.api.testNotification(), false, 'test notification sans permission refusé');
+  assert.equal(refused.scheduled.length, 0);
+  console.log('PASS proximité (simulée) : rayon 500m/200m min, opt-in, filtres, notification +10s, refus, arrêt');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
