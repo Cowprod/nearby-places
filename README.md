@@ -23,11 +23,19 @@ npm install
 npm run ios:add
 ```
 
-Ouvrir ensuite `platforms/ios/Nearby Places.xcworkspace` dans Xcode (l'intitulé exact peut varier selon les versions de Cordova), sélectionner le compte Apple dans Signing & Capabilities et l'iPhone ou le simulateur, puis Build/Run.
+Ouvrir ensuite `platforms/ios/App.xcworkspace` dans Xcode, sélectionner le compte Apple dans Signing & Capabilities et l'iPhone ou le simulateur, puis Build/Run.
 
 On peut aussi demander un build sans signature avec `npm run ios:build` ; pour signer et installer sur iPhone, préférer Xcode.
 
 En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versionner `platforms/`, `plugins/`, `node_modules/` ni les identifiants de signature.
+
+## Partage Apple Plans (première étape : lien profond iOS)
+- L'app accepte désormais le schéma `nearbyplaces://import?url=...`, où `url` contient un lien Apple Plans encodé en URL.
+- Un raccourci iOS depuis la feuille de partage peut recevoir une URL, construire `nearbyplaces://import?url=<URL encodée>`, puis utiliser l'action **Ouvrir les URL**. L'application doit être installée avec le nouveau plugin et recompilée.
+- L'import accepte actuellement uniquement les URL Apple Plans contenant des coordonnées `ll`, `coordinate` ou `daddr`. Les liens courts et certaines fiches Plans ne fonctionneront pas encore.
+- **Il ne s'agit pas encore d'une Share Extension native** : Nearby Places n'apparaît pas automatiquement comme destination de partage. Cette étape prépare le traitement et le dédoublonnage, avant l'extension native.
+- Les lieux restent dans `localStorage` avec les mêmes clés et sont immédiatement transmis au module de géofencing.
+- Ne pas supprimer l'app lors de la mise à jour. Sauvegarder les lieux personnels avec **Exporter JSON** avant toute opération risquée.
 
 ## Limitations
 - Le plugin officiel `cordova-plugin-geolocation` permet la mesure GPS ponctuelle. Le plugin natif Transistor Software gère la surveillance de zones à partir d'une autorisation explicite.
