@@ -1,1 +1,42 @@
-const assert=require('node:assert/strict');const fs=require('node:fs');const d=JSON.parse(fs.readFileSync('data/places.sample.json','utf8'));assert.equal(d.schemaVersion,1);assert.ok(d.places.length>=2);for(const p of d.places){assert.ok(p.id && p.name);assert.ok(p.latitude>=-90&&p.latitude<=90);assert.ok(p.longitude>=-180&&p.longitude<=180);assert.ok(Array.isArray(p.categories));assert.equal(p.alert.walkingMinutes,15)}console.log('PASS catalogue:',d.places.length,'lieux');
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+
+const read = (p) => fs.readFileSync(p, 'utf8');
+const fixtures = JSON.parse(read('data/places.sample.json'));
+const pkg = JSON.parse(read('package.json'));
+const config = read('config.xml');
+
+assert.equal(fixtures.schemaVersion, 1);
+assert.ok(Array.isArray(fixtures.places) && fixtures.places.length >= 2);
+assert.ok(Array.isArray(fixtures.categories));
+const categories = new Set(fixtures.categories.map((c) => c.id));
+const ids = new Set();
+for (const p of fixtures.places) {
+  assert.ok(p.id && p.name, 'id et nom obligatoires');
+  assert.ok(!ids.has(p.id), 'id unique: ' + p.id);
+  ids.add(p.id);
+  assert.ok(Number.isFinite(p.latitude) && Math.abs(p.latitude) <= 90, 'latitude');
+  assert.ok(Number.isFinite(p.longitude) && Math.abs(p.longitude) <= 180, 'longitude');
+  assert.ok(Array.isArray(p.categories) && p.categories.every((c) => categories.has(c)), 'categories');
+  assert.equal(p.alert.walkingMinutes, 15);
+  assert.ok(typeof p.visited === 'boolean');
+}
+assert.deepEqual(JSON.parse(read('www/data/places.sample.json')), fixtures, 'catalogue Cordova vs source');
+for (const file of ['index.html', 'js/app.js', 'data/places.sample.json']) {
+  assert.equal(read('public/' + file), read('www/' + file), 'preview différente de Cordova: ' + file);
+}
+new vm.Script(read('www/js/app.js'), {filename: 'www/js/app.js'});
+assert.match(read('www/index.html'), /src="js\/app\.js"/);
+assert.match(read('www/index.html'), /src="cordova\.js"/);
+assert.match(config, /NSLocationWhenInUseUsageDescription/);
+assert.doesNotMatch(config, /NSLocationAlwaysAndWhenInUseUsageDescription|UIBackgroundModes/);
+assert.match(config, /<content src="index\.html"\s*\/>/);
+assert.equal(pkg.devDependencies.cordova, '13.0.0');
+assert.equal(pkg.devDependencies['cordova-plugin-geolocation'], '5.0.0');
+assert.equal(pkg.scripts['ios:add'], 'cordova platform add ios@8.1.1');
+assert.ok(pkg.cordova.plugins['cordova-plugin-geolocation']);
+console.log('PASS catalogue:', fixtures.places.length, 'lieux');
+console.log('PASS Cordova:', 'configuration iOS, GPS au premier plan, JS syntaxe');
+console.log('PASS preview:', 'public et www identiques (3 fichiers)');
