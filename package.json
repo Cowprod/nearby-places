@@ -4,7 +4,7 @@
   "private": true,
   "description": "Cordova prototype for offline places and foreground GPS",
   "scripts": {
-    "test": "node tests/catalogue.test.js",
+    "test": "node tests/catalogue.test.js && node tests/proximity.behavior.test.js",
     "ios:add": "cordova platform add ios@8.1.1",
     "ios:prepare": "cordova prepare ios",
     "ios:build": "cordova build ios --debug",
