@@ -1,14 +1,24 @@
 {
   "name": "nearby-places",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
-  "description": "Offline-first Cordova place catalogue prototype",
+  "description": "Cordova prototype for offline places and foreground GPS",
   "scripts": {
-    "test": "node tests/catalogue.test.js"
+    "test": "node tests/catalogue.test.js",
+    "ios:add": "cordova platform add ios@8.1.1",
+    "ios:prepare": "cordova prepare ios",
+    "ios:build": "cordova build ios --debug",
+    "ios:requirements": "cordova requirements ios"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "cordova": "13.0.0"
+  },
   "cordova": {
     "platforms": [],
-    "plugins": {}
+    "plugins": {
+      "cordova-plugin-geolocation": {
+        "GEOLOCATION_USAGE_DESCRIPTION": "Votre position sert à afficher les lieux proches lorsque vous appuyez sur le bouton de localisation."
+      }
+    }
   }
 }
