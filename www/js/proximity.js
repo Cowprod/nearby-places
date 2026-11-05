@@ -18,6 +18,18 @@ function diagnostics(){
    (Array.isArray(events)?events.slice(0,12).map(function(e){return e.at+' · '+e.kind+' · '+e.details;}).join('\n'):'');
 }
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
+var TEST_NOTIFICATION_ID=1999999999;
+var notificationEventsRegistered=false;
+function registerNotificationEvents(){
+ var local=notificationPlugin();
+ if(!local || typeof local.on!=='function' || notificationEventsRegistered)return;
+ try{
+  local.on('add',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','notification ajoutée dans le planificateur natif');});
+  local.on('trigger',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','événement natif trigger reçu (WebView active)');});
+  local.on('click',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','notification ouverte par utilisateur');});
+  notificationEventsRegistered=true;
+ }catch(error){logEvent('notification-events','écoute native indisponible : '+String(error));}
+}
 function notificationId(id){var n=7;for(var i=0;i<id.length;i++)n=(Math.imul(n,31)+id.charCodeAt(i))|0;return (n>>>0)%2000000000+1;}
 function currentPlaces(){return catalogue.filter(function(p){return !p.visited && (!p.alert || p.alert.enabled!==false) && typeof p.latitude==='number' && typeof p.longitude==='number';});}
 function radius(){
@@ -57,7 +69,7 @@ function testNotification(){
    if(!granted){status('Test annulé : notifications non autorisées');logEvent('test-notification','permission refusée');return false;}
    try{
      local.schedule({
-       id:1999999999,
+       id:TEST_NOTIFICATION_ID,
        title:'Nearby Places · test',
        text:'Notification de test après 10 secondes, sans géofencing.',
        trigger:{in:10,unit:'second'},
@@ -88,6 +100,7 @@ function sync(){
  .catch(function(error){status('Erreur zones : '+String(error));return false;});
 }
 function init(){
+ registerNotificationEvents();
  sdk=root.BackgroundGeolocation;
  if(!sdk){status('Prévisualisation web : géofencing natif indisponible');return Promise.resolve(false);}
  sdk.onGeofence(onGeofence);
