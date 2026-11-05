@@ -112,15 +112,18 @@
       coords=url.searchParams.get('ll');
       name=url.searchParams.get('name')||'Lieu ChatGPT';
     }else if(url.protocol==='https:' && (host==='maps.apple.com'||host==='www.maps.apple.com')){
-      coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr')||url.searchParams.get('sll');
-      name=url.searchParams.get('q')||url.searchParams.get('name')||'Lieu Apple Plans';
+      coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr')||url.searchParams.get('sll')||url.searchParams.get('q');
+      name=url.searchParams.get('name')||url.searchParams.get('q')||'Lieu Apple Plans';
     }else if(url.protocol==='https:' && (host==='www.google.com'||host==='google.com'||host==='maps.google.com'||host==='maps.app.goo.gl')){
       if(host==='maps.app.goo.gl')throw Error('Lien Google Maps raccourci : ouvrir dans le navigateur et copier l’URL complète.');
       var at=url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
       var marker=url.pathname.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
-      coords=url.searchParams.get('q')||url.searchParams.get('query')||url.searchParams.get('ll')||(marker?marker[1]+','+marker[2]:null)||(at?at[1]+','+at[2]:null);
+      var query=url.searchParams.get('q')||url.searchParams.get('query');
+      var markerCoords=marker?marker[1]+','+marker[2]:null;
+      var numericQuery=query && /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(query);
+      coords=(numericQuery?query:null)||markerCoords||url.searchParams.get('ll')||(at?at[1]+','+at[2]:null);
       var pathName=url.pathname.match(/\/maps\/place\/([^/]+)/);
-      name=pathName?decodeURIComponent(pathName[1].replace(/\+/g,' ')):'Lieu Google Maps';
+      name=pathName?decodeURIComponent(pathName[1].replace(/\+/g,' ')):(query && !numericQuery?query:'Lieu Google Maps');
       if(!coords)throw Error('Coordonnées Google Maps absentes. Utiliser un lien complet avec latitude et longitude.');
     }else throw Error('Lien Apple Plans, Google Maps ou Nearby Places requis');
     if(!coords)throw Error('Ce lien ne contient pas de coordonnées.');
@@ -193,7 +196,7 @@
   $('locate').onclick=function(){if(!navigator.geolocation){status('GPS indisponible');return;}status('Recherche GPS…');navigator.geolocation.getCurrentPosition(function(p){var c=p.coords;status('Position reçue ; précision '+Math.round(c.accuracy)+' m');render({latitude:c.latitude,longitude:c.longitude});},function(e){status('GPS : '+e.message);},{enableHighAccuracy:true,timeout:20000,maximumAge:0});};
   $('add').onclick=function(){var name=$('name').value.trim(),lat=Number($('lat').value),lon=Number($('lon').value);if(!name||!$('lat').value||!$('lon').value||!validPosition(lat,lon)){status('Nom et coordonnées valides obligatoires');return;}addManual(name,lat,lon,$('category').value);status('Lieu ajouté localement');$('name').value='';};
   $('refresh').onclick=load;
-  $('reset').onclick=function(){localStorage.removeItem(KEY);localStorage.removeItem(CATALOGUE_KEY);load();};
+  $('reset').onclick=function(){if(!window.confirm('Réinitialiser tous les lieux locaux, les lieux personnels et les statuts visités ? Exporter JSON avant de confirmer.'))return;localStorage.removeItem(KEY);localStorage.removeItem(CATALOGUE_KEY);load();};
   if(window.NearbyProximity)window.NearbyProximity.wire();
   document.addEventListener('deviceready',function(){status('Cordova prêt');},{once:true});load();
 }());
