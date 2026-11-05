@@ -37,7 +37,7 @@ assert.match(appScript, /source\.type==='manual'/, 'préservation des lieux ajou
 assert.match(appScript, /GitHub synchronisé/, 'état de synchronisation');
 assert.match(read('www/index.html'), /id="refresh"/, 'bouton actualisation');
 assert.match(appScript, /\$\('refresh'\)\.onclick=load/, 'rafraîchissement manuel');
-assert.match(appScript, /maps\.apple\.com/, 'itinéraire piéton via Plans');
+assert.match(appScript, /maps\\.apple\\.com/, 'itinéraire piéton via Plans');
 assert.match(config, /<access origin="https:\/\/raw\.githubusercontent\.com"\s*\/>/, 'accès distant limité à GitHub');
 
 assert.match(read('www/index.html'), /src="js\/app\.js"/);
@@ -50,6 +50,12 @@ assert.equal(pkg.devDependencies['cordova-background-geolocation-lt'], '5.5.1');
 assert.equal(pkg.devDependencies['cordova-plugin-local-notification'], '1.2.3');
 assert.match(read('www/index.html'), /id="proximity-start"/);
 assert.match(read('www/index.html'), /id="proximity-stop"/);
+for (const id of ['maps-url','maps-add','export','import','proximity-diagnostics']) {
+  assert.ok(read('www/index.html').includes('id="'+id+'"'), 'contrôle '+id);
+}
+assert.match(appScript, /function parseMapsLink/);
+assert.match(appScript, /nearby-places-sauvegarde\\.json/);
+assert.match(read('www/js/proximity.js'), /nearby-places-events-v1/);
 assert.match(read('www/index.html'), /src="js\/proximity\.js"/);
 assert.match(read('www/js/proximity.js'), /startGeofences\(/);
 assert.match(read('www/js/proximity.js'), /stopOnTerminate:false/);
