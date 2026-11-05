@@ -1,35 +1,49 @@
 # Nearby Places
 
-Application Cordova iOS-first (Android ensuite) pour mémoriser des lieux et recevoir une alerte à proximité. Prototype V0.1.
+Application Cordova iOS-first (Android plus tard) pour mémoriser des lieux et recevoir, à terme, une notification quand on passe à proximité. Dépôt privé `Cowprod/nearby-places`.
 
-## État réel
-- Dépôt privé / espace devMcp provisionnés sur touchdeck.
-- UI Cordova dans `www/` : liste, ajout manuel, marqueur « visité », GPS **premier plan uniquement**.
-- Catalogue de démonstration dans `data/places.sample.json` (source) et `www/data/places.sample.json` (copie embarquée dans l'app). Les deux doivent rester synchronisées.
-- L'affichage de distance utilise Haversine (vol d'oiseau), **pas** un vrai itinéraire à pied.
-- **Non implémentés** : plugin geofencing natif, notifications locales, synchronisation serveur, recherche MapKit, partage iOS, import Google Maps et builds natifs. Ne pas considérer l'application comme un tracker arrière-plan fonctionnel.
+## Première version prête à essayer sur Mac : V0.1.1
+- Catalogue hors ligne de 2 lieux de démonstration : `www/data/places.sample.json`.
+- Liste des lieux, ajout manuel, marquage « visité », stockage local navigateur.
+- Bouton **Tester ma position** : demande l'autorisation iOS **Pendant l'utilisation** et affiche une distance à vol d'oiseau.
+- Pas de suivi arrière-plan, de géofencing ni de notification locale dans cette première compilation. La V0.2 ajoutera le plugin Swift approprié.
+- L'écran de prévisualisation (devMcp) utilise `public/`, copie de `www/` : les modifications doivent être reportées dans les deux dossiers tant qu'un mécanisme de génération n'est pas en place.
 
-## Installation sur Mac (lors du retour)
-Prérequis : Node.js, Cordova CLI, Xcode et outils iOS. Depuis le clone :
+## Compilation iOS sur le MacBook
+Prérequis : Xcode opérationnel, outils CLI Xcode, Node.js >=20.17, CocoaPods >=1.16, git. Le build iOS est possible **uniquement sur macOS**. Le projet utilise Cordova CLI 13.0.0 et demande cordova-ios 8.1.1.
+
+Cloner le dépôt (accès privé GitHub nécessaire), puis dans son dossier :
+
 ```sh
 npm install
-cordova platform add ios
+npm run ios:add
 ```
-Puis ouvrir / construire le projet iOS avec Xcode (signature Apple nécessaire). `cordova.js` est fourni par Cordova lors du build et absent en prévisualisation HTTP normale. Les autorisations GPS/notifications et le plugin natif seront ajoutés avant les essais arrière-plan.
 
-## Android / ADB
-Le serveur touchdeck héberge le workspace devMcp mais les autorisations d'actions ADB restent à configurer explicitement pour le projet. Le fait que d'autres projets comme MultiCam puissent interroger ADB ne signifie pas que Nearby Places peut le faire automatiquement. Ne pas installer sur des appareils physiques sans validation.
+Ouvrir ensuite `platforms/ios/Nearby Places.xcworkspace` dans Xcode (l'intitulé exact peut varier selon les versions de Cordova), sélectionner le compte Apple dans Signing & Capabilities et l'iPhone ou le simulateur, puis Build/Run.
 
-## Modèle de lieux V1
-`schemaVersion`, `collection`, `categories`, `places[]`. Chaque lieu : `id`, `name`, `latitude`, `longitude`, `categories[]`, `notes`, `alert` (`enabled`, `walkingMinutes`, `cooldownHours`), `visited`, `source`.
-La précision du GPS et les durées de marche ne doivent pas être présentées comme garanties.
+On peut aussi demander un build sans signature avec `npm run ios:build` ; pour signer et installer sur iPhone, préférer Xcode.
 
-## Feuille de route
-1. Catalogue et validation JSON, synchronisation sécurisée via devMcp, sans jeton GitHub dans le client.
-2. Plugin Swift Core Location iOS, autorisations explicites, géofencing dynamique (20 régions), journal des événements et notifications locales.
-3. Plugin Kotlin Android GeofencingClient (100 zones), permissions Android modernes et tests ADB.
-4. Recherche native et partage de lieux, imports Takeout Google Maps.
-5. Test terrain avec iPhone verrouillé, réseau intermittent, consommation électrique, règles anti-spam.
+En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versionner `platforms/`, `plugins/`, `node_modules/` ni les identifiants de signature.
 
-## Tests
-`npm test` (si Node.js disponible) vérifie le catalogue d'exemple. Les tests GPS réels restent à faire.
+## Limitations
+- Le plugin officiel `cordova-plugin-geolocation` est déclaré, ainsi que `NSLocationWhenInUseUsageDescription`. Le GPS ne démarre que lorsqu'on appuie sur le bouton.
+- Il ne doit pas être considéré comme un tracker de position tâche de fond. Les clés de permission `Always` et le mode `location` ne seront ajoutés qu'avec une implémentation native justifiant leur usage.
+- Le catalogue et les nouvelles entrées sont stockés localement par `localStorage` : désinstaller l'application peut effacer les modifications. Pas encore de synchronisation Git côté mobile.
+- Les lieux de démonstration sont des fixtures (coordonnées indicatives), pas des recommandations touristiques.
+
+## Arborescence
+- `config.xml` : configuration mobile et permission iOS au premier plan.
+- `package.json` : CLI Cordova et plugin GPS.
+- `www/` : interface Cordova et catalogue embarqué.
+- `public/` : prévisualisation statique devMcp.
+- `data/` : source de référence JSON.
+- `tests/` : tests de structure de données.
+
+## Suite
+1. Créer un vrai plugin iOS Swift Core Location pour géofencing et notifications locales, avec essais écran verrouillé.
+2. Réutiliser l'interface sur Android avec GeofencingClient et permissions modernes.
+3. Synchroniser les lieux via endpoint sécurisé devMcp/Git, sans secrets embarqués dans l'application.
+4. Ajouter recherche MapKit, extension Partager iOS et imports Takeout Google Maps en V2/V3.
+
+## Test de catalogue
+`npm test`
