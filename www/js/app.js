@@ -160,6 +160,26 @@
   document.addEventListener('resume',function(){
     if(pendingSharedURL){receiveSharedURL(pendingSharedURL);pendingSharedURL=null;}
   });
+  function registerNativeShare(){
+    var plugin=window.cordova && window.cordova.openwith;
+    if(!plugin){status('Partage natif indisponible : extension non installée');return;}
+    try{
+      plugin.init(function(){console.log('Share Extension prête');},function(error){console.warn('Share Extension',error);});
+      plugin.addHandler(function(intent){
+        var values=[];
+        if(intent && typeof intent.text==='string')values.push(intent.text);
+        if(intent && Array.isArray(intent.items))intent.items.forEach(function(item){
+          if(item && typeof item.data==='string' && /^https?:\/\//i.test(item.data))values.push(item.data);
+          if(item && typeof item.text==='string')values.push(item.text);
+        });
+        for(var i=0;i<values.length;i++){
+          try{if(receiveSharedURL(values[i]))return;}catch(error){console.warn('Share URL',error);}
+        }
+        status('Partage reçu, mais aucune URL exploitable avec coordonnées');
+      });
+    }catch(error){status('Initialisation partage : '+String(error));}
+  }
+  document.addEventListener('deviceready',registerNativeShare,{once:true});
   $('maps-add').onclick=function(){
     try{
       if(importMapsURL($('maps-url').value))$('maps-url').value='';
