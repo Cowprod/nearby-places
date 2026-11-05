@@ -15,17 +15,26 @@
     "cordova-plugin-geolocation": "5.0.0",
     "cordova-background-geolocation-lt": "5.5.1",
     "cordova-plugin-local-notification": "1.2.3",
-    "cordova-plugin-customurlscheme": "5.0.2"
+    "cordova-plugin-customurlscheme": "5.0.2",
+    "cordova-ios": "8.1.1",
+    "cordova-plugin-device": "^3.0.0"
   },
   "cordova": {
-    "platforms": [],
+    "platforms": [
+      "ios"
+    ],
     "plugins": {
-      "cordova-plugin-geolocation": {},
-      "cordova-background-geolocation-lt": {},
+      "cordova-plugin-geolocation": {
+        "GPS_REQUIRED": "true"
+      },
+      "cordova-background-geolocation-lt": {
+        "BACKGROUND_MODE_LOCATION": "<string>location</string>"
+      },
       "cordova-plugin-local-notification": {},
       "cordova-plugin-customurlscheme": {
         "URL_SCHEME": "nearbyplaces"
-      }
+      },
+      "cordova-plugin-device": {}
     }
   }
 }
