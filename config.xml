@@ -1,11 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<widget id="fr.cowprod.nearbyplaces" version="0.1.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+<widget id="fr.cowprod.nearbyplaces" version="0.1.1"
+  xmlns="http://www.w3.org/ns/widgets"
+  xmlns:cdv="http://cordova.apache.org/ns/1.0">
   <name>Nearby Places</name>
-  <description>Personal place discovery and proximity reminders</description>
+  <description>Catalogue personnel de lieux et rappels de proximité</description>
   <author>Cowprod</author>
   <content src="index.html"/>
   <access origin="*"/>
   <allow-intent href="https://*/*"/>
   <preference name="Orientation" value="default"/>
-  <platform name="ios"><preference name="deployment-target" value="15.0"/></platform>
+  <preference name="scheme" value="app"/>
+  <preference name="hostname" value="localhost"/>
+  <platform name="ios">
+    <preference name="deployment-target" value="15.0"/>
+    <edit-config target="NSLocationWhenInUseUsageDescription" file="*-Info.plist" mode="merge">
+      <string>Votre position est utilisée uniquement à votre demande pour afficher la distance des lieux enregistrés.</string>
+    </edit-config>
+  </platform>
 </widget>
