@@ -104,6 +104,7 @@
   }
   function parseMapsLink(raw){
     var input=String(raw||'').trim();
+    if(!input)throw Error('Coller un lien Maps avant de lancer l’import');
     var extracted=input.match(/(?:nearbyplaces:\/\/|https:\/\/)[^\s<>]+/i);
     if(extracted)input=extracted[0].replace(/[),.;]+$/,'');
     var url=new URL(input), host=url.hostname.toLowerCase(), coords=null, name='';
@@ -128,7 +129,7 @@
       name=pathName?decodeURIComponent(pathName[1].replace(/\+/g,' ')):(query && !numericQuery?query:'Lieu Google Maps');
       if(!coords)throw Error('Coordonnées Google Maps absentes. Utiliser un lien complet avec latitude et longitude.');
     }else throw Error('Lien Apple Plans, Google Maps ou Nearby Places requis');
-    if(!coords)throw Error('Ce lien ne contient pas de coordonnées.');
+    if(!coords)throw Error('URL résolue mais sans coordonnées GPS ; destination : '+url.href.slice(0,180));
     var match=coords.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
     if(!match)throw Error('Coordonnées absentes ou non reconnues');
     var lat=Number(match[1]),lon=Number(match[2]);
@@ -138,15 +139,21 @@
   function resolveMapsURL(value){
     trace('import-url','entrée : '+String(value||'').slice(0,250));
     var match=String(value||'').match(/https:\/\/(?:maps\.apple\/p\/|maps\.app\.goo\.gl\/)[^\s<>]+/i);
-    if(!match){trace('import-url','URL directe, sans redirection');return Promise.resolve(value);}
-    trace('import-url','résolution du lien court : '+match[0]);
-    var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},10000);
-    return fetch(match[0],{redirect:'follow',signal:controller.signal}).then(function(response){
-      trace('import-http','HTTP '+response.status+' → '+String(response.url||'').slice(0,250));
-      var target=response.url;
-      if(!target || target===match[0])throw Error('Redirection non accessible');
-      return String(value).replace(match[0],target);
-    }).finally(function(){clearTimeout(timer);});
+    if(!match){trace('import-url','URL directe');return Promise.resolve(value);}
+    trace('import-url','résolution native : '+match[0]);
+    var resolver=window.NearbyResolver;
+    if(!resolver || typeof resolver.resolve!=='function')return Promise.reject(Error('Résolveur iOS absent : installer le plugin local puis reconstruire'));
+    return new Promise(function(resolve,reject){
+      resolver.resolve(match[0],function(result){
+        trace('import-native','HTTP '+result.httpStatus+' → '+String(result.url).slice(0,250));
+        var target=result.url||'';
+        if(!/^(https:\/\/maps\.apple\.com\/|https:\/\/(?:www\.)?google\.com\/maps\/)/i.test(target)){
+          target=result.htmlMapURL||target;
+        }
+        if(!target || target===match[0]){reject(Error('Lien court sans destination exploitable'));return;}
+        resolve(String(value).replace(match[0],target));
+      },function(error){trace('import-native-error',String(error));reject(Error('Résolution iOS : '+String(error)));});
+    });
   }
   function importMapsURL(value){
     var parsed=parseMapsLink(value);
