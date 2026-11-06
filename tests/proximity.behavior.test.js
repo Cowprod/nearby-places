@@ -10,7 +10,7 @@ function harness(allowNotifications = true, slowNative = false, initialStorage, 
   const scheduled = [];
   const callbacks = {};
   const elements = {};
-  const state = { geofences: [], starts: 0, stops: 0, removes: 0, failNextAdds: 0, inFlight: 0, maxInFlight: 0 };
+  const state = { geofences: [], starts: 0, stops: 0, removes: 0, failNextAdds: 0, failNextStops: 0, inFlight: 0, maxInFlight: 0 };
   async function nativeStep(update) {
     state.inFlight++;
     state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
@@ -26,7 +26,7 @@ function harness(allowNotifications = true, slowNative = false, initialStorage, 
     async removeGeofences() { return nativeStep(() => { state.removes++; state.geofences = []; }); },
     async addGeofences(fences) { if(state.failNextAdds>0){state.failNextAdds--;return Promise.reject(Error('simulated addGeofences failure'));}return nativeStep(() => { state.geofences = fences; }); },
     async startGeofences() { return nativeStep(() => { state.starts++; }); },
-    async stop() { return nativeStep(() => { state.stops++; }); }
+    async stop() { if(state.failNextStops>0){state.failNextStops--;throw Error('simulated SDK stop failure');}return nativeStep(() => { state.stops++; }); }
   };
   const root = {
     cordova: { plugins: { notification: { local: {
@@ -203,6 +203,15 @@ async function main() {
   assert.equal(noConsentStore.get('nearby-places-v1'),originalPlaces,'les données de lieux ne sont pas modifiées par la reprise');
   bootWithoutConsent.api.onGeofence({action:'ENTER',identifier:place.id});
   assert.equal(bootWithoutConsent.scheduled.length,0,'aucune notification après restauration native non autorisée');
+
+  const bootStopFailure=harness(true,false,new Map(),true);
+  bootStopFailure.state.failNextStops=1;
+  bootStopFailure.api.setPlaces([place]);
+  bootStopFailure.api.wire();
+  assert.equal(await bootStopFailure.callbacks.deviceready(),false,'arrêt natif échoué doit faire échouer init');
+  bootStopFailure.api.onGeofence({action:'ENTER',identifier:place.id});
+  assert.equal(bootStopFailure.scheduled.length,0,'aucune notification JS si arrêt natif échoue');
+  assert.match(bootStopFailure.elements['proximity-status'].textContent,/Erreur arrêt du SDK sans consentement/,'erreur natif visible et non masquée');
 
   const declinedStore=new Map([['nearby-places-proximity-v1',JSON.stringify({enabled:false})]]);
   const bootOptedOut=harness(true,false,declinedStore,true);
