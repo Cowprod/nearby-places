@@ -24,10 +24,11 @@ for (const p of fixtures.places) {
   assert.ok(typeof p.visited === 'boolean');
 }
 assert.deepEqual(JSON.parse(read('www/data/places.sample.json')), fixtures, 'catalogue Cordova vs source');
-for (const file of ['index.html', 'js/app.js', 'js/proximity.js', 'data/places.sample.json']) {
+for (const file of ['index.html', 'js/app.js', 'js/proximity.js', 'js/deeplink-bootstrap.js', 'data/places.sample.json']) {
   assert.equal(read('public/' + file), read('www/' + file), 'preview différente de Cordova: ' + file);
 }
 new vm.Script(read('www/js/app.js'), {filename: 'www/js/app.js'});
+new vm.Script(read('www/js/deeplink-bootstrap.js'), {filename: 'www/js/deeplink-bootstrap.js'});
 new vm.Script(read('www/js/proximity.js'), {filename: 'www/js/proximity.js'});
 const appScript = read('www/js/app.js');
 assert.match(appScript, /https:\/\/raw\.githubusercontent\.com\/Cowprod\/nearby-places\/main\/data\/places\.sample\.json/);
@@ -42,6 +43,10 @@ assert.match(config, /<access origin="https:\/\/raw\.githubusercontent\.com"\s*\
 
 assert.match(read('www/index.html'), /src="js\/app\.js"/);
 assert.match(read('www/index.html'), /src="cordova\.js"/);
+const html = read('www/index.html');
+assert.ok(html.indexOf('src="js/deeplink-bootstrap.js"') < html.indexOf('src="cordova.js"'), 'bootstrap installe handleOpenURL avant Cordova');
+assert.ok(html.indexOf('src="js/deeplink-bootstrap.js"') !== -1, 'bootstrap des URL inclus');
+assert.match(appScript, /__nearbyEarlyDeepLinks\.splice\(0,10\)/, 'liens capturés avant app.js rejoués');
 assert.match(config, /NSLocationWhenInUseUsageDescription/);
 assert.match(config, /NSLocationAlwaysAndWhenInUseUsageDescription/);
 assert.match(config, /UIBackgroundModes/);
