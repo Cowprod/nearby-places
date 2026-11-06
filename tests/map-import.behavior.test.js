@@ -102,6 +102,7 @@ retained=JSON.parse(legacy.store.get('nearby-places-v1'));
 assert.equal(retained.some(p=>p&&p.id==='manual-damaged'),true,'import preserves malformed existing records');
 assert.equal(retained.some(p=>p&&p.name==='Nouveau lieu'),true,'valid new place still saved');
 
+console.log('PASS données locales (simulation) : JSON illisible préservé, affichage défensif, fusion sans perte et import valide');
 // A stale first HTTP response must never overwrite a newer catalogue/cache.
 const refreshing=harness(false,[],true);
 assert.equal(refreshing.networkCalls.length,1,'initial remote fetch started');
