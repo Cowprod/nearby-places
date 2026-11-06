@@ -59,6 +59,14 @@ function harness(native = false, earlyURLs = []) {
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
 async function main() {
 const h=harness();
+// Short Maps links percent-encoded into a Shortcuts/ChatGPT import URL must reach
+// the native resolver when pasted directly (not only via handleOpenURL).
+const wrapped=harness();
+let wrappedPlaces=await wrapped.importURL('nearbyplaces://import?url=https%3A%2F%2Fmaps.apple%2Fp%2FokRedirect');
+assert.equal(wrappedPlaces.length,1,'encoded Apple short URL resolved before parsing wrapper');
+checkPlace(wrappedPlaces[0],35.720,139.790);
+wrappedPlaces=await wrapped.importURL('nearbyplaces://import?url=https%3A%2F%2Fevil.example%2Fbad%3Fll%3D35.1%2C139.1');
+assert.equal(wrappedPlaces.length,1,'untrusted encoded URL must not create a place');
 // No shared link is persisted before explicit confirmation.
 const draft=harness();
 draft.input('maps-url','https://maps.apple.com/?ll=35.600,139.600&name=Fiche+test');
