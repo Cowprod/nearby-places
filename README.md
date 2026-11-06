@@ -32,8 +32,8 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 ## Partage Apple Plans (première étape : lien profond iOS)
 - L'app accepte désormais le schéma `nearbyplaces://import?url=...`, où `url` contient un lien Apple Plans encodé en URL.
 - Un raccourci iOS depuis la feuille de partage peut recevoir une URL, construire `nearbyplaces://import?url=<URL encodée>`, puis utiliser l'action **Ouvrir les URL**. L'application doit être installée avec le nouveau plugin et recompilée.
-- L'import accepte actuellement uniquement les URL Apple Plans contenant des coordonnées `ll`, `coordinate` ou `daddr`. Les liens courts (`maps.apple`, `maps.app.goo.gl`) et certaines fiches Plans ne fonctionneront pas encore.
-- **Il ne s'agit pas encore d'une Share Extension native** : Nearby Places n'apparaît pas automatiquement comme destination de partage. Cette étape prépare le traitement et le dédoublonnage, avant l'extension native.
+- L'import accepte les URL complètes Apple Plans avec coordonnées (`ll`, `coordinate`, `daddr` ou `q` numérique). Une **tentative** de résolution HTTP des liens courts `maps.apple/p/...` et `maps.app.goo.gl/...` est effectuée, mais elle peut échouer dans WKWebView (CORS ou redirection réservée au navigateur). Aucun lieu n'est créé sans coordonnées vérifiées.
+- Une Share Extension est désormais **déclarée** via `cordova-plugin-openwith-ios`, mais son fonctionnement, sa signature et son affichage dans la feuille Partager restent à valider sur Mac/iPhone ; le raccourci iOS reste une solution de repli.
 - Les lieux restent dans `localStorage` avec les mêmes clés et sont immédiatement transmis au module de géofencing.
 - Ne pas supprimer l'app lors de la mise à jour. Sauvegarder les lieux personnels avec **Exporter JSON** avant toute opération risquée.
 
@@ -43,7 +43,7 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 - **Depuis Apple Plans** : copier une URL longue avec `ll`, `coordinate` ou `daddr`; coller dans l'import. Une URL `https://maps.apple.com/place?coordinate=35.7,139.7&name=Exemple` est acceptée.
 - **Depuis Google Maps** : coller une URL complète contenant des coordonnées (par ex. `https://www.google.com/maps/search/?api=1&query=35.7%2C139.7` ou une URL de fiche avec `!3d...!4d...`). Une URL raccourcie `maps.app.goo.gl` n'est pas encore résolue.
 - **Depuis une conversation ChatGPT** : demander un lien au format `nearbyplaces://import?ll=LATITUDE,LONGITUDE&name=NOM_ENCODE`, puis le coller dans le champ Importer. Exemple : `nearbyplaces://import?ll=35.7001,139.7702&name=Lieu%20ChatGPT`. Pour l'ouverture automatique, un raccourci iOS peut recevoir ce lien et utiliser **Ouvrir les URL**. Cette fonction n'est pas une intégration native ChatGPT.
-- Le partage **direct** depuis le bouton Partager d'Apple Plans ou Google Maps vers l'app reste à réaliser via une Share Extension iOS. La version actuelle accepte seulement le collage ou un raccourci iOS. Ne pas annoncer ce partage comme terminé.
+- Le code de réception du partage natif est présent mais **n'a pas été validé sur iOS réel**. Collage et Raccourcis restent les méthodes de test fiables ; un `npm test` réussi ne démontre pas le fonctionnement de la Share Extension.
 
 ## Limitations
 - Le plugin officiel `cordova-plugin-geolocation` permet la mesure GPS ponctuelle. Le plugin natif Transistor Software gère la surveillance de zones à partir d'une autorisation explicite.
@@ -74,7 +74,7 @@ En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versi
 - **Import Maps** : les URL Apple Plans comportant `ll`, `coordinate`, `daddr` ou des coordonnées dans `q` sont interprétées. Pour Google Maps, les coordonnées `!3d...!4d...` du lieu priment sur les coordonnées `@latitude,longitude` du viewport et sur une recherche textuelle `q`. Les liens sans coordonnées exploitables restent refusés : aucun géocodage inventé.
 - **Préservation locale** : « Réinitialiser les lieux » exige désormais une confirmation explicite, car cette opération efface aussi les ajouts manuels et le cache du catalogue. Le paramètre local de rayon et le journal de diagnostic ne sont pas concernés. En cas de doute, conserver les données et utiliser l'export JSON ; l'export lui-même doit encore être confirmé dans WKWebView iOS.
 - **Premier build** : sur Mac, exécuter `npm install`, puis `npm run ios:add` uniquement si la plateforme iOS n'est pas encore installée ; ensuite ouvrir le workspace Xcode. Un build de validation sans installation sur iPhone peut être effectué sur macOS. **Aucun test natif, signature Xcode, notification écran verrouillé ni partage iOS ne sont attestés par les tests Node sur TouchDeck.**
-- **Partager** : en attendant une Share Extension native, l'option Raccourcis iOS décrite ci-dessous reste la voie proposée. Les URL courtes `maps.apple/p/...` et `maps.app.goo.gl/...` doivent être développées en une URL complète portant des coordonnées, faute de quoi leur import échoue proprement.
+- **Partager** : l'option Raccourcis iOS reste la voie de repli tant que la Share Extension n'est pas validée. Les liens courts font l'objet d'une tentative de résolution par `fetch`, qui peut être bloquée par CORS : l'échec ne doit jamais inventer de coordonnées ni modifier les lieux existants.
 
 ## Tests hors appareil
 `npm test` exécute les contrôles du catalogue et les tests comportementaux simulés. Cela ne constitue pas un build Xcode ni un essai sur iPhone.
@@ -100,3 +100,10 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 **Configuration indispensable sur Mac :** après `cordova prepare ios`, ouvrir `platforms/ios/App.xcworkspace` ; dans Signing & Capabilities, activer **App Groups** sur **App** et **ShareExtension** avec exactement `group.fr.cowprod.nearbyplaces.shareextension`, choisir la même équipe de signature, et vérifier des identifiants de bundle distincts (`fr.cowprod.nearbyplaces` et `fr.cowprod.nearbyplaces.shareextension`). Vérifier que la cible extension possède le même deployment target minimum que l'application. Le plugin n'automatise pas l'activation App Groups.
 
 **Limites :** ce plugin ancien n'est pas encore validé avec Cordova iOS 8.1.1 / iOS 26 sur iPhone ; la compilation et le lancement doivent être contrôlés dans Xcode. Les liens courts Google Maps nécessitent encore une résolution. Ne pas désinstaller l'app existante ni supprimer `platforms/ios` pour tenter une réparation sans sauvegarde.
+
+## Robustesse géofencing et tests du 6 novembre 2026
+
+- Les opérations natives `removeGeofences`, `addGeofences`, `startGeofences` et `stop` passent désormais par une file Promise séquentielle. Modifier plusieurs fois le rayon ou le catalogue n'entrelace plus les transactions du SDK.
+- Appuyer sur **Arrêter la surveillance** invalide immédiatement toute activation encore en attente de permission, désactive les notifications de proximité JavaScript, puis programme l'arrêt natif en ordre. Ce garde-fou ne constitue pas un contrôle de la fiabilité iOS après suspension.
+- Les tests Node simulent un SDK lent, une activation et un arrêt concurrents, la notification à +10 secondes, ainsi qu'un lien Apple court résolu ou bloqué par CORS. Ils n'évaluent ni la livraison sur écran verrouillé, ni la signature CocoaPods/Xcode, ni la disponibilité des callbacks après terminaison.
+- Pour un premier contrôle sur Mac **sans appareil physique** : conserver la plateforme iOS existante, effectuer `git pull --ff-only`, puis `npm test` et `npm run ios:build` (si les dépendances natives sont installées). Ne jamais réinitialiser `platforms/ios` ni désinstaller l'application pour dépanner sans sauvegarde préalable.
