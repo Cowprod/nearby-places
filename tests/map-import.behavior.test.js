@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('www/js/app.js', 'utf8');
-function harness(native = false) {
+function harness(native = false, earlyURLs = []) {
   const store = new Map(), elements = new Map(), listeners = new Map(), hooks = {};
   let confirmAllowed = false;
   function element() {
@@ -34,6 +34,8 @@ function harness(native = false) {
     init(success){if(success)success();},
     addHandler(callback){hooks.share=callback;}
   }};
+  vm.runInNewContext(fs.readFileSync('www/js/deeplink-bootstrap.js','utf8'),context,{filename:'www/js/deeplink-bootstrap.js'});
+  earlyURLs.forEach(url=>context.window.handleOpenURL(url));
   vm.runInNewContext(source,context,{filename:'www/js/app.js'});
   document.getElementById('category').value='culture';
   async function importURL(url){document.getElementById('maps-url').value=url;
@@ -77,6 +79,9 @@ assert.equal(list[5].name,'Good Shop');
 list=await h.importURL('Voici mon lien de partage : https://maps.apple.com/?ll=35.711,139.782&q=Good%20Cafe');
 assert.equal(list.length,7,'URL de partage extraite du texte');
 checkPlace(list[6],35.711,139.782);
+list=await h.importURL('https://www.google.com/maps/place/Unknown+Shop/@35.734,139.734,16z');
+assert.equal(list.length,7,'les coordonnées @ sont le centre de carte, pas le lieu Google Maps');
+assert.match(h.status(),/Coordonnées Google Maps absentes/, 'erreur explicite si une fiche ne fournit que le viewport');
 list=await h.importURL('https://maps.app.goo.gl/shortCode');
 assert.equal(list.length,7,'lien court non résolu ne crée rien');
 assert.match(h.status(),/Import du lieu : Résolution iOS/, 'échec réseau natif explicite sans création de lieu');
@@ -108,6 +113,11 @@ h.setConfirm(true);
 h.reset();
 assert.equal(h.store.has('nearby-places-v1'),false,'réinitialisation explicite seulement');
 assert.equal(h.store.has('nearby-places-catalogue-v1'),false,'cache réinitialisé explicitement');
+const early=harness(true,['nearbyplaces://import?ll=35.850,139.850&name=AvantScript']);
+assert.equal(early.store.has('nearby-places-v1'),false,'URL capturée avant app.js, sans ajout avant deviceready');
+early.fire('deviceready');
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(JSON.parse(early.store.get('nearby-places-v1')||'[]')[0].name,'AvantScript','URL initiale rejouée à deviceready');
 const cold=harness(true);
 cold.window.handleOpenURL('nearbyplaces://import?ll=35.801,139.801&name=Premier');
 cold.window.handleOpenURL('nearbyplaces://import?ll=35.802,139.802&name=Second');
