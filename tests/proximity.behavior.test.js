@@ -165,6 +165,32 @@ async function main() {
   assert.equal(concurrent.state.maxInFlight, 1);
   concurrent.api.onGeofence({action:'ENTER', identifier:place.id});
   assert.equal(concurrent.scheduled.length, 0, 'aucune notification après demande d’arrêt');
+
+  // Imported or locally restored data may be malformed. It must never reach Core Location.
+  // Leave localStorage untouched: exclude invalid records from native fences and callbacks only.
+  const malformed=harness();
+  malformed.api.wire();
+  await malformed.callbacks.deviceready();
+  assert.equal(await malformed.api.setPlaces([
+    place, null,
+    { ...place, id:'bad-nan', latitude:NaN },
+    { ...place, id:'bad-infinity', latitude:Infinity },
+    { ...place, id:'bad-lat', latitude:91 },
+    { ...place, id:'bad-lon', longitude:181 },
+    { ...place, id:'bad-string', latitude:'35.6' },
+    { ...place, id:'' },
+    { ...place, id:42 }
+  ]),true);
+  assert.equal(malformed.state.geofences.length,1,'seule une zone géographique valide doit atteindre le SDK iOS');
+  assert.equal(malformed.state.geofences[0].identifier,place.id);
+  assert.equal(await malformed.api.enable(),true);
+  for(const id of ['bad-nan','bad-infinity','bad-lat','bad-lon','bad-string','']) {
+    malformed.api.onGeofence({action:'ENTER',identifier:id});
+  }
+  assert.equal(malformed.scheduled.length,0,'ne jamais notifier une entrée locale invalide ou un callback ancien');
+  malformed.api.onGeofence({action:'ENTER',identifier:place.id});
+  assert.equal(malformed.scheduled.length,1,'un lieu valide continue de notifier');
+  console.log('PASS zones iOS (simulées) : entrées locales invalides filtrées sans suppression, callbacks périmés ignorés');
   console.log('PASS proximité (simulée) : rayon, opt-in, test notification +10s, callbacks fictifs, arrêt, sérialisation SDK, reprise après erreur add et stop');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
