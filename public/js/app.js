@@ -162,23 +162,28 @@
       },function(error){trace('import-native-error',String(error));reject(Error('Résolution iOS : '+String(error)));});
     });
   }
-  var pendingImport=null;
+  var pendingImport=null, importQueue=[];
+  function showNextImport(){
+    if(pendingImport || !importQueue.length)return;
+    pendingImport=importQueue.shift();
+    $('import-name').value=/^Lieu (Apple Plans|Google Maps|ChatGPT)$/.test(pendingImport.name)?'':pendingImport.name;
+    $('import-category').value='culture';
+    $('import-comment').value='';
+    $('import-coordinates').textContent=pendingImport.latitude.toFixed(6)+', '+pendingImport.longitude.toFixed(6);
+    $('import-dialog').hidden=false;
+    trace('import-form','confirmation demandée '+pendingImport.latitude+','+pendingImport.longitude);
+    $('import-name').focus();
+  }
   function importMapsURL(value){
     var parsed=parseMapsLink(value);
     var duplicate=places.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 &&
       Math.abs(p.longitude-parsed.longitude)<0.00001;});
     if(duplicate){trace('import-result','doublon '+parsed.name);status('Ce lieu existe déjà dans le catalogue');return false;}
-    pendingImport=parsed;
-    $('import-name').value=/^Lieu (Apple Plans|Google Maps|ChatGPT)$/.test(parsed.name)?'':parsed.name;
-    $('import-category').value='culture';
-    $('import-comment').value='';
-    $('import-coordinates').textContent=parsed.latitude.toFixed(6)+', '+parsed.longitude.toFixed(6);
-    $('import-dialog').hidden=false;
-    trace('import-form','confirmation demandée '+parsed.latitude+','+parsed.longitude);
-    $('import-name').focus();
+    if((pendingImport && Math.abs(pendingImport.latitude-parsed.latitude)<0.00001 && Math.abs(pendingImport.longitude-parsed.longitude)<0.00001) || importQueue.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;})){status('Ce lieu est déjà en attente de confirmation');return false;}
+    importQueue.push(parsed);showNextImport();
     return true;
   }
-  $('import-cancel').onclick=function(){pendingImport=null;$('import-dialog').hidden=true;status('Import annulé');};
+  $('import-cancel').onclick=function(){pendingImport=null;$('import-dialog').hidden=true;status('Import annulé');showNextImport();};
   $('import-confirm').onclick=function(){
     if(!pendingImport)return;
     var name=$('import-name').value.trim(),category=$('import-category').value,comment=$('import-comment').value.trim();
@@ -187,7 +192,7 @@
     addManual(name,parsed.latitude,parsed.longitude,category,comment);
     trace('import-result','OK '+name+' '+parsed.latitude+','+parsed.longitude);
     pendingImport=null;$('import-dialog').hidden=true;$('maps-url').value='';
-    status('Lieu enregistré localement');
+    status('Lieu enregistré localement');showNextImport();
   };
   function receiveSharedURL(value){
     trace('share-url','reçu : '+String(value).slice(0,250));
