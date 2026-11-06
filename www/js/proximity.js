@@ -229,15 +229,27 @@ function enable(){
 }
 function disable(){
  ++controlRevision; // Invalide les demandes d'activation en attente de permission.
- active=false; // Coupe immédiatement les alertes JavaScript pendant l'arrêt natif.
- if(!sdk || !ready){status('Module natif absent');return Promise.resolve(false);}
+ active=false; // Bloque immédiatement les alertes JS, même si stop() échoue.
+ // Persister le retrait de consentement AVANT l'appel natif asynchrone :
+ // un crash, une fermeture ou un échec de stop() ne doit pas réactiver les alertes au boot.
+ storeSet(STORAGE,{enabled:false});
+ logEvent('stop-request','consentement retiré ; arrêt natif demandé');
+ if(!sdk || !ready){
+   status('Surveillance désactivée localement · arrêt natif à vérifier à l’initialisation');
+   return Promise.resolve(false);
+ }
  return serialNative(function(){
    return sdk.stop().then(function(){
      // The SDK may discard native zones on stop; always rebuild on next enable.
      lastFenceSignature=null;
-     storeSet(STORAGE,{enabled:false});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;
+     status('Surveillance arrêtée');logEvent('stop','utilisateur, arrêt SDK confirmé');return true;
    });
- }).catch(function(error){status('Arrêt impossible : '+String(error));return false;});
+ }).catch(function(error){
+   // Le consentement reste retiré : init() retentera stop() si le SDK se restaure.
+   logEvent('stop-error','consentement retiré, arrêt natif non confirmé : '+String(error));
+   status('Arrêt natif impossible (préférence désactivée) : '+String(error));
+   return false;
+ });
 }
 function setPlaces(places){catalogue=Array.isArray(places)?places.slice():[];if(ready)return sync();return Promise.resolve(false);}
 function wire(){
