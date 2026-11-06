@@ -133,6 +133,27 @@ overlapping.confirmImport();
 assert.equal(JSON.parse(overlapping.store.get('nearby-places-v1')).length,1,'confirmation cannot duplicate newly added location');
 assert.equal(overlapping.formOpen(),false,'obsolete confirmation dismissed safely');
 assert.match(overlapping.status(),/existe déjà/);
+// Apple Maps place/route coordinates must win over viewport or search-bias values.
+// Native iPhone sharing still requires device validation: these are JS parser tests.
+const appleTargets=harness();
+let targets=await appleTargets.importURL('https://maps.apple.com/place?coordinate=35.811,139.811&ll=35.100,139.100&name=Target');
+assert.equal(targets.length,1);
+checkPlace(targets[0],35.811,139.811);
+targets=await appleTargets.importURL('https://maps.apple.com/?daddr=35.812,139.812&ll=35.200,139.200&dirflg=w');
+assert.equal(targets.length,2);
+checkPlace(targets[1],35.812,139.812);
+targets=await appleTargets.importURL('https://maps.apple.com/directions?destination=35.813,139.813&ll=35.300,139.300');
+assert.equal(targets.length,3,'unified Apple directions uses destination');
+checkPlace(targets[2],35.813,139.813);
+targets=await appleTargets.importURL('https://maps.apple.com/?q=35.814,139.814&sll=35.400,139.400');
+assert.equal(targets.length,4,'numeric q remains valid without using sll');
+checkPlace(targets[3],35.814,139.814);
+const appleViewport=harness();
+let rejected=await appleViewport.importURL('https://maps.apple.com/?q=Pharmacie&sll=35.900,139.900');
+assert.equal(rejected.length,0,'search bias is not a selected place');
+rejected=await appleViewport.importURL('https://maps.apple.com/directions?destination=Tokyo%20Station&ll=35.500,139.500');
+assert.equal(rejected.length,0,'route with named target must not silently import viewport');
+console.log('PASS Apple Plans (parser simulé) : cible POI/directions prioritaire, sll et viewport non importés comme destination');
 const h=harness();
 // Short Maps links percent-encoded into a Shortcuts/ChatGPT import URL must reach
 // the native resolver when pasted directly (not only via handleOpenURL).
