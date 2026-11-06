@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('www/js/app.js', 'utf8');
-function harness(native = false, earlyURLs = []) {
+function harness(native = false, earlyURLs = [], controlledFetch = false) {
   const store = new Map(), elements = new Map(), listeners = new Map(), hooks = {};
-  const nativeResolutions=[];
+  const nativeResolutions=[], networkCalls=[];
   let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
@@ -27,6 +27,7 @@ function harness(native = false, earlyURLs = []) {
   const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0)fn();return 1;},clearTimeout(){},
     fetch(url){
+      if(controlledFetch)return new Promise((resolve,reject)=>networkCalls.push({url:String(url),resolve,reject}));
       if(String(url).includes('/p/okRedirect')) return Promise.resolve({url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});
       if(String(url).includes('maps.apple/p/') || String(url).includes('maps.app.goo.gl/')) return Promise.reject(new Error('CORS: lien court inaccessible'));
       return new Promise(()=>{});
@@ -47,7 +48,10 @@ function harness(native = false, earlyURLs = []) {
     return JSON.parse(store.get('nearby-places-v1')||'[]');
   }
   function status(){return document.getElementById('status').textContent;}
-  return {importURL,status,store,window:context.window,nativeResolutions,
+  return {importURL,status,store,window:context.window,nativeResolutions,networkCalls,
+    resolveFetch(index,data){networkCalls[index].resolve({ok:true,json(){return Promise.resolve(data)}});},
+    refresh(){document.getElementById('refresh').onclick();},
+    manualAdd(){document.getElementById('add').onclick();},
     setConfirm(value){confirmAllowed=value;},
     fire(event){(listeners.get(event)||[]).forEach(callback=>callback());},
     share(intent){assert.equal(typeof hooks.share,'function','handler Share Extension non déclaré');hooks.share(intent);},
@@ -59,6 +63,36 @@ function harness(native = false, earlyURLs = []) {
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
 async function main() {
+// A stale first HTTP response must never overwrite a newer catalogue/cache.
+const refreshing=harness(false,[],true);
+assert.equal(refreshing.networkCalls.length,1,'initial remote fetch started');
+refreshing.refresh();
+assert.equal(refreshing.networkCalls.length,2,'refresh starts a new fetch');
+const older=JSON.parse(fs.readFileSync('data/places.sample.json','utf8'));
+const newer=JSON.parse(JSON.stringify(older));
+newer.places[0].name='Nouveau catalogue';
+refreshing.resolveFetch(1,newer);
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(JSON.parse(refreshing.store.get('nearby-places-catalogue-v1')).places[0].name,'Nouveau catalogue');
+refreshing.resolveFetch(0,older);
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(JSON.parse(refreshing.store.get('nearby-places-catalogue-v1')).places[0].name,'Nouveau catalogue','stale response cannot overwrite cache');
+assert.equal(JSON.parse(refreshing.store.get('nearby-places-v1'))[0].name,'Nouveau catalogue','stale response cannot overwrite places');
+// Recheck duplicates at confirmation: another action can add the same point
+// while the imported Apple Plans place is awaiting explicit approval.
+const overlapping=harness();
+overlapping.window.handleOpenURL('nearbyplaces://import?ll=35.610,139.610&name=En+attente');
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(overlapping.formOpen(),true);
+overlapping.input('name','Ajout concurrent');
+overlapping.input('lat','35.610');
+overlapping.input('lon','139.610');
+overlapping.manualAdd();
+assert.equal(JSON.parse(overlapping.store.get('nearby-places-v1')).length,1);
+overlapping.confirmImport();
+assert.equal(JSON.parse(overlapping.store.get('nearby-places-v1')).length,1,'confirmation cannot duplicate newly added location');
+assert.equal(overlapping.formOpen(),false,'obsolete confirmation dismissed safely');
+assert.match(overlapping.status(),/existe déjà/);
 const h=harness();
 // Short Maps links percent-encoded into a Shortcuts/ChatGPT import URL must reach
 // the native resolver when pasted directly (not only via handleOpenURL).
