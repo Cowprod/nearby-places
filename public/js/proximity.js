@@ -58,7 +58,7 @@ function registerNotificationEvents(){
  var local=notificationPlugin();
  if(!local || typeof local.on!=='function' || notificationEventsRegistered)return;
  try{
-  local.on('add',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','notification ajoutée dans le planificateur natif');});
+  local.on('add',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','confirmation native add reçue (notification ajoutée au planificateur)');});
   local.on('trigger',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','événement natif trigger reçu (WebView active)');});
   local.on('click',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','notification ouverte par utilisateur');});
   notificationEventsRegistered=true;
@@ -109,8 +109,8 @@ function testNotification(){
        trigger:{in:10,unit:'second'},
        foreground:true
      });
-     status('Notification programmée dans 10 s · verrouille l’iPhone');
-     logEvent('test-notification','programmée à +10 s (natif)');
+     status('Demande de notification envoyée (+10 s) · confirmation native à vérifier');
+     logEvent('test-notification','demande JS envoyée à +10 s (pas une confirmation iOS)');
      return true;
    }catch(error){
      status('Échec programmation notification : '+String(error));
