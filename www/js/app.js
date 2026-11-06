@@ -146,11 +146,14 @@
     return new Promise(function(resolve,reject){
       resolver.resolve(match[0],function(result){
         trace('import-native','HTTP '+result.httpStatus+' → '+String(result.url).slice(0,250));
-        var target=result.url||'';
-        if(!/^(https:\/\/maps\.apple\.com\/|https:\/\/(?:www\.)?google\.com\/maps\/)/i.test(target)){
-          target=result.htmlMapURL||target;
-        }
-        if(!target || target===match[0]){reject(Error('Lien court sans destination exploitable'));return;}
+        // Accept only a destination whose coordinates can actually be parsed.
+        // A short Maps URL may return an HTML page with a usable canonical link.
+        var candidates=[result && result.url, result && result.htmlMapURL];
+        var target=candidates.find(function(candidate){
+          if(typeof candidate!=='string' || candidate===match[0])return false;
+          try{parseMapsLink(candidate);return true;}catch(error){return false;}
+        });
+        if(!target){reject(Error('Lien court sans destination Maps avec coordonnées exploitables'));return;}
         resolve(String(value).replace(match[0],target));
       },function(error){trace('import-native-error',String(error));reject(Error('Résolution iOS : '+String(error)));});
     });
