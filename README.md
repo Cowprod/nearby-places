@@ -145,3 +145,10 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 - Chaque pression sur « Tester une notification dans 10 s » utilise désormais un **identifiant numérique distinct**, réservé dans la plage `2100000000–2139999999` (Int32 signé), afin qu'une seconde pression ne remplace pas une notification encore en attente. Le compteur `nearby-places-test-notification-seq-v1` reste local et n'efface aucun lieu.
 - Les événements `add`, `trigger` et `click` sont journalisés avec l'identifiant correspondant ; l'ancien identifiant de test `1999999999` reste reconnu pour les événements déjà programmés avant la mise à jour. Un appel JS à `schedule` n'est **pas** une preuve de livraison sur iPhone verrouillé.
 - `npm test` vérifie hors appareil deux demandes consécutives, les identifiants distincts, leur persistance après une relance JavaScript simulée, le filtrage d'un événement étranger et les callbacks simulés. La présentation réelle sur l'écran verrouillé, la réception après suspension/terminaison et le comportement iOS ne sont **pas** validés.
+
+
+## Import depuis un partage texte — protections supplémentaires (6 novembre 2026)
+
+- Une URL courte Apple Plans (`maps.apple/p/...`) ou Google Maps (`maps.app.goo.gl/...`) copiée avec une ponctuation finale dans un message est nettoyée avant l'appel au résolveur iOS. Les URL non autorisées restent rejetées.
+- Les enveloppes `nearbyplaces://import?url=...` imbriquées sont acceptées jusqu'à quatre niveaux, puis refusées explicitement. Un rejet ne crée aucun lieu : la confirmation du formulaire reste obligatoire.
+- Les tests Node vérifient ce nettoyage, la limite d'imbrication et la conservation du catalogue local en cas d'erreur. Le résolveur Objective-C, l'extension de partage et la remise native des URL après démarrage à froid ne sont toujours **pas** validés par un build Xcode ou par un essai sur iPhone.
