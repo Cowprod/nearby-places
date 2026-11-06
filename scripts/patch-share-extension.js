@@ -3,8 +3,13 @@
 const fs=require('fs'),path=require('path');
 function patch(source){
   if(source.includes('NEARBY_SHARE_PATCH_V1'))return source;
+  // Some OpenWith releases already parse public.url and export item.data.
+  // Preserve their native implementation rather than adding a competing handler.
+  if(source.includes('hasItemConformingToTypeIdentifier:@"public.url"') &&
+     source.includes('loadItemForTypeIdentifier:@"public.url"') &&
+     /@"data"\s*:\s*item\.absoluteString/.test(source))return source;
   const anchor='    // TEXT case\n';
-  if(!source.includes(anchor)||!source.includes('    // IMAGE case\n')||!source.includes('    __block int remainingAttachments'))throw Error('Unexpected OpenWith ShareViewController template; refusing unsafe patch');
+  if(!source.includes(anchor)||!source.includes('    // IMAGE case\n')||!source.includes('    __block int remainingAttachments')||!source.includes('    [self.view endEditing:YES];')||!source.includes('        [self openURL:[NSURL URLWithString:url]];'))throw Error('Unexpected OpenWith ShareViewController template; refusing unsafe patch');
   source=source.replace('    [self.view endEditing:YES];','    [super viewDidAppear:animated];\n    [self.view endEditing:YES];');
   source=source.replace('    __block int remainingAttachments = ((NSExtensionItem*)self.extensionContext.inputItems[0]).attachments.count;',`    // NEARBY_SHARE_PATCH_V1: Apple Maps can supply public.url rather than public.text.
     if (self.extensionContext.inputItems.count == 0) {
