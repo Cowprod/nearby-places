@@ -59,6 +59,29 @@ function harness(native = false, earlyURLs = []) {
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
 async function main() {
 const h=harness();
+// No shared link is persisted before explicit confirmation.
+const draft=harness();
+draft.input('maps-url','https://maps.apple.com/?ll=35.600,139.600&name=Fiche+test');
+draft.window.handleOpenURL('nearbyplaces://import?ll=35.600,139.600&name=Fiche+test');
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(draft.store.has('nearby-places-v1'),false,'aucun enregistrement avant confirmation');
+assert.equal(draft.formOpen(),true);
+draft.input('import-name','');
+draft.confirmImport();
+assert.equal(draft.formOpen(),true,'libellé obligatoire');
+assert.equal(draft.store.has('nearby-places-v1'),false);
+draft.input('import-name','Boutique test');
+draft.input('import-category','occasion');
+draft.input('import-comment','Rayon pédales et instruments');
+draft.confirmImport();
+const saved=JSON.parse(draft.store.get('nearby-places-v1'))[0];
+assert.equal(saved.name,'Boutique test');
+assert.deepEqual(Array.from(saved.categories),['occasion']);
+assert.equal(saved.comment,'Rayon pédales et instruments');
+draft.window.handleOpenURL('nearbyplaces://import?ll=35.601,139.601&name=Annulation');
+await new Promise(resolve=>setImmediate(resolve));
+draft.cancelImport();
+assert.equal(JSON.parse(draft.store.get('nearby-places-v1')).length,1,'annuler ne crée aucun lieu');
 let list=await h.importURL('https://maps.apple.com/place?coordinate=35.7001,139.7702&name=Lieu+Apple');
 assert.equal(list.length,1);
 checkPlace(list[0],35.7001,139.7702);
