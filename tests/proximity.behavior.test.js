@@ -214,6 +214,49 @@ async function main() {
   assert.equal(bootStopFailure.scheduled.length,0,'aucune notification JS si arrêt natif échoue');
   assert.match(bootStopFailure.elements['proximity-status'].textContent,/Erreur arrêt du SDK sans consentement/,'erreur natif visible et non masquée');
 
+  // Retrait du consentement : le drapeau local doit être désactivé avant toute
+  // opération native, y compris si stop() échoue ou si deviceready n'est pas arrivé.
+  const privatePlaces='[{"id":"manual-secret","name":"Lieu privé"}]';
+  const failedStopStore=new Map([
+    ['nearby-places-proximity-v1',JSON.stringify({enabled:true})],
+    ['nearby-places-v1',privatePlaces]
+  ]);
+  const failedStop=harness(true,false,failedStopStore);
+  failedStop.api.setPlaces([place]);
+  failedStop.api.wire();
+  await failedStop.callbacks.deviceready();
+  assert.equal(await failedStop.api.enable(),true,'opt-in préalable simulé');
+  failedStop.state.failNextStops=1;
+  assert.equal(await failedStop.api.disable(),false,'échec natif signalé sans succès fictif');
+  assert.equal(JSON.parse(failedStopStore.get('nearby-places-proximity-v1')).enabled,false,
+    'le retrait de consentement persiste malgré stop() rejeté');
+  assert.equal(failedStopStore.get('nearby-places-v1'),privatePlaces,'aucune modification des lieux');
+  assert.match(failedStop.elements['proximity-status'].textContent,/Arrêt natif impossible/,
+    'échec natif clairement visible');
+  failedStop.api.onGeofence({action:'ENTER',identifier:place.id});
+  assert.equal(failedStop.scheduled.length,0,'aucune alerte JS après retrait du consentement');
+  const restartAfterFailedStop=harness(true,false,failedStopStore,true);
+  restartAfterFailedStop.api.setPlaces([place]);
+  restartAfterFailedStop.api.wire();
+  assert.equal(await restartAfterFailedStop.callbacks.deviceready(),true);
+  assert.equal(restartAfterFailedStop.state.stops,1,'au redémarrage le SDK est arrêté après échec précédent');
+  assert.equal(failedStopStore.get('nearby-places-v1'),privatePlaces,'données intactes après reprise');
+
+  const earlyOptOutStore=new Map([
+    ['nearby-places-proximity-v1',JSON.stringify({enabled:true})],
+    ['nearby-places-v1',privatePlaces]
+  ]);
+  const earlyOptOut=harness(true,false,earlyOptOutStore,true);
+  earlyOptOut.api.setPlaces([place]);
+  earlyOptOut.api.wire();
+  assert.equal(await earlyOptOut.api.disable(),false,'stop précoce sans SDK initialisé non présenté comme confirmé');
+  assert.equal(JSON.parse(earlyOptOutStore.get('nearby-places-proximity-v1')).enabled,false,
+    'stop avant deviceready mémorise immédiatement le retrait de consentement');
+  assert.equal(await earlyOptOut.callbacks.deviceready(),true);
+  assert.equal(earlyOptOut.state.stops,1,'init effectue l’arrêt natif différé');
+  assert.equal(earlyOptOutStore.get('nearby-places-v1'),privatePlaces,'pas de perte de données au boot');
+  console.log('PASS retrait de consentement (simulé) : échec stop, démarrage précoce, reprise SDK et données locales préservées');
+
   const declinedStore=new Map([['nearby-places-proximity-v1',JSON.stringify({enabled:false})]]);
   const bootOptedOut=harness(true,false,declinedStore,true);
   bootOptedOut.api.wire();
