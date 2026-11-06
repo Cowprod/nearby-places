@@ -172,3 +172,10 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 - Le catalogue local peut contenir des données malformées après une restauration ou une ancienne version. Le module de géofencing ignore maintenant les entrées nulles, sans identifiant texte non vide ou dont latitude/longitude sont non finies ou hors limites (±90° / ±180°). Les entrées locales sont **conservées** : cette protection ne nettoie pas ni ne réécrit `localStorage`.
 - Un callback `ENTER` ancien visant un lieu devenu invalide est également ignoré : seuls les lieux encore admissibles à la surveillance peuvent produire une demande de notification de proximité.
 - `npm test` vérifie ce filtrage avec un SDK JavaScript simulé (`NaN`, `Infinity`, coordonnées hors bornes, type texte, identifiant invalide), puis vérifie qu'un lieu valide continue de notifier. **Aucun SDK Core Location réel, aucune notification à +10 s sur écran verrouillé et aucun import Apple Plans natif n'ont été validés par ces tests.**
+
+## Résilience du catalogue local (7 novembre 2026)
+
+- L'affichage tolère des entrées historiques incomplètes (coordonnées hors schéma, catégories incorrectes, enregistrements nuls) et n'ouvre pas d'itinéraire pour des coordonnées invalides. L'enregistrement brut reste conservé pour récupération ; aucune correction silencieuse des lieux de l'utilisateur n'est effectuée.
+- Une réponse GitHub ne supprime plus les entrées locales manuelles malformées ni les enregistrements historiques sans identifiant. Les lieux valides du catalogue distant continuent de se mettre à jour normalement.
+- Si `nearby-places-v1` contient un JSON illisible ou un objet inattendu plutôt qu'un tableau, la synchronisation est suspendue **sans réécrire cette clé**. Utiliser la sauvegarde disponible ou examiner les données avant une réinitialisation explicite ; ne pas désinstaller l'app.
+- Les tests `npm test` couvrent ces scénarios dans un environnement JavaScript simulé : **ni le stockage WKWebView réel ni la présentation d'une notification sur écran verrouillé ne sont validés**. `config.xml`, les plugins Cordova, les clés de stockage et les cibles Xcode restent inchangés.
