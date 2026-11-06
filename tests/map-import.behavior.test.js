@@ -42,7 +42,7 @@ function harness(native = false, earlyURLs = []) {
     document.getElementById('maps-add').onclick();
     await new Promise(resolve => setImmediate(resolve)); // L'import suit maintenant une résolution Promise.
     const dialog=document.getElementById('import-dialog');
-    if(dialog.hidden===false){document.getElementById('import-confirm').onclick();}
+    if(dialog.hidden===false){if(!document.getElementById('import-name').value)document.getElementById('import-name').value='Libellé de test';document.getElementById('import-confirm').onclick();}
     return JSON.parse(store.get('nearby-places-v1')||'[]');
   }
   function status(){return document.getElementById('status').textContent;}
