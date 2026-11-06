@@ -62,14 +62,22 @@ async function main() {
   ]);
   h.api.wire();
   await h.callbacks.deviceready();
-  assert.equal(h.state.geofences.length, 1, 'seules les zones actives et non visitées sont enregistrées');
-  assert.equal(h.state.geofences[0].radius, 500);
+  assert.equal(h.state.geofences.length, 0, 'aucune zone native sans consentement préalable');
   assert.equal(h.api.radius(), 500);
   await h.api.setRadius(750);
-  assert.equal(h.state.geofences[0].radius, 750);
+  assert.equal(h.state.geofences.length, 0, 'rayon sauvegardé sans écriture native');
   assert.equal(await h.api.setRadius(50), false);
   assert.equal(await h.api.setRadius(150), false, 'rayon iOS inférieur à 200 m refusé');
   assert.equal(h.api.radius(), 750);
+
+
+  h.api.onGeofence({ action: 'ENTER', identifier: place.id });
+  assert.equal(h.scheduled.length, 0, 'pas de notification avant consentement explicite');
+
+  assert.equal(await h.api.enable(), true);
+  assert.equal(h.state.starts, 1);
+  assert.equal(h.state.geofences.length,1,'zones installées après opt-in');
+  assert.equal(h.state.geofences[0].radius,750);
   // A failed native add after a successful remove invalidates the previous fence cache.
   h.state.failNextAdds=1;
   assert.equal(await h.api.setRadius(800),false,'native add failure propagated to caller');
@@ -77,12 +85,6 @@ async function main() {
   assert.equal(await h.api.setRadius(750),true,'retry after failure must rebuild even for previously cached radius');
   assert.equal(h.state.geofences.length,1,'retry restores native fence');
   assert.equal(h.state.geofences[0].radius,750);
-
-  h.api.onGeofence({ action: 'ENTER', identifier: place.id });
-  assert.equal(h.scheduled.length, 0, 'pas de notification avant consentement explicite');
-
-  assert.equal(await h.api.enable(), true);
-  assert.equal(h.state.starts, 1);
   h.api.onGeofence({ action: 'EXIT', identifier: place.id });
   h.api.onGeofence({ action: 'ENTER', identifier: 'disabled' });
   h.api.onGeofence({ action: 'ENTER', identifier: 'visited' });
@@ -95,8 +97,11 @@ async function main() {
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
   assert.equal(h.scheduled.length, 1, 'pas de notification après arrêt');
   const removeCountAfterStop=h.state.removes;
+  assert.equal(await h.api.setRadius(900),true,'rayon enregistré après stop');
+  assert.equal(h.state.removes,removeCountAfterStop,'aucun nouvel appel natif après retrait de consentement');
   assert.equal(await h.api.enable(),true,'surveillance relancée après stop');
   assert.equal(h.state.removes,removeCountAfterStop+1,'restart rebuilds fences even if catalogue unchanged');
+  assert.equal(h.state.geofences[0].radius,900,'l’activation reprend le rayon modifié pendant l’arrêt');
   assert.equal(await h.api.disable(),true);
 
   assert.equal(await h.api.testNotification(), true, 'test +10 s même après arrêt du GPS');
@@ -155,8 +160,8 @@ async function main() {
     concurrent.api.setPlaces([place])
   ];
   assert.deepEqual(await Promise.all(updates), [true, true, true, true]);
-  assert.equal(concurrent.state.maxInFlight, 1, 'les appels SDK natifs ne se chevauchent jamais');
-  assert.equal(concurrent.state.geofences[0].radius, 800, 'dernière valeur de rayon conservée');
+  assert.equal(concurrent.state.maxInFlight, 0, 'aucun appel SDK avant consentement');
+  assert.equal(concurrent.api.radius(), 800, 'dernière valeur de rayon conservée localement');
   const startPending = concurrent.api.enable();
   const stopPending = concurrent.api.disable();
   assert.equal(await startPending, false, 'l’arrêt annule une activation encore en attente de permission');
@@ -182,9 +187,10 @@ async function main() {
     { ...place, id:'' },
     { ...place, id:42 }
   ]),true);
+  assert.equal(malformed.state.geofences.length,0,'aucune zone avant le consentement');
+  assert.equal(await malformed.api.enable(),true);
   assert.equal(malformed.state.geofences.length,1,'seule une zone géographique valide doit atteindre le SDK iOS');
   assert.equal(malformed.state.geofences[0].identifier,place.id);
-  assert.equal(await malformed.api.enable(),true);
   for(const id of ['bad-nan','bad-infinity','bad-lat','bad-lon','bad-string','']) {
     malformed.api.onGeofence({action:'ENTER',identifier:id});
   }
@@ -200,10 +206,16 @@ async function main() {
   bootWithoutConsent.api.wire();
   assert.equal(await bootWithoutConsent.callbacks.deviceready(),true);
   assert.equal(bootWithoutConsent.state.stops,1,'SDK actif au boot sans opt-in doit être arrêté');
+  assert.equal(bootWithoutConsent.state.removes,0,'ne pas reprogrammer de zones après cet arrêt');
   assert.equal(JSON.parse(noConsentStore.get('nearby-places-proximity-v1')).enabled,false,'désactivation locale persistée');
   assert.equal(noConsentStore.get('nearby-places-v1'),originalPlaces,'les données de lieux ne sont pas modifiées par la reprise');
   bootWithoutConsent.api.onGeofence({action:'ENTER',identifier:place.id});
   assert.equal(bootWithoutConsent.scheduled.length,0,'aucune notification après restauration native non autorisée');
+  await bootWithoutConsent.api.setRadius(650);
+  assert.equal(bootWithoutConsent.state.removes,0,'mise à jour du rayon ne réarme pas iOS sans opt-in');
+  assert.equal(await bootWithoutConsent.api.enable(),true,'réactivation explicite possible');
+  assert.equal(bootWithoutConsent.state.geofences[0].radius,650,'le prochain opt-in applique les réglages locaux');
+  assert.equal(await bootWithoutConsent.api.disable(),true);
 
   const bootStopFailure=harness(true,false,new Map(),true);
   bootStopFailure.state.failNextStops=1;
@@ -271,7 +283,7 @@ async function main() {
   assert.equal(bootOptedIn.state.stops,0,'reprise autorisée par opt-in persisté');
   bootOptedIn.api.onGeofence({action:'ENTER',identifier:place.id});
   assert.equal(bootOptedIn.scheduled.length,1,'opt-in historique et SDK actif permettent la notification simulée');
-  console.log('PASS consentement au démarrage (simulé) : SDK restauré sans opt-in arrêté, données préservées, opt-in historique respecté');
+  console.log('PASS consentement au démarrage (simulé) : SDK arrêté sans opt-in, aucun réarmement, réglages différés, opt-in historique respecté');
   console.log('PASS zones iOS (simulées) : entrées locales invalides filtrées sans suppression, callbacks périmés ignorés');
   console.log('PASS proximité (simulée) : rayon, opt-in, test notification +10s, callbacks fictifs, arrêt, sérialisation SDK, reprise après erreur add et stop');
 }
