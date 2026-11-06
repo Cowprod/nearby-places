@@ -161,8 +161,14 @@
       coords=url.searchParams.get('ll');
       name=url.searchParams.get('name')||'';
     }else if(url.protocol==='https:' && (host==='maps.apple.com'||host==='www.maps.apple.com')){
-      coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr')||url.searchParams.get('sll')||url.searchParams.get('q');
-      name=url.searchParams.get('name')||url.searchParams.get('q')||'Lieu Apple Plans';
+      // 'coordinate' identifies a place, 'daddr'/'destination' a route's target.
+      // 'll' is only a legacy map pin/center; 'sll' biases search, not a POI.
+      // Never import the viewport if a directions URL has an unparseable target.
+      var directions=/^\/directions\/?$/.test(url.pathname);
+      coords=directions
+        ? (url.searchParams.get('destination')||url.searchParams.get('daddr'))
+        : (url.searchParams.get('coordinate')||url.searchParams.get('daddr')||url.searchParams.get('ll')||url.searchParams.get('q'));
+      name=url.searchParams.get('name')||(directions?'Destination Apple Plans':url.searchParams.get('q'))||'Lieu Apple Plans';
     }else if(url.protocol==='https:' && (host==='www.google.com'||host==='google.com'||host==='maps.google.com'||host==='maps.app.goo.gl')){
       if(host==='maps.app.goo.gl')throw Error('Lien Google Maps raccourci : ouvrir dans le navigateur et copier l’URL complète.');
       var at=url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
