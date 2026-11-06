@@ -152,3 +152,10 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 - Une URL courte Apple Plans (`maps.apple/p/...`) ou Google Maps (`maps.app.goo.gl/...`) copiée avec une ponctuation finale dans un message est nettoyée avant l'appel au résolveur iOS. Les URL non autorisées restent rejetées.
 - Les enveloppes `nearbyplaces://import?url=...` imbriquées sont acceptées jusqu'à quatre niveaux, puis refusées explicitement. Un rejet ne crée aucun lieu : la confirmation du formulaire reste obligatoire.
 - Les tests Node vérifient ce nettoyage, la limite d'imbrication et la conservation du catalogue local en cas d'erreur. Le résolveur Objective-C, l'extension de partage et la remise native des URL après démarrage à froid ne sont toujours **pas** validés par un build Xcode ou par un essai sur iPhone.
+
+## Protection des imports et des rafraîchissements concurrents (7 novembre 2026 JST)
+
+- Chaque appel à **Actualiser GitHub** ou rechargement possède une génération interne. Une réponse HTTP d'un ancien appel, y compris un repli sur le catalogue embarqué, ne peut plus écraser le catalogue ou son cache après une actualisation plus récente. Les ajouts personnels et leurs clés `localStorage` restent inchangés.
+- **Confirmer le lieu** vérifie les doublons une seconde fois juste avant l'enregistrement : un lieu inséré par une autre opération pendant que le formulaire Apple Plans est ouvert ne peut pas être ajouté deux fois.
+- Scénarios Node exécutés : réponse réseau ancienne arrivant après la plus récente ; ajout manuel concurrent pendant un import en attente. Il s'agit de tests JavaScript simulés, **pas** d'une validation WKWebView, Xcode, Core Location ou iPhone verrouillé.
+- La notification locale à +10 secondes et les liens Apple Plans natifs nécessitent toujours un build iOS, puis un essai réel sur iPhone uniquement sur instruction. Préserver `platforms/ios`, la signature Xcode et l'application installée ; ne pas désinstaller l'application pour effectuer une mise à jour.
