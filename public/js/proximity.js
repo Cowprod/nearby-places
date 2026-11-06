@@ -2,6 +2,12 @@
 'use strict';
 var STORAGE='nearby-places-proximity-v1', COOLDOWN='nearby-places-alerts-v1', EVENTS='nearby-places-events-v1';
 var ready=false, active=false, catalogue=[], sdk=null;
+var nativeQueue=Promise.resolve(), controlRevision=0;
+function serialNative(action){
+ var pending=nativeQueue.then(action,action);
+ nativeQueue=pending.then(function(){},function(){});
+ return pending;
+}
 function storeGet(key,fallback){try {return JSON.parse(localStorage.getItem(key))||fallback;}catch(e){return fallback;}}
 function storeSet(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch(e){console.warn('storage',e);}}
 function status(message){var e=document.getElementById('proximity-status');if(e)e.textContent=message;}
@@ -91,13 +97,17 @@ function onGeofence(event){
  var place=catalogue.find(function(p){return p.id===event.identifier;});
  if(place && !place.visited && (!place.alert || place.alert.enabled!==false))notify(place);
 }
-function sync(){
- if(!ready || !sdk)return Promise.resolve(false);
+function syncNative(){
  var list=fences();
  return sdk.removeGeofences().then(function(){
    return list.length?sdk.addGeofences(list):true;
  }).then(function(){status(active?'Surveillance active · '+list.length+' lieux':'Prêt · '+list.length+' lieux surveillables');logEvent('zones',list.length+' zones');return true;})
  .catch(function(error){status('Erreur zones : '+String(error));return false;});
+}
+function sync(){
+ if(!ready || !sdk)return Promise.resolve(false);
+ // Une seule transaction SDK à la fois : aucune suppression ne croise un ajout.
+ return serialNative(syncNative);
 }
 function init(){
  registerNotificationEvents();
@@ -113,20 +123,36 @@ function enable(){
  if(!sdk || !ready){status('Le module natif n’est pas prêt');return Promise.resolve(false);}
  var local=notificationPlugin();
  if(!local){status('Plugin de notification manquant');return Promise.resolve(false);}
+ var requestRevision=++controlRevision;
  return new Promise(function(resolve){
    try{local.requestPermission(function(granted){resolve(!!granted);});}catch(error){resolve(false);}
  }).then(function(granted){
+   if(requestRevision!==controlRevision)return false;
    if(!granted){status('Permission notifications refusée');return false;}
-   return sync().then(function(ok){
-     if(!ok)return false;
-     return sdk.startGeofences().then(function(){active=true;storeSet(STORAGE,{enabled:true});status('Surveillance activée · rayon '+radius()+' m');logEvent('start',radius()+' m');return true;});
+   return serialNative(function(){
+     if(requestRevision!==controlRevision)return false;
+     return syncNative().then(function(ok){
+       if(!ok || requestRevision!==controlRevision)return false;
+       return sdk.startGeofences().then(function(){
+         // Un arrêt demandé entre-temps reste prioritaire et suivra dans la file.
+         if(requestRevision!==controlRevision)return false;
+         active=true;storeSet(STORAGE,{enabled:true});
+         status('Surveillance activée · rayon '+radius()+' m');logEvent('start',radius()+' m');
+         return true;
+       });
+     });
    });
  }).catch(function(error){status('Surveillance refusée : '+String(error));return false;});
 }
 function disable(){
+ ++controlRevision; // Invalide les demandes d'activation en attente de permission.
+ active=false; // Coupe immédiatement les alertes JavaScript pendant l'arrêt natif.
  if(!sdk || !ready){status('Module natif absent');return Promise.resolve(false);}
- return sdk.stop().then(function(){active=false;storeSet(STORAGE,{enabled:false});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;})
- .catch(function(error){status('Arrêt impossible : '+String(error));return false;});
+ return serialNative(function(){
+   return sdk.stop().then(function(){
+     storeSet(STORAGE,{enabled:false});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;
+   });
+ }).catch(function(error){status('Arrêt impossible : '+String(error));return false;});
 }
 function setPlaces(places){catalogue=Array.isArray(places)?places.slice():[];if(ready)return sync();return Promise.resolve(false);}
 function wire(){
