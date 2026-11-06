@@ -9,7 +9,7 @@ function harness(native = false, earlyURLs = []) {
   let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
-      append(...items){this.children.push(...items);},
+      append(...items){this.children.push(...items);}, focus(){},
       replaceChildren(...items){this.children=items;},
       remove(){}, click(){}, setAttribute(){} };
   }
@@ -41,6 +41,8 @@ function harness(native = false, earlyURLs = []) {
   async function importURL(url){document.getElementById('maps-url').value=url;
     document.getElementById('maps-add').onclick();
     await new Promise(resolve => setImmediate(resolve)); // L'import suit maintenant une résolution Promise.
+    const dialog=document.getElementById('import-dialog');
+    if(dialog.hidden===false){document.getElementById('import-confirm').onclick();}
     return JSON.parse(store.get('nearby-places-v1')||'[]');
   }
   function status(){return document.getElementById('status').textContent;}
@@ -48,6 +50,10 @@ function harness(native = false, earlyURLs = []) {
     setConfirm(value){confirmAllowed=value;},
     fire(event){(listeners.get(event)||[]).forEach(callback=>callback());},
     share(intent){assert.equal(typeof hooks.share,'function','handler Share Extension non déclaré');hooks.share(intent);},
+    confirmImport(){document.getElementById('import-confirm').onclick();},
+    cancelImport(){document.getElementById('import-cancel').onclick();},
+    input(id,value){document.getElementById(id).value=value;},
+    formOpen(){return document.getElementById('import-dialog').hidden===false;},
     reset(){document.getElementById('reset').onclick();}};
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
@@ -103,6 +109,8 @@ list=await h.importURL('https://evil.example/redirect?ll=35.7,139.7');
 assert.equal(list.length,9,'hôte non autorisé');
 h.window.handleOpenURL('nearbyplaces://import?ll=35.706,139.778&name=Transmis');
 await new Promise(resolve => setImmediate(resolve));
+assert.equal(h.formOpen(),true,'deep link ouvre le formulaire sans enregistrer');
+h.confirmImport();
 list=JSON.parse(h.store.get('nearby-places-v1'));
 assert.equal(list.length,10);
 assert.equal(list[9].name,'Transmis');
@@ -117,7 +125,9 @@ const early=harness(true,['nearbyplaces://import?ll=35.850,139.850&name=AvantScr
 assert.equal(early.store.has('nearby-places-v1'),false,'URL capturée avant app.js, sans ajout avant deviceready');
 early.fire('deviceready');
 await new Promise(resolve=>setImmediate(resolve));
-assert.equal(JSON.parse(early.store.get('nearby-places-v1')||'[]')[0].name,'AvantScript','URL initiale rejouée à deviceready');
+assert.equal(early.formOpen(),true,'URL initiale rejouée dans le formulaire');
+early.confirmImport();
+assert.equal(JSON.parse(early.store.get('nearby-places-v1')||'[]')[0].name,'AvantScript');
 const cold=harness(true);
 cold.window.handleOpenURL('nearbyplaces://import?ll=35.801,139.801&name=Premier');
 cold.window.handleOpenURL('nearbyplaces://import?ll=35.802,139.802&name=Second');
@@ -126,15 +136,21 @@ assert.equal(cold.store.has('nearby-places-v1'),false,'aucun import avant device
 cold.fire('deviceready');
 await new Promise(resolve=>setImmediate(resolve));
 await new Promise(resolve=>setImmediate(resolve));
+assert.equal(cold.formOpen(),true,'premier lien attend confirmation');
+cold.confirmImport();
+assert.equal(cold.formOpen(),true,'second lien attend confirmation');
+cold.confirmImport();
 let queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
-assert.deepEqual(queued.map(p=>p.name),['Premier','Second'],'deux liens profonds reçus avant deviceready sont traités dans l’ordre');
+assert.deepEqual(queued.map(p=>p.name),['Premier','Second'],'deux liens profonds confirmés dans l’ordre');
 cold.share({text:'Titre de page sans URL',items:[{data:'https://maps.apple.com/?ll=35.803,139.803&name=Depuis+Partager',text:'Fiche Plans'}]});
 await new Promise(resolve=>setImmediate(resolve));
+cold.confirmImport();
 queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
 assert.equal(queued.length,3,'le titre du partage ne masque pas l’URL de item.data');
 assert.equal(queued[2].name,'Depuis Partager');
 cold.share({text:'Encore un titre',items:[{data:'https://evil.example/invalid'},{data:'https://maps.apple.com/?ll=35.804,139.804&name=Repli'}]});
 await new Promise(resolve=>setImmediate(resolve));
+cold.confirmImport();
 queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
 assert.equal(queued.length,4,'un candidat rejeté n’empêche pas la lecture du suivant');
 assert.equal(queued[3].name,'Repli');
