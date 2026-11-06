@@ -11,6 +11,7 @@
   <preference name="Orientation" value="default"/>
   <preference name="scheme" value="app"/>
   <preference name="hostname" value="localhost"/>
+  <hook type="after_prepare" src="scripts/patch-share-extension.js" />
   <platform name="ios">
     <preference name="deployment-target" value="15.0"/>
     <edit-config target="NSLocationWhenInUseUsageDescription" file="*-Info.plist" mode="merge">
