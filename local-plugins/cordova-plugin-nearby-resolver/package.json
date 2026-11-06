@@ -1,0 +1,12 @@
+{
+  "name": "cordova-plugin-nearby-resolver",
+  "version": "0.1.0",
+  "description": "Native iOS short Maps link resolver for Nearby Places",
+  "cordova": {
+    "id": "cordova-plugin-nearby-resolver",
+    "platforms": [
+      "ios"
+    ]
+  },
+  "license": "UNLICENSED"
+}
