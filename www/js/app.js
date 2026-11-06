@@ -141,6 +141,19 @@
   }
   function resolveMapsURL(value){
     trace('import-url','entrée : '+String(value||'').slice(0,250));
+    // Links pasted from Shortcuts can contain a percent-encoded short Maps URL.
+    // Resolve the inner URL before parsing the surrounding nearbyplaces://import URL.
+    var incoming;
+    try{incoming=new URL(String(value||'').trim());}catch(error){}
+    if(incoming && incoming.protocol==='nearbyplaces:' && incoming.hostname==='import'){
+      var embedded=incoming.searchParams.get('url');
+      if(embedded){
+        return resolveMapsURL(embedded).then(function(resolved){
+          incoming.searchParams.set('url',resolved);
+          return incoming.href;
+        });
+      }
+    }
     var match=String(value||'').match(/https:\/\/(?:maps\.apple\/p\/|maps\.app\.goo\.gl\/)[^\s<>]+/i);
     if(!match){trace('import-url','URL directe');return Promise.resolve(value);}
     trace('import-url','résolution native : '+match[0]);
