@@ -6,6 +6,7 @@
   function validPosition(lat, lon) { return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; }
   function distanceMeters(a,b,c,d) { var r=Math.PI/180, x=(c-a)*r, y=(d-b)*r, q=Math.sin(x/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)**2;return 12742000*Math.asin(Math.min(1,Math.sqrt(q))); }
   function save(){ localStorage.setItem(KEY,JSON.stringify(places)); if(window.NearbyProximity)window.NearbyProximity.setPlaces(places); }
+  function trace(kind,detail){if(window.NearbyProximity&&window.NearbyProximity.logEvent)window.NearbyProximity.logEvent(kind,detail);}
   function status(s){ $('status').textContent=s; }
   function render(position){
     $('places').replaceChildren();
@@ -135,10 +136,13 @@
     return {name:name,latitude:lat,longitude:lon};
   }
   function resolveMapsURL(value){
+    trace('import-url','entrée : '+String(value||'').slice(0,250));
     var match=String(value||'').match(/https:\/\/(?:maps\.apple\/p\/|maps\.app\.goo\.gl\/)[^\s<>]+/i);
-    if(!match)return Promise.resolve(value);
+    if(!match){trace('import-url','URL directe, sans redirection');return Promise.resolve(value);}
+    trace('import-url','résolution du lien court : '+match[0]);
     var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},10000);
     return fetch(match[0],{redirect:'follow',signal:controller.signal}).then(function(response){
+      trace('import-http','HTTP '+response.status+' → '+String(response.url||'').slice(0,250));
       var target=response.url;
       if(!target || target===match[0])throw Error('Redirection non accessible');
       return String(value).replace(match[0],target);
@@ -148,14 +152,17 @@
     var parsed=parseMapsLink(value);
     var duplicate=places.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 &&
       Math.abs(p.longitude-parsed.longitude)<0.00001;});
-    if(duplicate){status('Ce lieu existe déjà dans le catalogue');return false;}
+    if(duplicate){trace('import-result','doublon '+parsed.name);status('Ce lieu existe déjà dans le catalogue');return false;}
     addManual(parsed.name,parsed.latitude,parsed.longitude,$('category').value);
+    trace('import-result','OK '+parsed.name+' '+parsed.latitude+','+parsed.longitude);
     status('Lieu importé localement');return true;
   }
   function receiveSharedURL(value){
+    trace('share-url','reçu : '+String(value).slice(0,250));
     return resolveMapsURL(value).then(function(resolved){
       return importMapsURL(resolved);
     }).catch(function(error){
+      trace('share-error',String(error));
       $('maps-url').value=value;
       status('Import impossible : '+error.message+' (le lien court peut nécessiter une résolution native)');
       return false;
@@ -163,6 +170,7 @@
   }
   var pendingSharedURL=null;
   window.handleOpenURL=function(url){
+    trace('deeplink','reçu : '+String(url).slice(0,250));
     try{
       var incoming=new URL(url);
       if(incoming.protocol!=='nearbyplaces:' || incoming.hostname!=='import')return;
@@ -177,10 +185,12 @@
   });
   function registerNativeShare(){
     var plugin=window.cordova && window.cordova.openwith;
-    if(!plugin){status('Partage natif indisponible : extension non installée');return;}
+    if(!plugin){trace('share-init','plugin absent');status('Partage natif indisponible : extension non installée');return;}
     try{
-      plugin.init(function(){console.log('Share Extension prête');},function(error){console.warn('Share Extension',error);});
+      trace('share-init','initialisation');
+      plugin.init(function(){trace('share-init','plugin prêt');console.log('Share Extension prête');},function(error){trace('share-error','init '+String(error));console.warn('Share Extension',error);});
       plugin.addHandler(function(intent){
+        trace('share-intent','reçu : '+JSON.stringify(intent||{}).slice(0,500));
         var values=[];
         if(intent && typeof intent.text==='string')values.push(intent.text);
         if(intent && Array.isArray(intent.items))intent.items.forEach(function(item){
@@ -190,17 +200,19 @@
         for(var i=0;i<values.length;i++){
           receiveSharedURL(values[i]);return;
         }
+        trace('share-error','aucune URL exploitable');
         status('Partage reçu, mais aucune URL exploitable avec coordonnées');
       });
-    }catch(error){status('Initialisation partage : '+String(error));}
+    }catch(error){trace('share-error','initialisation '+String(error));status('Initialisation partage : '+String(error));}
   }
   document.addEventListener('deviceready',registerNativeShare,{once:true});
   $('maps-add').onclick=function(){
     var value=$('maps-url').value;
+    trace('import-click','bouton pressé : '+String(value).slice(0,250));
     status('Résolution du lien…');
     resolveMapsURL(value).then(function(resolved){
       if(importMapsURL(resolved))$('maps-url').value='';
-    }).catch(function(error){status('Import du lieu : '+error.message);});
+    }).catch(function(error){trace('import-error',String(error));status('Import du lieu : '+error.message);});
   };
   $('export').onclick=function(){
     var payload={schemaVersion:1,exportedAt:new Date().toISOString(),places:places.filter(function(p){return p.source&&p.source.type==='manual';}),
