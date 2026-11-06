@@ -146,6 +146,9 @@ function syncNative(){
  var signature=JSON.stringify(list);
  if(signature===lastFenceSignature){logEvent('zones-unchanged',list.length+' zones inchangées');return Promise.resolve(true);}
  logEvent('zones-sync','début '+list.length+' zones, rayon '+radius()+' m');
+ // Invalidate the cache before mutating native zones: a successful removal followed
+ // by a failed addition must never make the next retry a false no-op.
+ lastFenceSignature=null;
  return sdk.removeGeofences().then(function(){
    return list.length?sdk.addGeofences(list):true;
  }).then(function(){status(active?'Surveillance active · '+list.length+' lieux':'Prêt · '+list.length+' lieux surveillables');lastFenceSignature=signature;logEvent('zones',list.length+' zones');return true;})
@@ -199,6 +202,8 @@ function disable(){
  if(!sdk || !ready){status('Module natif absent');return Promise.resolve(false);}
  return serialNative(function(){
    return sdk.stop().then(function(){
+     // The SDK may discard native zones on stop; always rebuild on next enable.
+     lastFenceSignature=null;
      storeSet(STORAGE,{enabled:false});status('Surveillance arrêtée');logEvent('stop','utilisateur');return true;
    });
  }).catch(function(error){status('Arrêt impossible : '+String(error));return false;});
