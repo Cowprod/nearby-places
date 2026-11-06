@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var KEY = 'nearby-places-v1', CATALOGUE_KEY = 'nearby-places-catalogue-v1', places = [];
+  var KEY = 'nearby-places-v1', CATALOGUE_KEY = 'nearby-places-catalogue-v1', places = [], loadRevision = 0;
   var REMOTE_URL = 'https://raw.githubusercontent.com/Cowprod/nearby-places/main/data/places.sample.json';
   var $ = function (id) { return document.getElementById(id); };
   function validPosition(lat, lon) { return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; }
@@ -72,15 +72,19 @@
     }).finally(function(){clearTimeout(timer);});
   }
   function load(){
+    // Only the most recent refresh may commit network/cache results.
+    var revision=++loadRevision;
     var local=readJSON(KEY,[]);
     places=Array.isArray(local)?local:[];
     render();
     if(window.NearbyProximity)window.NearbyProximity.setPlaces(places);
     status(places.length+' lieux locaux · synchronisation GitHub…');
     fetchCatalogue(REMOTE_URL,8000).then(function(data){
+      if(revision!==loadRevision)return;
       localStorage.setItem(CATALOGUE_KEY,JSON.stringify(data));
       mergeCatalogue(data,'GitHub synchronisé');
     }).catch(function(error){
+      if(revision!==loadRevision)return;
       var reason=error && error.name==='AbortError' ? 'délai dépassé' : 'réseau ou réponse invalide';
       var cached=readJSON(CATALOGUE_KEY,null);
       if(validCatalogue(cached)){
@@ -88,8 +92,10 @@
         return;
       }
       fetchCatalogue('data/places.sample.json',5000).then(function(data){
+        if(revision!==loadRevision)return;
         mergeCatalogue(data,'catalogue embarqué ('+reason+')');
       }).catch(function(){
+        if(revision!==loadRevision)return;
         render();
         status(places.length+' lieux locaux · échec GitHub et catalogue embarqué ('+reason+')');
       });
@@ -206,6 +212,13 @@
     var name=$('import-name').value.trim(),category=$('import-category').value,comment=$('import-comment').value.trim();
     if(!name){status('Libellé obligatoire');$('import-name').focus();return;}
     var parsed=pendingImport;
+    // A catalogue refresh or manual addition may have inserted this location
+    // while the confirmation sheet was open. Recheck before persisting.
+    if(places.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;})){
+      trace('import-result','doublon à la confirmation '+parsed.latitude+','+parsed.longitude);
+      pendingImport=null;$('import-dialog').hidden=true;
+      status('Ce lieu existe déjà : import non enregistré');showNextImport();return;
+    }
     addManual(name,parsed.latitude,parsed.longitude,category,comment);
     trace('import-result','OK '+name+' '+parsed.latitude+','+parsed.longitude);
     pendingImport=null;$('import-dialog').hidden=true;$('maps-url').value='';
