@@ -23,6 +23,14 @@ function diagnostics(){
    ' · rayon : '+radius()+' m · zones configurées : '+fences().length+'\n'+
    (Array.isArray(events)?events.slice(0,60).map(function(e){return e.at+' · '+e.kind+' · '+e.details;}).join('\n'):'');
 }
+function copyDiagnostics(){
+ var el=document.getElementById('proximity-diagnostics'),feedback=document.getElementById('copy-diagnostics-status');
+ var content='Nearby Places build 0.2.1-diag.1\n'+(el?el.textContent:'journal absent');
+ function done(ok){if(feedback)feedback.textContent=ok?'Journal copié':'Copie impossible : sélectionner le journal';}
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(content).then(function(){done(true);},function(){fallback();});}
+ else fallback();
+ function fallback(){try{var t=document.createElement('textarea');t.value=content;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();var ok=document.execCommand('copy');document.body.removeChild(t);done(ok);}catch(e){done(false);}}
+}
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
 var TEST_NOTIFICATION_ID=1999999999;
 var notificationEventsRegistered=false;
@@ -165,6 +173,7 @@ function wire(){
  if(start)start.onclick=enable;
  if(stop)stop.onclick=disable;
  if(test)test.onclick=testNotification;
+ var copy=document.getElementById('copy-diagnostics');if(copy)copy.onclick=copyDiagnostics;
  diagnostics();
  if(!root.cordova){status('Mode web : uniquement la consultation et le GPS au premier plan');return;}
  document.addEventListener('deviceready',init,{once:true});
