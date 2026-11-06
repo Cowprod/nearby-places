@@ -5,8 +5,8 @@ const vm = require('node:vm');
 
 const script = fs.readFileSync('www/js/proximity.js', 'utf8');
 
-function harness(allowNotifications = true, slowNative = false) {
-  const storage = new Map();
+function harness(allowNotifications = true, slowNative = false, initialStorage) {
+  const storage = initialStorage || new Map();
   const scheduled = [];
   const callbacks = {};
   const elements = {};
@@ -92,7 +92,13 @@ async function main() {
   assert.equal(h.scheduled.length, 2);
   assert.equal(h.scheduled[1].trigger.in, 10);
   assert.equal(h.scheduled[1].trigger.unit, 'second');
-  assert.equal(h.scheduled[1].id, 1999999999);
+  const firstTestId=h.scheduled[1].id;
+  assert.ok(Number.isInteger(firstTestId) && firstTestId>=2100000000 && firstTestId<2140000000, 'ID test réservé dans Int32');
+  assert.equal(await h.api.testNotification(), true, 'second test indépendant');
+  assert.equal(h.scheduled.length, 3, 'les deux notifications restent programmées');
+  const secondTestId=h.scheduled[2].id;
+  assert.notEqual(firstTestId,secondTestId,'ne pas remplacer la première notification en réutilisant son ID');
+  assert.equal(Number(h.storage.get('nearby-places-test-notification-seq-v1')),2,'séquence persistée localement');
   assert.equal(typeof h.callbacks['notification.add'], 'function');
   assert.equal(typeof h.callbacks['notification.trigger'], 'function');
   assert.equal(typeof h.callbacks['notification.click'], 'function');
@@ -100,14 +106,24 @@ async function main() {
   assert.ok(events.some(e => e.details.includes('demande JS envoyée à +10 s')), 'demande JS tracée, pas prétendue validée par iOS');
   assert.ok(!events.some(e => e.details.includes('confirmation native add reçue')), 'pas de confirmation native sans callback');
   assert.ok(!events.some(e => e.details.includes('événement natif trigger reçu')), 'pas de déclenchement natif inventé');
-  h.callbacks['notification.add']({ id:1999999999 });
-  h.callbacks['notification.trigger']({ id:1999999999 });
-  h.callbacks['notification.click']({ id:1999999999 });
+  h.callbacks['notification.add']({ id:firstTestId });
+  h.callbacks['notification.trigger']({ id:firstTestId });
+  h.callbacks['notification.click']({ id:secondTestId });
+  h.callbacks['notification.click']({ id:1999999999 }); // Legacy ID remains recognized.
+  const eventCount=JSON.parse(h.storage.get('nearby-places-events-v1')||'[]').length;
+  h.callbacks['notification.trigger']({ id:12345 });
+  assert.equal(JSON.parse(h.storage.get('nearby-places-events-v1')||'[]').length,eventCount,'ignorer une notification étrangère au diagnostic');
   events = JSON.parse(h.storage.get('nearby-places-events-v1') || '[]');
   assert.ok(events.some(e => e.details.includes('confirmation native add reçue')), 'accusé natif add tracé seulement après callback');
   assert.ok(events.some(e => e.details.includes('événement natif trigger reçu')), 'événement trigger journalisé séparément de la programmation');
   assert.ok(events.some(e => e.details.includes('ouverte par utilisateur')), 'clic utilisateur journalisé');
-  assert.equal(h.scheduled.length, 2, 'écouter les événements ne doit pas programmer d’autres notifications');
+  assert.ok(events.some(e => e.details.includes('id '+firstTestId+' : événement natif trigger reçu')), 'identifiant corrélé au callback');
+  assert.equal(h.scheduled.length, 3, 'écouter les événements ne doit pas programmer d’autres notifications');
+  const resumed=harness(true,false,h.storage);
+  resumed.api.wire();
+  await resumed.callbacks.deviceready();
+  assert.equal(await resumed.api.testNotification(),true,'test après redémarrage simulé');
+  assert.ok(resumed.scheduled[0].id>secondTestId,'nouvel ID après relance et conservation du compteur local');
   const refused = harness(false);
   refused.api.setPlaces([place]);
   refused.api.wire();
