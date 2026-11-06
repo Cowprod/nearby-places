@@ -145,6 +145,7 @@
     if(!resolver || typeof resolver.resolve!=='function')return Promise.reject(Error('Résolveur iOS absent : installer le plugin local puis reconstruire'));
     return new Promise(function(resolve,reject){
       resolver.resolve(match[0],function(result){
+        if(!result || !Number.isInteger(Number(result.httpStatus)) || Number(result.httpStatus)<200 || Number(result.httpStatus)>=300){reject(Error('Réponse du résolveur iOS invalide'));return;}
         trace('import-native','HTTP '+result.httpStatus+' → '+String(result.url).slice(0,250));
         // Accept only a destination whose coordinates can actually be parsed.
         // A short Maps URL may return an HTML page with a usable canonical link.
