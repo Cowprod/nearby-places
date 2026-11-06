@@ -2,7 +2,7 @@
 'use strict';
 var STORAGE='nearby-places-proximity-v1', COOLDOWN='nearby-places-alerts-v1', EVENTS='nearby-places-events-v1';
 var ready=false, active=false, catalogue=[], sdk=null;
-var nativeQueue=Promise.resolve(), controlRevision=0;
+var nativeQueue=Promise.resolve(), controlRevision=0, lastFenceSignature=null;
 function serialNative(action){
  var pending=nativeQueue.then(action,action);
  nativeQueue=pending.then(function(){},function(){});
@@ -25,7 +25,7 @@ function diagnostics(){
 }
 function copyDiagnostics(){
  var el=document.getElementById('proximity-diagnostics'),feedback=document.getElementById('copy-diagnostics-status');
- var content='Nearby Places build 0.2.1-diag.1\n'+(el?el.textContent:'journal absent');
+ var content='Nearby Places build '+(document.getElementById('build-number')?document.getElementById('build-number').textContent:'inconnu')+'\n'+(el?el.textContent:'journal absent');
  function done(ok){if(feedback)feedback.textContent=ok?'Journal copié':'Copie impossible : sélectionner le journal';}
  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(content).then(function(){done(true);},function(){fallback();});}
  else fallback();
@@ -128,10 +128,12 @@ function onGeofence(event){
 }
 function syncNative(){
  var list=fences();
+ var signature=JSON.stringify(list);
+ if(signature===lastFenceSignature){logEvent('zones-unchanged',list.length+' zones inchangées');return Promise.resolve(true);}
  logEvent('zones-sync','début '+list.length+' zones, rayon '+radius()+' m');
  return sdk.removeGeofences().then(function(){
    return list.length?sdk.addGeofences(list):true;
- }).then(function(){status(active?'Surveillance active · '+list.length+' lieux':'Prêt · '+list.length+' lieux surveillables');logEvent('zones',list.length+' zones');return true;})
+ }).then(function(){status(active?'Surveillance active · '+list.length+' lieux':'Prêt · '+list.length+' lieux surveillables');lastFenceSignature=signature;logEvent('zones',list.length+' zones');return true;})
  .catch(function(error){logEvent('zones-error',String(error));status('Erreur zones : '+String(error));return false;});
 }
 function sync(){
@@ -146,8 +148,8 @@ function init(){
  sdk.onGeofence(onGeofence);
  logEvent('init','SDK présent, ready en cours');
  return sdk.ready({locationAuthorizationRequest:'Always',stopOnTerminate:false,startOnBoot:true,
-   geofenceInitialTriggerEntry:false,geofenceProximityRadius:2000,debug:false,logLevel:sdk.LOG_LEVEL_ERROR})
- .then(function(state){ready=true;active=!!state.enabled;logEvent('init','enabled='+active+' auth='+String(state.authorization)+' status='+String(state.status));return sync().then(function(){return true;});})
+   geofenceInitialTriggerEntry:true,geofenceProximityRadius:2000,debug:false,logLevel:sdk.LOG_LEVEL_ERROR})
+ .then(function(state){ready=true;active=!!state.enabled;logEvent('init','enabled='+active+' auth='+JSON.stringify(state.authorization||null)+' status='+String(state.status));return sync().then(function(){return true;});})
  .catch(function(error){logEvent('init-error',String(error));status('Initialisation impossible : '+String(error));return false;});
 }
 function enable(){
