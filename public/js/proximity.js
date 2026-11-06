@@ -52,15 +52,29 @@ function checkProximityNow(){
  },function(error){var message='GPS erreur '+error.code+' : '+error.message;logEvent('proximity-error',message);show(message);},{enableHighAccuracy:true,maximumAge:0,timeout:20000});
 }
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
-var TEST_NOTIFICATION_ID=1999999999;
+// The plugin cancels a pending notification when its numeric ID is reused.
+// Reserve a signed Int32 range separate from proximity IDs; keep legacy callbacks.
+var LEGACY_TEST_NOTIFICATION_ID=1999999999, TEST_ID_BASE=2100000000, TEST_ID_SPAN=40000000;
+var TEST_SEQUENCE_KEY='nearby-places-test-notification-seq-v1', testSequence=0;
+function isTestNotification(n){
+ var id=n && Number(n.id);
+ return Number.isInteger(id) && (id===LEGACY_TEST_NOTIFICATION_ID || (id>=TEST_ID_BASE && id<TEST_ID_BASE+TEST_ID_SPAN));
+}
+function nextTestNotificationId(){
+ var saved=Number(storeGet(TEST_SEQUENCE_KEY,0));
+ if(Number.isSafeInteger(saved) && saved>=0 && saved<TEST_ID_SPAN && saved>testSequence)testSequence=saved;
+ testSequence=(testSequence+1)%TEST_ID_SPAN;
+ storeSet(TEST_SEQUENCE_KEY,testSequence);
+ return TEST_ID_BASE+testSequence;
+}
 var notificationEventsRegistered=false;
 function registerNotificationEvents(){
  var local=notificationPlugin();
  if(!local || typeof local.on!=='function' || notificationEventsRegistered)return;
  try{
-  local.on('add',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','confirmation native add reçue (notification ajoutée au planificateur)');});
-  local.on('trigger',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','événement natif trigger reçu (WebView active)');});
-  local.on('click',function(n){if(n && Number(n.id)===TEST_NOTIFICATION_ID)logEvent('test-notification','notification ouverte par utilisateur');});
+  local.on('add',function(n){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : confirmation native add reçue (notification ajoutée au planificateur)');});
+  local.on('trigger',function(n){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : événement natif trigger reçu (WebView active)');});
+  local.on('click',function(n){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : notification ouverte par utilisateur');});
   notificationEventsRegistered=true;
  }catch(error){logEvent('notification-events','écoute native indisponible : '+String(error));}
 }
@@ -102,15 +116,16 @@ function testNotification(){
  }).then(function(granted){
    if(!granted){status('Test annulé : notifications non autorisées');logEvent('test-notification','permission refusée');return false;}
    try{
+     var testId=nextTestNotificationId();
      local.schedule({
-       id:TEST_NOTIFICATION_ID,
+       id:testId,
        title:'Nearby Places · test',
        text:'Notification de test après 10 secondes, sans géofencing.',
        trigger:{in:10,unit:'second'},
        foreground:true
      });
-     status('Demande de notification envoyée (+10 s) · confirmation native à vérifier');
-     logEvent('test-notification','demande JS envoyée à +10 s (pas une confirmation iOS)');
+     status('Demande notification '+testId+' envoyée (+10 s) · confirmation native à vérifier');
+     logEvent('test-notification','id '+testId+' : demande JS envoyée à +10 s (pas une confirmation iOS)');
      return true;
    }catch(error){
      status('Échec programmation notification : '+String(error));
