@@ -167,7 +167,31 @@ function init(){
  logEvent('init','SDK présent, ready en cours');
  return sdk.ready({locationAuthorizationRequest:'Always',stopOnTerminate:false,startOnBoot:true,
    geofenceInitialTriggerEntry:true,geofenceProximityRadius:2000,debug:false,logLevel:sdk.LOG_LEVEL_ERROR})
- .then(function(state){ready=true;active=!!state.enabled;logEvent('init','enabled='+active+' auth='+JSON.stringify(state.authorization||null)+' status='+String(state.status));return sync().then(function(){return true;});})
+ .then(function(state){
+   ready=true;
+   var nativeEnabled=!!(state && state.enabled);
+   var savedConsent=storeGet(STORAGE,null);
+   var optedIn=!!(savedConsent && savedConsent.enabled===true);
+   // The SDK may restore itself after reboot or a previous crash. Native state alone
+   // is not proof of user consent; never enable JS notifications without saved opt-in.
+   active=nativeEnabled && optedIn;
+   logEvent('init','nativeEnabled='+nativeEnabled+' optIn='+optedIn+' auth='+JSON.stringify(state && state.authorization || null)+' status='+String(state && state.status));
+   if(nativeEnabled && !optedIn){
+     ++controlRevision;
+     return serialNative(function(){return sdk.stop();}).then(function(){
+       lastFenceSignature=null;
+       storeSet(STORAGE,{enabled:false});
+       logEvent('init-stop','SDK actif sans consentement local : arrêt natif demandé et terminé');
+       return sync().then(function(){return true;});
+     }).catch(function(error){
+       active=false;
+       logEvent('init-stop-error',String(error));
+       status('Erreur arrêt du SDK sans consentement : '+String(error));
+       return false;
+     });
+   }
+   return sync().then(function(){return true;});
+ })
  .catch(function(error){logEvent('init-error',String(error));status('Initialisation impossible : '+String(error));return false;});
 }
 function enable(){
