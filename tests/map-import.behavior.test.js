@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync('www/js/app.js', 'utf8');
 function harness(native = false, earlyURLs = []) {
   const store = new Map(), elements = new Map(), listeners = new Map(), hooks = {};
+  const nativeResolutions=[];
   let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
@@ -23,7 +24,7 @@ function harness(native = false, earlyURLs = []) {
     setItem(key,value){store.set(key,String(value));},
     removeItem(key){store.delete(key);}
   };
-  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
+  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0)fn();return 1;},clearTimeout(){},
     fetch(url){
       if(String(url).includes('/p/okRedirect')) return Promise.resolve({url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});
@@ -46,7 +47,7 @@ function harness(native = false, earlyURLs = []) {
     return JSON.parse(store.get('nearby-places-v1')||'[]');
   }
   function status(){return document.getElementById('status').textContent;}
-  return {importURL,status,store,window:context.window,
+  return {importURL,status,store,window:context.window,nativeResolutions,
     setConfirm(value){confirmAllowed=value;},
     fire(event){(listeners.get(event)||[]).forEach(callback=>callback());},
     share(intent){assert.equal(typeof hooks.share,'function','handler Share Extension non déclaré');hooks.share(intent);},
@@ -67,6 +68,19 @@ assert.equal(wrappedPlaces.length,1,'encoded Apple short URL resolved before par
 checkPlace(wrappedPlaces[0],35.720,139.790);
 wrappedPlaces=await wrapped.importURL('nearbyplaces://import?url=https%3A%2F%2Fevil.example%2Fbad%3Fll%3D35.1%2C139.1');
 assert.equal(wrappedPlaces.length,1,'untrusted encoded URL must not create a place');
+// A short link copied from a message can end with punctuation not belonging to its URL.
+const punctuation=harness();
+const punctuationPlaces=await punctuation.importURL('Partage : https://maps.apple/p/okRedirect).');
+assert.equal(punctuationPlaces.length,1,'Apple short link from a sentence resolves');
+assert.deepEqual(punctuation.nativeResolutions,['https://maps.apple/p/okRedirect'],'native resolver does not receive trailing punctuation');
+// Deeply nested nearbyplaces://import?url=... links must not cause unbounded recursion.
+function wrap(url,n){for(let i=0;i<n;i++)url='nearbyplaces://import?url='+encodeURIComponent(url);return url;}
+const nested=harness();
+let nestedPlaces=await nested.importURL(wrap('https://maps.apple.com/?ll=35.735,139.735&name=Imbrique',4));
+assert.equal(nestedPlaces.length,1,'four nested import wrappers remain compatible');
+nestedPlaces=await nested.importURL(wrap('https://maps.apple.com/?ll=35.736,139.736&name=Interdit',6));
+assert.equal(nestedPlaces.length,1,'excessively nested import cannot modify local catalogue');
+assert.match(nested.status(),/imbriqué trop profondément/,'explicit rejection for too many nested links');
 // No shared link is persisted before explicit confirmation.
 const draft=harness();
 draft.input('maps-url','https://maps.apple.com/?ll=35.600,139.600&name=Fiche+test');
