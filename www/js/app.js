@@ -17,7 +17,7 @@
       var button=document.createElement('button');button.textContent=p.visited?'Réactiver':'Visité';button.onclick=function(){p.visited=!p.visited;save();render(position);};
       head.append(title,button);card.append(head);
       var meta=document.createElement('p');meta.className='tag';meta.textContent=(p.categories||[]).join(', ')+' · '+p.latitude.toFixed(5)+', '+p.longitude.toFixed(5);
-      card.append(meta);
+      card.append(meta);if(p.comment){var note=document.createElement('p');note.textContent=p.comment;card.append(note);}
       if(position){var km=distanceMeters(position.latitude,position.longitude,p.latitude,p.longitude)/1000;var t=document.createElement('p');t.textContent=km.toFixed(2)+' km à vol d’oiseau (pas un temps de marche)';card.append(t);}
       var directions=document.createElement('a');
       directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(p.latitude+','+p.longitude)+'&dirflg=w';
@@ -95,10 +95,10 @@
       });
     });
   }
-  function addManual(name,lat,lon,category){
+  function addManual(name,lat,lon,category,comment){
     if(!name || !validPosition(lat,lon))throw Error('Nom et coordonnées invalides');
     var place={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),name:name,
-      latitude:lat,longitude:lon,categories:[category||'culture'],visited:false,
+      latitude:lat,longitude:lon,categories:[category||'culture'],comment:String(comment||'').trim(),visited:false,
       alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}};
     places.push(place);save();render();return place;
   }
@@ -113,7 +113,7 @@
       var embedded=url.searchParams.get('url');
       if(embedded)return parseMapsLink(embedded);
       coords=url.searchParams.get('ll');
-      name=url.searchParams.get('name')||'Lieu ChatGPT';
+      name=url.searchParams.get('name')||'';
     }else if(url.protocol==='https:' && (host==='maps.apple.com'||host==='www.maps.apple.com')){
       coords=url.searchParams.get('ll')||url.searchParams.get('coordinate')||url.searchParams.get('daddr')||url.searchParams.get('sll')||url.searchParams.get('q');
       name=url.searchParams.get('name')||url.searchParams.get('q')||'Lieu Apple Plans';
@@ -162,15 +162,33 @@
       },function(error){trace('import-native-error',String(error));reject(Error('Résolution iOS : '+String(error)));});
     });
   }
+  var pendingImport=null;
   function importMapsURL(value){
     var parsed=parseMapsLink(value);
     var duplicate=places.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 &&
       Math.abs(p.longitude-parsed.longitude)<0.00001;});
     if(duplicate){trace('import-result','doublon '+parsed.name);status('Ce lieu existe déjà dans le catalogue');return false;}
-    addManual(parsed.name,parsed.latitude,parsed.longitude,$('category').value);
-    trace('import-result','OK '+parsed.name+' '+parsed.latitude+','+parsed.longitude);
-    status('Lieu importé localement');return true;
+    pendingImport=parsed;
+    $('import-name').value=/^Lieu (Apple Plans|Google Maps|ChatGPT)$/.test(parsed.name)?'':parsed.name;
+    $('import-category').value='culture';
+    $('import-comment').value='';
+    $('import-coordinates').textContent=parsed.latitude.toFixed(6)+', '+parsed.longitude.toFixed(6);
+    $('import-dialog').hidden=false;
+    trace('import-form','confirmation demandée '+parsed.latitude+','+parsed.longitude);
+    $('import-name').focus();
+    return true;
   }
+  $('import-cancel').onclick=function(){pendingImport=null;$('import-dialog').hidden=true;status('Import annulé');};
+  $('import-confirm').onclick=function(){
+    if(!pendingImport)return;
+    var name=$('import-name').value.trim(),category=$('import-category').value,comment=$('import-comment').value.trim();
+    if(!name){status('Libellé obligatoire');$('import-name').focus();return;}
+    var parsed=pendingImport;
+    addManual(name,parsed.latitude,parsed.longitude,category,comment);
+    trace('import-result','OK '+name+' '+parsed.latitude+','+parsed.longitude);
+    pendingImport=null;$('import-dialog').hidden=true;$('maps-url').value='';
+    status('Lieu enregistré localement');
+  };
   function receiveSharedURL(value){
     trace('share-url','reçu : '+String(value).slice(0,250));
     return resolveMapsURL(value).then(function(resolved){
@@ -248,7 +266,7 @@
     trace('import-click','bouton pressé : '+String(value).slice(0,250));
     status('Résolution du lien…');
     resolveMapsURL(value).then(function(resolved){
-      if(importMapsURL(resolved))$('maps-url').value='';
+      importMapsURL(resolved);
     }).catch(function(error){trace('import-error',String(error));status('Import du lieu : '+error.message);});
   };
   $('export').onclick=function(){
