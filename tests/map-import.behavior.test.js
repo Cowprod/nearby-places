@@ -23,7 +23,7 @@ function harness() {
     setItem(key,value){store.set(key,String(value));},
     removeItem(key){store.delete(key);}
   };
-  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
+  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0)fn();return 1;},clearTimeout(){},
     fetch(url){
       if(String(url).includes('/p/okRedirect')) return Promise.resolve({url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});
@@ -84,6 +84,10 @@ assert.equal(list.length,9,'le lien canonique HTML est utilisé si la redirectio
 checkPlace(list[8],35.722,139.792);
 list=await h.importURL('https://maps.apple/p/untrusted');
 assert.equal(list.length,9,'un résultat natif vers un domaine tiers est rejeté');
+list=await h.importURL('https://maps.apple/p/nullResult');
+assert.equal(list.length,9,'réponse native vide : aucun lieu ajouté');
+list=await h.importURL('https://maps.apple/p/httpFailure');
+assert.equal(list.length,9,'HTTP 404 natif : même des coordonnées plausibles sont rejetées');
 list=await h.importURL('https://evil.example/redirect?ll=35.7,139.7');
 assert.equal(list.length,9,'hôte non autorisé');
 h.window.handleOpenURL('nearbyplaces://import?ll=35.706,139.778&name=Transmis');
@@ -98,6 +102,6 @@ h.setConfirm(true);
 h.reset();
 assert.equal(h.store.has('nearby-places-v1'),false,'réinitialisation explicite seulement');
 assert.equal(h.store.has('nearby-places-catalogue-v1'),false,'cache réinitialisé explicitement');
-console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native, reset confirmé');
+console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native/HTTP/NULL, reset confirmé');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
