@@ -5,20 +5,28 @@ const vm = require('node:vm');
 
 const script = fs.readFileSync('www/js/proximity.js', 'utf8');
 
-function harness(allowNotifications = true) {
+function harness(allowNotifications = true, slowNative = false) {
   const storage = new Map();
   const scheduled = [];
   const callbacks = {};
   const elements = {};
-  const state = { geofences: [], starts: 0, stops: 0 };
+  const state = { geofences: [], starts: 0, stops: 0, inFlight: 0, maxInFlight: 0 };
+  async function nativeStep(update) {
+    state.inFlight++;
+    state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
+    try {
+      if(slowNative) await new Promise(resolve => setTimeout(resolve, 3));
+      update();
+    } finally { state.inFlight--; }
+  }
   const sdk = {
     LOG_LEVEL_ERROR: 0,
     onGeofence(callback) { callbacks.geofence = callback; },
     async ready() { return { enabled: false }; },
-    async removeGeofences() { state.geofences = []; },
-    async addGeofences(fences) { state.geofences = fences; },
-    async startGeofences() { state.starts++; },
-    async stop() { state.stops++; }
+    async removeGeofences() { return nativeStep(() => { state.geofences = []; }); },
+    async addGeofences(fences) { return nativeStep(() => { state.geofences = fences; }); },
+    async startGeofences() { return nativeStep(() => { state.starts++; }); },
+    async stop() { return nativeStep(() => { state.stops++; }); }
   };
   const root = {
     cordova: { plugins: { notification: { local: {
@@ -103,6 +111,28 @@ async function main() {
   assert.equal(refused.state.starts, 0, 'permissions refusées : surveillance non démarrée');
   assert.equal(await refused.api.testNotification(), false, 'test notification sans permission refusé');
   assert.equal(refused.scheduled.length, 0);
-  console.log('PASS proximité (simulée) : rayon 500m/200m min, opt-in, notification +10s, événements natifs fictifs, refus, arrêt');
+  // Provoquer les anciennes courses remove/add et start/stop avec un SDK volontairement lent.
+  const concurrent = harness(true, true);
+  concurrent.api.wire();
+  await concurrent.callbacks.deviceready();
+  const updates = [
+    concurrent.api.setPlaces([place]),
+    concurrent.api.setRadius(600),
+    concurrent.api.setRadius(800),
+    concurrent.api.setPlaces([place])
+  ];
+  assert.deepEqual(await Promise.all(updates), [true, true, true, true]);
+  assert.equal(concurrent.state.maxInFlight, 1, 'les appels SDK natifs ne se chevauchent jamais');
+  assert.equal(concurrent.state.geofences[0].radius, 800, 'dernière valeur de rayon conservée');
+  const startPending = concurrent.api.enable();
+  const stopPending = concurrent.api.disable();
+  assert.equal(await startPending, false, 'l’arrêt annule une activation encore en attente de permission');
+  assert.equal(await stopPending, true);
+  assert.equal(concurrent.state.starts, 0, 'aucun start tardif après arrêt');
+  assert.equal(concurrent.state.stops, 1);
+  assert.equal(concurrent.state.maxInFlight, 1);
+  concurrent.api.onGeofence({action:'ENTER', identifier:place.id});
+  assert.equal(concurrent.scheduled.length, 0, 'aucune notification après demande d’arrêt');
+  console.log('PASS proximité (simulée) : rayon, opt-in, test notification +10s, callbacks fictifs, arrêt, sérialisation SDK');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
