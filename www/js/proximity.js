@@ -31,6 +31,26 @@ function copyDiagnostics(){
  else fallback();
  function fallback(){try{var t=document.createElement('textarea');t.value=content;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();var ok=document.execCommand('copy');document.body.removeChild(t);done(ok);}catch(e){done(false);}}
 }
+function checkProximityNow(){
+ var result=document.getElementById('proximity-check-result');
+ function show(message){if(result)result.textContent=message;}
+ logEvent('proximity-check','bouton pressé ; zones='+fences().length+' active='+active+' ready='+ready);
+ show('Recherche de la position GPS…');
+ if(!navigator.geolocation){show('Géolocalisation WebView absente');logEvent('proximity-error','geolocation absente');return;}
+ navigator.geolocation.getCurrentPosition(function(position){
+  var c=position.coords,lat=c.latitude,lon=c.longitude,accuracy=c.accuracy,rad=radius();
+  var candidates=currentPlaces().map(function(p){
+   var dlat=(p.latitude-lat)*Math.PI/180,dlon=(p.longitude-lon)*Math.PI/180;
+   var a=Math.sin(dlat/2)**2+Math.cos(lat*Math.PI/180)*Math.cos(p.latitude*Math.PI/180)*Math.sin(dlon/2)**2;
+   return {name:p.name,id:p.id,meters:Math.round(12742000*Math.asin(Math.min(1,Math.sqrt(a))))};
+  }).sort(function(a,b){return a.meters-b.meters;});
+  var lines=candidates.slice(0,10).map(function(p){return p.name+' : '+p.meters+' m '+(p.meters<=rad?'(dans rayon)':'(hors rayon)');});
+  var header='GPS '+lat.toFixed(6)+','+lon.toFixed(6)+' ±'+Math.round(accuracy)+' m ; rayon '+rad+' m ; SDK '+(ready?'prêt':'absent')+'/'+(active?'actif':'inactif');
+  logEvent('proximity-gps',header);
+  candidates.forEach(function(p){logEvent('proximity-distance',p.id+' '+p.name+' : '+p.meters+' m / '+rad+' m '+(p.meters<=rad?'INSIDE':'OUTSIDE'));});
+  show(header+'\n'+(lines.join('\n')||'Aucun lieu surveillable'));
+ },function(error){var message='GPS erreur '+error.code+' : '+error.message;logEvent('proximity-error',message);show(message);},{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+}
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
 var TEST_NOTIFICATION_ID=1999999999;
 var notificationEventsRegistered=false;
@@ -173,6 +193,7 @@ function wire(){
  if(start)start.onclick=enable;
  if(stop)stop.onclick=disable;
  if(test)test.onclick=testNotification;
+ var check=document.getElementById('proximity-check');if(check)check.onclick=checkProximityNow;
  var copy=document.getElementById('copy-diagnostics');if(copy)copy.onclick=copyDiagnostics;
  diagnostics();
  if(!root.cordova){status('Mode web : uniquement la consultation et le GPS au premier plan');return;}
