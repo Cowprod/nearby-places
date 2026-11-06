@@ -124,7 +124,10 @@
       var query=url.searchParams.get('q')||url.searchParams.get('query');
       var markerCoords=marker?marker[1]+','+marker[2]:null;
       var numericQuery=query && /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(query);
-      coords=(numericQuery?query:null)||markerCoords||url.searchParams.get('ll')||(at?at[1]+','+at[2]:null);
+      // The @latitude,longitude segment is the camera position, not a POI coordinate.
+      // Only import it when the URL explicitly represents the map viewport.
+      var mapViewport=/^\/maps\/@/.test(url.pathname);
+      coords=(numericQuery?query:null)||markerCoords||url.searchParams.get('ll')||(mapViewport&&at?at[1]+','+at[2]:null);
       var pathName=url.pathname.match(/\/maps\/place\/([^/]+)/);
       name=pathName?decodeURIComponent(pathName[1].replace(/\+/g,' ')):(query && !numericQuery?query:'Lieu Google Maps');
       if(!coords)throw Error('Coordonnées Google Maps absentes. Utiliser un lien complet avec latitude et longitude.');
@@ -202,6 +205,11 @@
       setTimeout(flushPendingSharedURLs,0);
     }catch(error){status('Lien partagé invalide');}
   };
+  // Drain URLs received by the minimal callback installed before cordova.js.
+  // The main handler still validates scheme, hostname, queue capacity and content.
+  if(Array.isArray(window.__nearbyEarlyDeepLinks)){
+    window.__nearbyEarlyDeepLinks.splice(0,10).forEach(window.handleOpenURL);
+  }
   document.addEventListener('deviceready',function(){sharedReady=true;flushPendingSharedURLs();},{once:true});
   document.addEventListener('resume',flushPendingSharedURLs);
   function registerNativeShare(){
