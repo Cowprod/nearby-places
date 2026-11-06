@@ -161,10 +161,21 @@ function syncNative(){
  }).then(function(){status(active?'Surveillance active · '+list.length+' lieux':'Prêt · '+list.length+' lieux surveillables');lastFenceSignature=signature;logEvent('zones',list.length+' zones');return true;})
  .catch(function(error){logEvent('zones-error',String(error));status('Erreur zones : '+String(error));return false;});
 }
+function savedOptIn(){
+ var consent=storeGet(STORAGE,null);
+ return !!(consent && consent.enabled===true);
+}
 function sync(){
  if(!ready || !sdk)return Promise.resolve(false);
- // Une seule transaction SDK à la fois : aucune suppression ne croise un ajout.
- return serialNative(syncNative);
+ // Only explicit persisted opt-in permits background geofence configuration.
+ // Place and radius changes while opted out are applied when enable() runs.
+ return serialNative(function(){
+   if(!savedOptIn()){
+     logEvent('zones-skip','sans consentement : zones natives non modifiées');
+     return true;
+   }
+   return syncNative();
+ });
 }
 function init(){
  registerNotificationEvents();
@@ -189,7 +200,8 @@ function init(){
        lastFenceSignature=null;
        storeSet(STORAGE,{enabled:false});
        logEvent('init-stop','SDK actif sans consentement local : arrêt natif demandé et terminé');
-       return sync().then(function(){return true;});
+       // Never immediately re-arm native geofences after an unauthorized boot.
+       return true;
      }).catch(function(error){
        active=false;
        logEvent('init-stop-error',String(error));
