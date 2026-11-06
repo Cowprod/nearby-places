@@ -234,7 +234,7 @@
   function showNextImport(){
     if(pendingImport || !importQueue.length)return;
     pendingImport=importQueue.shift();
-    $('import-name').value=/^Lieu (Apple Plans|Google Maps)$/.test(pendingImport.name)?'':pendingImport.name;
+    $('import-name').value=/^(?:Lieu (?:Apple Plans|Google Maps)|Destination Apple Plans)$/.test(pendingImport.name)?'':pendingImport.name;
     $('import-category').value='culture';
     $('import-comment').value='';
     $('import-coordinates').textContent=pendingImport.latitude.toFixed(6)+', '+pendingImport.longitude.toFixed(6);
