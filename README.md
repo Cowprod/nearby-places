@@ -139,3 +139,9 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 - L'enregistrement n'est réalisé **qu'après confirmation explicite** du libellé, de la catégorie et de l'éventuel commentaire. La résolution seule ne modifie pas le catalogue personnel.
 - Le diagnostic de notification à **+10 secondes** reste une demande JavaScript au plugin. Un retour `add` ou `trigger` journalisé dépend de l'événement effectivement reçu par la WebView. **Aucune livraison sur écran verrouillé n'est établie sans test iPhone.**
 - Le contrôle hors appareil reste `npm test` sur TouchDeck. Le build Cordova/Xcode, la signature de ShareExtension et les essais iOS après terminaison de l'application ne sont pas validés sous Linux. Conserver `platforms/ios` et ne pas désinstaller l'application pour faire une mise à jour.
+
+## Diagnostic de plusieurs notifications locales (+10 s)
+
+- Chaque pression sur « Tester une notification dans 10 s » utilise désormais un **identifiant numérique distinct**, réservé dans la plage `2100000000–2139999999` (Int32 signé), afin qu'une seconde pression ne remplace pas une notification encore en attente. Le compteur `nearby-places-test-notification-seq-v1` reste local et n'efface aucun lieu.
+- Les événements `add`, `trigger` et `click` sont journalisés avec l'identifiant correspondant ; l'ancien identifiant de test `1999999999` reste reconnu pour les événements déjà programmés avant la mise à jour. Un appel JS à `schedule` n'est **pas** une preuve de livraison sur iPhone verrouillé.
+- `npm test` vérifie hors appareil deux demandes consécutives, les identifiants distincts, leur persistance après une relance JavaScript simulée, le filtrage d'un événement étranger et les callbacks simulés. La présentation réelle sur l'écran verrouillé, la réception après suspension/terminaison et le comportement iOS ne sont **pas** validés.
