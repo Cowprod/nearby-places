@@ -96,10 +96,15 @@ async function main() {
   assert.equal(typeof h.callbacks['notification.add'], 'function');
   assert.equal(typeof h.callbacks['notification.trigger'], 'function');
   assert.equal(typeof h.callbacks['notification.click'], 'function');
+  let events = JSON.parse(h.storage.get('nearby-places-events-v1') || '[]');
+  assert.ok(events.some(e => e.details.includes('demande JS envoyée à +10 s')), 'demande JS tracée, pas prétendue validée par iOS');
+  assert.ok(!events.some(e => e.details.includes('confirmation native add reçue')), 'pas de confirmation native sans callback');
+  assert.ok(!events.some(e => e.details.includes('événement natif trigger reçu')), 'pas de déclenchement natif inventé');
   h.callbacks['notification.add']({ id:1999999999 });
   h.callbacks['notification.trigger']({ id:1999999999 });
   h.callbacks['notification.click']({ id:1999999999 });
-  const events = JSON.parse(h.storage.get('nearby-places-events-v1') || '[]');
+  events = JSON.parse(h.storage.get('nearby-places-events-v1') || '[]');
+  assert.ok(events.some(e => e.details.includes('confirmation native add reçue')), 'accusé natif add tracé seulement après callback');
   assert.ok(events.some(e => e.details.includes('événement natif trigger reçu')), 'événement trigger journalisé séparément de la programmation');
   assert.ok(events.some(e => e.details.includes('ouverte par utilisateur')), 'clic utilisateur journalisé');
   assert.equal(h.scheduled.length, 2, 'écouter les événements ne doit pas programmer d’autres notifications');
