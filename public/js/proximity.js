@@ -79,7 +79,7 @@ function registerNotificationEvents(){
  }catch(error){logEvent('notification-events','écoute native indisponible : '+String(error));}
 }
 function notificationId(id){var n=7;for(var i=0;i<id.length;i++)n=(Math.imul(n,31)+id.charCodeAt(i))|0;return (n>>>0)%2000000000+1;}
-function currentPlaces(){return catalogue.filter(function(p){return !p.visited && (!p.alert || p.alert.enabled!==false) && typeof p.latitude==='number' && typeof p.longitude==='number';});}
+function currentPlaces(){return catalogue.filter(function(p){return p && typeof p.id==='string' && p.id.length>0 && !p.visited && (!p.alert || p.alert.enabled!==false) && Number.isFinite(p.latitude) && Math.abs(p.latitude)<=90 && Number.isFinite(p.longitude) && Math.abs(p.longitude)<=180;});}
 function radius(){
  var saved=storeGet('nearby-places-radius-m',500);
  var n=Number(saved);
@@ -137,7 +137,7 @@ function testNotification(){
 function onGeofence(event){
  logEvent('geofence',event ? (event.action+' '+event.identifier) : 'événement absent');
  if(!active || !event || event.action!=='ENTER'){logEvent('geofence-skip','inactive ou action non ENTER');return;}
- var place=catalogue.find(function(p){return p.id===event.identifier;});
+ var place=currentPlaces().find(function(p){return p.id===event.identifier;});
  if(place && !place.visited && (!place.alert || place.alert.enabled!==false))notify(place);
  else logEvent('geofence-skip','lieu absent, visité ou alerte désactivée : '+String(event.identifier));
 }
