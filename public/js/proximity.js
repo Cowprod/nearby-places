@@ -67,14 +67,21 @@ function nextTestNotificationId(){
  storeSet(TEST_SEQUENCE_KEY,testSequence);
  return TEST_ID_BASE+testSequence;
 }
+function notificationEventContext(event){
+ if(!event || typeof event!=='object')return '';
+ var flags=[];
+ if(typeof event.foreground==='boolean')flags.push('foreground='+event.foreground);
+ if(typeof event.queued==='boolean')flags.push('queued='+event.queued);
+ return flags.length?' ['+flags.join(', ')+']':'';
+}
 var notificationEventsRegistered=false;
 function registerNotificationEvents(){
  var local=notificationPlugin();
  if(!local || typeof local.on!=='function' || notificationEventsRegistered)return;
  try{
-  local.on('add',function(n){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : confirmation native add reçue (notification ajoutée au planificateur)');});
-  local.on('trigger',function(n){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : événement natif trigger reçu (WebView active)');});
-  local.on('click',function(n){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : notification ouverte par utilisateur');});
+  local.on('add',function(n,event){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : confirmation native add reçue (notification ajoutée au planificateur)'+notificationEventContext(event));});
+  local.on('trigger',function(n,event){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : événement natif trigger reçu (WebView active)'+notificationEventContext(event));});
+  local.on('click',function(n,event){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : notification ouverte par utilisateur'+notificationEventContext(event));});
   notificationEventsRegistered=true;
  }catch(error){logEvent('notification-events','écoute native indisponible : '+String(error));}
 }
