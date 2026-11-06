@@ -123,3 +123,10 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 - L'extension de partage `cordova-plugin-openwith-ios` peut envoyer le **titre descriptif** dans `intent.text`, tandis que l'URL se trouve dans `intent.items[].data`. L'application privilégie les URL des items, ignore les chaînes sans lien et essaie l'URL suivante si la précédente est rejetée.
 - Les tests Node simulent `deviceready`, deux liens arrivant avant l'initialisation et plusieurs champs d'un intent de partage. Ils ne prouvent **ni** la réception d'un lien avant que la fonction JavaScript `handleOpenURL` soit installée **ni** la remise d'un intent après terminaison du processus iOS. Ces cas restent à vérifier dans Xcode/simulateur puis sur iPhone seulement avec autorisation.
 - Aucune modification des clés `localStorage`, des cibles Xcode, de `platforms/ios` ni des identifiants de signature n'est nécessaire pour cette correction JavaScript. L'installation de l'extension reste à valider sur Mac.
+
+
+## Garde-fous iOS du build 0.2.2 (6 novembre 2026)
+
+- `js/deeplink-bootstrap.js` installe `handleOpenURL` **avant** `cordova.js` et conserve au plus dix liens reçus après le chargement de la WebView, avant `app.js`. L'application les rejoue après `deviceready`. Il ne récupère **pas** une URL perdue en code natif avant le chargement de JavaScript : le démarrage à froid avec `cordova-ios@8.1.1` reste à valider sur Mac/iPhone.
+- Une URL Google Maps de fiche `/maps/place/…/@latitude,longitude` **sans** marqueur `!3d…!4d…` ou coordonnées explicites est refusée : `@` indique le centre de la caméra et peut pointer loin du commerce. Les URL de vue de carte `/maps/@…` gardent leur sens de point de carte, sans être présentées comme une fiche d'établissement.
+- Les tests du bootstrap et du filtrage du viewport utilisent Node/VM. Ils vérifient la logique JavaScript, **pas** le transport des URL par iOS, la compilation Objective-C ni la Share Extension. Aucun lieu local n'est effacé ou modifié par ces corrections.
