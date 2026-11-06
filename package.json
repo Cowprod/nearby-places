@@ -19,7 +19,7 @@
     "cordova-ios": "8.1.1",
     "cordova-plugin-device": "^3.0.0",
     "cordova-plugin-openwith-ios": "2.0.0",
-    "cordova-plugin-nearby-resolver": "file:plugins/cordova-plugin-nearby-resolver"
+    "cordova-plugin-nearby-resolver": "file:local-plugins/cordova-plugin-nearby-resolver"
   },
   "cordova": {
     "platforms": [
