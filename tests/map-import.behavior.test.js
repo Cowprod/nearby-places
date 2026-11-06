@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('www/js/app.js', 'utf8');
-function harness() {
-  const store = new Map(), elements = new Map();
+function harness(native = false) {
+  const store = new Map(), elements = new Map(), listeners = new Map(), hooks = {};
   let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
@@ -16,7 +16,7 @@ function harness() {
   const document = {
     getElementById(id){ if(!elements.has(id))elements.set(id,element());return elements.get(id); },
     createElement(){return element();},
-    addEventListener(){}, body:{append(){}}
+    addEventListener(event,callback){if(!listeners.has(event))listeners.set(event,[]);listeners.get(event).push(callback);}, body:{append(){}}
   };
   const localStorage = {
     getItem(key){return store.get(key)??null;},
@@ -30,6 +30,10 @@ function harness() {
       if(String(url).includes('maps.apple/p/') || String(url).includes('maps.app.goo.gl/')) return Promise.reject(new Error('CORS: lien court inaccessible'));
       return new Promise(()=>{});
     },Promise,Date,Math,Number,Blob,console,Set,Map};
+  if(native)context.window.cordova={openwith:{
+    init(success){if(success)success();},
+    addHandler(callback){hooks.share=callback;}
+  }};
   vm.runInNewContext(source,context,{filename:'www/js/app.js'});
   document.getElementById('category').value='culture';
   async function importURL(url){document.getElementById('maps-url').value=url;
@@ -40,6 +44,8 @@ function harness() {
   function status(){return document.getElementById('status').textContent;}
   return {importURL,status,store,window:context.window,
     setConfirm(value){confirmAllowed=value;},
+    fire(event){(listeners.get(event)||[]).forEach(callback=>callback());},
+    share(intent){assert.equal(typeof hooks.share,'function','handler Share Extension non déclaré');hooks.share(intent);},
     reset(){document.getElementById('reset').onclick();}};
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
@@ -102,6 +108,27 @@ h.setConfirm(true);
 h.reset();
 assert.equal(h.store.has('nearby-places-v1'),false,'réinitialisation explicite seulement');
 assert.equal(h.store.has('nearby-places-catalogue-v1'),false,'cache réinitialisé explicitement');
+const cold=harness(true);
+cold.window.handleOpenURL('nearbyplaces://import?ll=35.801,139.801&name=Premier');
+cold.window.handleOpenURL('nearbyplaces://import?ll=35.802,139.802&name=Second');
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(cold.store.has('nearby-places-v1'),false,'aucun import avant deviceready');
+cold.fire('deviceready');
+await new Promise(resolve=>setImmediate(resolve));
+await new Promise(resolve=>setImmediate(resolve));
+let queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
+assert.deepEqual(queued.map(p=>p.name),['Premier','Second'],'deux liens profonds reçus avant deviceready sont traités dans l’ordre');
+cold.share({text:'Titre de page sans URL',items:[{data:'https://maps.apple.com/?ll=35.803,139.803&name=Depuis+Partager',text:'Fiche Plans'}]});
+await new Promise(resolve=>setImmediate(resolve));
+queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
+assert.equal(queued.length,3,'le titre du partage ne masque pas l’URL de item.data');
+assert.equal(queued[2].name,'Depuis Partager');
+cold.share({text:'Encore un titre',items:[{data:'https://evil.example/invalid'},{data:'https://maps.apple.com/?ll=35.804,139.804&name=Repli'}]});
+await new Promise(resolve=>setImmediate(resolve));
+queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
+assert.equal(queued.length,4,'un candidat rejeté n’empêche pas la lecture du suivant');
+assert.equal(queued[3].name,'Repli');
+console.log('PASS partage iOS (simulé) : attente deviceready, FIFO deep links, priorités item.data et repli sans perte');
 console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native/HTTP/NULL, reset confirmé');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
