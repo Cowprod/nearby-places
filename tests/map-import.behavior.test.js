@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('www/js/app.js', 'utf8');
-function harness(native = false, earlyURLs = [], controlledFetch = false) {
+function harness(native = false, earlyURLs = [], controlledFetch = false, seedLocal = null) {
   const store = new Map(), elements = new Map(), listeners = new Map(), hooks = {};
   const nativeResolutions=[], networkCalls=[];
   let confirmAllowed = false;
@@ -24,6 +24,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false) {
     setItem(key,value){store.set(key,String(value));},
     removeItem(key){store.delete(key);}
   };
+  if(seedLocal!==null)store.set('nearby-places-v1',seedLocal);
   const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0)fn();return 1;},clearTimeout(){},
     fetch(url){
@@ -59,10 +60,48 @@ function harness(native = false, earlyURLs = [], controlledFetch = false) {
     cancelImport(){document.getElementById('import-cancel').onclick();},
     input(id,value){document.getElementById(id).value=value;},
     formOpen(){return document.getElementById('import-dialog').hidden===false;},
+    renderCards(){return document.getElementById('places').children;},
     reset(){document.getElementById('reset').onclick();}};
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
 async function main() {
+// Malformed local storage must never be silently replaced with remote data.
+const unreadableRaw='{"truncated":';
+const unreadable=harness(false,[],true,unreadableRaw);
+assert.equal(unreadable.networkCalls.length,0,'invalid JSON suspends background sync');
+assert.equal(unreadable.store.get('nearby-places-v1'),unreadableRaw,'invalid raw JSON remains untouched');
+assert.match(unreadable.status(),/synchronisation suspendue/);
+unreadable.refresh();
+assert.equal(unreadable.networkCalls.length,0,'manual refresh also refuses destructive overwrite');
+
+// Mixed legacy records must not crash the UI, import or catalogue refresh.
+const legacyRecords=[
+  null,
+  {id:'manual-damaged',name:'A réparer',latitude:'35.60',longitude:null,categories:{bad:true},source:{type:'manual'},visited:false},
+  {id:'manual-healthy',name:'Lieu local',latitude:35.615,longitude:139.615,categories:['occasion'],source:{type:'manual'},visited:false},
+  {name:'Enregistrement sans ID',latitude:35.616,longitude:139.616,categories:['culture']}
+];
+const legacyRaw=JSON.stringify(legacyRecords);
+const legacy=harness(false,[],true,legacyRaw);
+assert.equal(legacy.store.get('nearby-places-v1'),legacyRaw,'render is read-only');
+assert.equal(legacy.renderCards().length,3,'null record skipped without deleting it');
+assert.ok(legacy.renderCards().some(card=>card.children.some(child=>String(child.textContent).includes('Coordonnées invalides'))),'bad coordinates signaled in UI');
+const validRemote=JSON.parse(fs.readFileSync('data/places.sample.json','utf8'));
+legacy.resolveFetch(0,validRemote);
+await new Promise(resolve=>setImmediate(resolve));
+let retained=JSON.parse(legacy.store.get('nearby-places-v1'));
+assert.equal(retained.some(p=>p&&p.id==='manual-damaged'),true,'malformed manual entry preserved after refresh');
+assert.equal(retained.some(p=>p&&p.id==='manual-healthy'),true,'healthy manual entry preserved after refresh');
+assert.equal(retained.includes(null),true,'unkeyed null kept for later recovery');
+assert.equal(retained.some(p=>p&&p.name==='Enregistrement sans ID'),true,'unkeyed legacy record preserved');
+legacy.window.handleOpenURL('nearbyplaces://import?ll=35.620,139.620&name=Nouveau+lieu');
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(legacy.formOpen(),true,'legacy entries do not prevent Apple Plans import confirmation');
+legacy.confirmImport();
+retained=JSON.parse(legacy.store.get('nearby-places-v1'));
+assert.equal(retained.some(p=>p&&p.id==='manual-damaged'),true,'import preserves malformed existing records');
+assert.equal(retained.some(p=>p&&p.name==='Nouveau lieu'),true,'valid new place still saved');
+
 // A stale first HTTP response must never overwrite a newer catalogue/cache.
 const refreshing=harness(false,[],true);
 assert.equal(refreshing.networkCalls.length,1,'initial remote fetch started');
