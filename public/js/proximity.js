@@ -14,14 +14,14 @@ function status(message){var e=document.getElementById('proximity-status');if(e)
 function logEvent(kind,details){
  var items=storeGet(EVENTS,[]);if(!Array.isArray(items))items=[];
  items.unshift({at:new Date().toISOString(),kind:kind,details:String(details||'')});
- storeSet(EVENTS,items.slice(0,50));diagnostics();
+ storeSet(EVENTS,items.slice(0,150));diagnostics();
 }
 function diagnostics(){
  var el=document.getElementById('proximity-diagnostics');if(!el)return;
  var events=storeGet(EVENTS,[]);
  el.textContent='Module : '+(ready?'prêt':'indisponible')+' · surveillance : '+(active?'active':'inactive')+
    ' · rayon : '+radius()+' m · zones configurées : '+fences().length+'\n'+
-   (Array.isArray(events)?events.slice(0,12).map(function(e){return e.at+' · '+e.kind+' · '+e.details;}).join('\n'):'');
+   (Array.isArray(events)?events.slice(0,60).map(function(e){return e.at+' · '+e.kind+' · '+e.details;}).join('\n'):'');
 }
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
 var TEST_NOTIFICATION_ID=1999999999;
@@ -54,9 +54,9 @@ function setRadius(value){
 function fences(){return currentPlaces().map(function(p){return {identifier:p.id,latitude:p.latitude,longitude:p.longitude,radius:radius(),notifyOnEntry:true,notifyOnExit:false,extras:{name:p.name}};});}
 function notify(place){
  var local=notificationPlugin(), history=storeGet(COOLDOWN,{}), now=Date.now();
- if(!place || !local)return;
+ if(!place || !local){logEvent('notification-skip','lieu ou plugin absent');return;}
  var hours=(place.alert&&Number(place.alert.cooldownHours))||24;
- if(now-(history[place.id]||0)<hours*3600000)return;
+ if(now-(history[place.id]||0)<hours*3600000){logEvent('notification-skip','cooldown '+place.name);return;}
  // Local notifications are generated when the native SDK delivers a JavaScript event.
  // iOS may terminate the WebView; this is NOT guaranteed background delivery.
  try {
@@ -93,16 +93,18 @@ function testNotification(){
 }
 function onGeofence(event){
  logEvent('geofence',event ? (event.action+' '+event.identifier) : 'événement absent');
- if(!active || !event || event.action!=='ENTER')return;
+ if(!active || !event || event.action!=='ENTER'){logEvent('geofence-skip','inactive ou action non ENTER');return;}
  var place=catalogue.find(function(p){return p.id===event.identifier;});
  if(place && !place.visited && (!place.alert || place.alert.enabled!==false))notify(place);
+ else logEvent('geofence-skip','lieu absent, visité ou alerte désactivée : '+String(event.identifier));
 }
 function syncNative(){
  var list=fences();
+ logEvent('zones-sync','début '+list.length+' zones, rayon '+radius()+' m');
  return sdk.removeGeofences().then(function(){
    return list.length?sdk.addGeofences(list):true;
  }).then(function(){status(active?'Surveillance active · '+list.length+' lieux':'Prêt · '+list.length+' lieux surveillables');logEvent('zones',list.length+' zones');return true;})
- .catch(function(error){status('Erreur zones : '+String(error));return false;});
+ .catch(function(error){logEvent('zones-error',String(error));status('Erreur zones : '+String(error));return false;});
 }
 function sync(){
  if(!ready || !sdk)return Promise.resolve(false);
@@ -112,12 +114,13 @@ function sync(){
 function init(){
  registerNotificationEvents();
  sdk=root.BackgroundGeolocation;
- if(!sdk){status('Prévisualisation web : géofencing natif indisponible');return Promise.resolve(false);}
+ if(!sdk){logEvent('init-error','SDK absent');status('Prévisualisation web : géofencing natif indisponible');return Promise.resolve(false);}
  sdk.onGeofence(onGeofence);
+ logEvent('init','SDK présent, ready en cours');
  return sdk.ready({locationAuthorizationRequest:'Always',stopOnTerminate:false,startOnBoot:true,
    geofenceInitialTriggerEntry:false,geofenceProximityRadius:2000,debug:false,logLevel:sdk.LOG_LEVEL_ERROR})
- .then(function(state){ready=true;active=!!state.enabled;logEvent('init','enabled='+active);return sync().then(function(){return true;});})
- .catch(function(error){status('Initialisation impossible : '+String(error));return false;});
+ .then(function(state){ready=true;active=!!state.enabled;logEvent('init','enabled='+active+' auth='+String(state.authorization)+' status='+String(state.status));return sync().then(function(){return true;});})
+ .catch(function(error){logEvent('init-error',String(error));status('Initialisation impossible : '+String(error));return false;});
 }
 function enable(){
  if(!sdk || !ready){status('Le module natif n’est pas prêt');return Promise.resolve(false);}
@@ -133,6 +136,7 @@ function enable(){
      if(requestRevision!==controlRevision)return false;
      return syncNative().then(function(ok){
        if(!ok || requestRevision!==controlRevision)return false;
+       logEvent('start','demande startGeofences');
        return sdk.startGeofences().then(function(){
          // Un arrêt demandé entre-temps reste prioritaire et suivra dans la file.
          if(requestRevision!==controlRevision)return false;
@@ -142,7 +146,7 @@ function enable(){
        });
      });
    });
- }).catch(function(error){status('Surveillance refusée : '+String(error));return false;});
+ }).catch(function(error){logEvent('start-error',String(error));status('Surveillance refusée : '+String(error));return false;});
 }
 function disable(){
  ++controlRevision; // Invalide les demandes d'activation en attente de permission.
@@ -165,5 +169,5 @@ function wire(){
  if(!root.cordova){status('Mode web : uniquement la consultation et le GPS au premier plan');return;}
  document.addEventListener('deviceready',init,{once:true});
 }
-root.NearbyProximity={wire:wire,setPlaces:setPlaces,enable:enable,disable:disable,testNotification:testNotification,radius:radius,setRadius:setRadius,onGeofence:onGeofence,fences:fences};
+root.NearbyProximity={logEvent:logEvent,wire:wire,setPlaces:setPlaces,enable:enable,disable:disable,testNotification:testNotification,radius:radius,setRadius:setRadius,onGeofence:onGeofence,fences:fences};
 })(window);
