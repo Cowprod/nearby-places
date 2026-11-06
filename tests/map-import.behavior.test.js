@@ -59,6 +59,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     confirmImport(){document.getElementById('import-confirm').onclick();},
     cancelImport(){document.getElementById('import-cancel').onclick();},
     input(id,value){document.getElementById(id).value=value;},
+    inputValue(id){return document.getElementById(id).value;},
     formOpen(){return document.getElementById('import-dialog').hidden===false;},
     renderCards(){return document.getElementById('places').children;},
     reset(){document.getElementById('reset').onclick();}};
@@ -154,6 +155,22 @@ assert.equal(rejected.length,0,'search bias is not a selected place');
 rejected=await appleViewport.importURL('https://maps.apple.com/directions?destination=Tokyo%20Station&ll=35.500,139.500');
 assert.equal(rejected.length,0,'route with named target must not silently import viewport');
 console.log('PASS Apple Plans (parser simulé) : cible POI/directions prioritaire, sll et viewport non importés comme destination');
+const namedRoute=harness();
+namedRoute.window.handleOpenURL('nearbyplaces://import?url='+encodeURIComponent('https://maps.apple.com/directions?destination=35.819,139.819'));
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(namedRoute.formOpen(),true,'Apple route opens the confirmation form');
+assert.equal(namedRoute.inputValue('import-name'),'','generic route title must not become a saved name');
+namedRoute.confirmImport();
+assert.equal(namedRoute.store.has('nearby-places-v1'),false,'empty route label cannot persist');
+namedRoute.input('import-name','Une destination choisie');
+namedRoute.input('import-category','musique');
+namedRoute.input('import-comment','À visiter');
+namedRoute.confirmImport();
+const routeSaved=JSON.parse(namedRoute.store.get('nearby-places-v1'))[0];
+assert.equal(routeSaved.name,'Une destination choisie');
+assert.equal(routeSaved.comment,'À visiter');
+assert.deepEqual(Array.from(routeSaved.categories),['musique']);
+console.log('PASS validation Apple Plans (simulée) : nom de destination saisi et confirmé avant sauvegarde');
 const h=harness();
 // Short Maps links percent-encoded into a Shortcuts/ChatGPT import URL must reach
 // the native resolver when pasted directly (not only via handleOpenURL).
