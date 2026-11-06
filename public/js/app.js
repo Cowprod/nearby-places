@@ -10,22 +10,38 @@
   function status(s){ $('status').textContent=s; }
   function render(position){
     $('places').replaceChildren();
+    // Local data may predate schema validation; render defensively without deleting it.
     places.forEach(function(p){
+      if(!p || typeof p!=='object')return;
+      var validCoords=validPosition(p.latitude,p.longitude);
       var card=document.createElement('section');card.className='place';
       var head=document.createElement('div');head.className='row';
-      var title=document.createElement('strong');title.textContent=p.name;
-      var button=document.createElement('button');button.textContent=p.visited?'Réactiver':'Visité';button.onclick=function(){p.visited=!p.visited;save();render(position);};
+      var title=document.createElement('strong');
+      title.textContent=typeof p.name==='string' && p.name.trim()?p.name:'Lieu local sans nom';
+      var button=document.createElement('button');button.textContent=p.visited?'Réactiver':'Visité';
+      button.onclick=function(){p.visited=!p.visited;save();render(position);};
       head.append(title,button);card.append(head);
-      var meta=document.createElement('p');meta.className='tag';meta.textContent=(p.categories||[]).join(', ')+' · '+p.latitude.toFixed(5)+', '+p.longitude.toFixed(5);
-      card.append(meta);if(p.comment){var note=document.createElement('p');note.textContent=p.comment;card.append(note);}
-      if(position){var km=distanceMeters(position.latitude,position.longitude,p.latitude,p.longitude)/1000;var t=document.createElement('p');t.textContent=km.toFixed(2)+' km à vol d’oiseau (pas un temps de marche)';card.append(t);}
-      var directions=document.createElement('a');
-      directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(p.latitude+','+p.longitude)+'&dirflg=w';
-      directions.textContent='Itinéraire à pied (Plans)';
-      directions.target='_blank';
-      directions.rel='noopener noreferrer';
-      directions.style.color='#5bd7bb';
-      card.append(directions);
+      var meta=document.createElement('p');meta.className='tag';
+      var categories=Array.isArray(p.categories)?p.categories.filter(function(c){return typeof c==='string';}).join(', '):'';
+      meta.textContent=categories+' · '+(validCoords?
+        p.latitude.toFixed(5)+', '+p.longitude.toFixed(5):
+        'Coordonnées invalides (donnée locale conservée)');
+      card.append(meta);
+      if(typeof p.comment==='string' && p.comment){
+        var note=document.createElement('p');note.textContent=p.comment;card.append(note);
+      }
+      if(validCoords && position && validPosition(position.latitude,position.longitude)){
+        var km=distanceMeters(position.latitude,position.longitude,p.latitude,p.longitude)/1000;
+        var t=document.createElement('p');t.textContent=km.toFixed(2)+' km à vol d’oiseau (pas un temps de marche)';
+        card.append(t);
+      }
+      if(validCoords){
+        var directions=document.createElement('a');
+        directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(p.latitude+','+p.longitude)+'&dirflg=w';
+        directions.textContent='Itinéraire à pied (Plans)';
+        directions.target='_blank';directions.rel='noopener noreferrer';
+        directions.style.color='#5bd7bb';card.append(directions);
+      }
       $('places').append(card);
     });
   }
@@ -55,8 +71,17 @@
       return Object.assign({},p,{visited:old ? !!old.visited : !!p.visited});
     });
     // Keep user-entered places and locally edited places when a catalogue is refreshed.
-    var manuallyAdded=Array.from(byId.values()).filter(function(p){return p.source && p.source.type==='manual';});
-    places=incoming.concat(manuallyAdded);
+    // Keep manual entries (even malformed) and orphaned local data for recovery.
+    // Never silently discard legacy records just because GPS coordinates are invalid.
+    var manuallyAdded=Array.from(byId.values()).filter(function(p){
+      return (p.source && p.source.type==='manual') ||
+        !validPosition(p.latitude,p.longitude) ||
+        typeof p.name!=='string' || !Array.isArray(p.categories);
+    });
+    var unkeyed=previous.filter(function(p){
+      return !p || typeof p!=='object' || typeof p.id!=='string' || !p.id;
+    });
+    places=incoming.concat(manuallyAdded,unkeyed);
     save();render();
     status(places.length+' lieux · '+label);
   }
@@ -74,8 +99,22 @@
   function load(){
     // Only the most recent refresh may commit network/cache results.
     var revision=++loadRevision;
-    var local=readJSON(KEY,[]);
-    places=Array.isArray(local)?local:[];
+    // A corrupt JSON payload must not be overwritten by a remote catalogue.
+    var rawLocal,local;
+    try{
+      rawLocal=localStorage.getItem(KEY);
+      local=rawLocal===null?[]:JSON.parse(rawLocal);
+    }catch(error){
+      status('Données locales illisibles : synchronisation suspendue pour éviter leur perte');
+      trace('storage-error','JSON local illisible ; stockage préservé');
+      return;
+    }
+    if(!Array.isArray(local)){
+      status('Format local inattendu : synchronisation suspendue pour éviter la perte de données');
+      trace('storage-error','Catalogue local non tableau ; stockage préservé');
+      return;
+    }
+    places=local;
     render();
     if(window.NearbyProximity)window.NearbyProximity.setPlaces(places);
     status(places.length+' lieux locaux · synchronisation GitHub…');
@@ -199,7 +238,7 @@
   }
   function importMapsURL(value){
     var parsed=parseMapsLink(value);
-    var duplicate=places.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 &&
+    var duplicate=places.some(function(p){return p && validPosition(p.latitude,p.longitude) && Math.abs(p.latitude-parsed.latitude)<0.00001 &&
       Math.abs(p.longitude-parsed.longitude)<0.00001;});
     if(duplicate){trace('import-result','doublon '+parsed.name);status('Ce lieu existe déjà dans le catalogue');return false;}
     if((pendingImport && Math.abs(pendingImport.latitude-parsed.latitude)<0.00001 && Math.abs(pendingImport.longitude-parsed.longitude)<0.00001) || importQueue.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;})){status('Ce lieu est déjà en attente de confirmation');return false;}
@@ -214,7 +253,7 @@
     var parsed=pendingImport;
     // A catalogue refresh or manual addition may have inserted this location
     // while the confirmation sheet was open. Recheck before persisting.
-    if(places.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;})){
+    if(places.some(function(p){return p && validPosition(p.latitude,p.longitude) && Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;})){
       trace('import-result','doublon à la confirmation '+parsed.latitude+','+parsed.longitude);
       pendingImport=null;$('import-dialog').hidden=true;
       status('Ce lieu existe déjà : import non enregistré');showNextImport();return;
@@ -305,8 +344,8 @@
     }).catch(function(error){trace('import-error',String(error));status('Import du lieu : '+error.message);});
   };
   $('export').onclick=function(){
-    var payload={schemaVersion:1,exportedAt:new Date().toISOString(),places:places.filter(function(p){return p.source&&p.source.type==='manual';}),
-      visited:places.filter(function(p){return p.visited;}).map(function(p){return p.id;})};
+    var payload={schemaVersion:1,exportedAt:new Date().toISOString(),places:places.filter(function(p){return p && p.source&&p.source.type==='manual';}),
+      visited:places.filter(function(p){return p && p.visited && typeof p.id==='string';}).map(function(p){return p.id;})};
     var blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
     var url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;
     link.download='nearby-places-sauvegarde.json';document.body.append(link);link.click();link.remove();
@@ -325,10 +364,11 @@
           !Array.isArray(p.categories)||!p.source||p.source.type!=='manual')throw Error('Lieu invalide');
         ids.add(p.id);
       });
-      var merged=new Map(places.map(function(p){return [p.id,p];}));
+      var unkeyed=places.filter(function(p){return !p || typeof p!=='object' || typeof p.id!=='string' || !p.id;});
+      var merged=new Map(places.filter(function(p){return p && typeof p.id==='string' && p.id;}).map(function(p){return [p.id,p];}));
       data.places.forEach(function(p){merged.set(p.id,p);});
       var visited=new Set(data.visited.filter(function(id){return typeof id==='string';}));
-      places=Array.from(merged.values()).map(function(p){return Object.assign({},p,{visited:!!p.visited||visited.has(p.id)});});
+      places=Array.from(merged.values()).map(function(p){return Object.assign({},p,{visited:!!p.visited||visited.has(p.id)});}).concat(unkeyed);
       save();render();status('Sauvegarde restaurée · '+data.places.length+' lieux personnels');
     }).catch(function(error){status('Import refusé : '+error.message);}).finally(function(){event.target.value='';});
   };
