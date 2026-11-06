@@ -118,8 +118,8 @@ async function main() {
   assert.ok(!events.some(e => e.details.includes('confirmation native add reçue')), 'pas de confirmation native sans callback');
   assert.ok(!events.some(e => e.details.includes('événement natif trigger reçu')), 'pas de déclenchement natif inventé');
   h.callbacks['notification.add']({ id:firstTestId });
-  h.callbacks['notification.trigger']({ id:firstTestId });
-  h.callbacks['notification.click']({ id:secondTestId });
+  h.callbacks['notification.trigger']({ id:firstTestId }, { foreground:false, queued:true });
+  h.callbacks['notification.click']({ id:secondTestId }, { foreground:false, queued:false });
   h.callbacks['notification.click']({ id:1999999999 }); // Legacy ID remains recognized.
   const eventCount=JSON.parse(h.storage.get('nearby-places-events-v1')||'[]').length;
   h.callbacks['notification.trigger']({ id:12345 });
@@ -128,7 +128,8 @@ async function main() {
   assert.ok(events.some(e => e.details.includes('confirmation native add reçue')), 'accusé natif add tracé seulement après callback');
   assert.ok(events.some(e => e.details.includes('événement natif trigger reçu')), 'événement trigger journalisé séparément de la programmation');
   assert.ok(events.some(e => e.details.includes('ouverte par utilisateur')), 'clic utilisateur journalisé');
-  assert.ok(events.some(e => e.details.includes('id '+firstTestId+' : événement natif trigger reçu')), 'identifiant corrélé au callback');
+  assert.ok(events.some(e => e.details.includes('id '+firstTestId+' : événement natif trigger reçu') && e.details.includes('foreground=false') && e.details.includes('queued=true')), 'callback natif différé identifiable sans prétendre observer la bannière');
+  assert.ok(events.some(e => e.details.includes('id '+secondTestId+' : notification ouverte') && e.details.includes('queued=false')), 'contexte de clic restitué sans altérer le diagnostic');
   assert.equal(h.scheduled.length, 3, 'écouter les événements ne doit pas programmer d’autres notifications');
   const resumed=harness(true,false,h.storage);
   resumed.api.wire();
