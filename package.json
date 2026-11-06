@@ -1,6 +1,6 @@
 {
   "name": "nearby-places",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": true,
   "description": "Cordova prototype for offline places and foreground GPS",
   "scripts": {
@@ -18,7 +18,8 @@
     "cordova-plugin-customurlscheme": "5.0.2",
     "cordova-ios": "8.1.1",
     "cordova-plugin-device": "^3.0.0",
-    "cordova-plugin-openwith-ios": "2.0.0"
+    "cordova-plugin-openwith-ios": "2.0.0",
+    "cordova-plugin-nearby-resolver": "file:plugins/cordova-plugin-nearby-resolver"
   },
   "cordova": {
     "platforms": [
@@ -38,7 +39,8 @@
       "cordova-plugin-device": {},
       "cordova-plugin-openwith-ios": {
         "IOS_URL_SCHEME": "nearbyplacesshare"
-      }
+      },
+      "cordova-plugin-nearby-resolver": {}
     }
   }
 }
