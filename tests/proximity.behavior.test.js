@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 const script = fs.readFileSync('www/js/proximity.js', 'utf8');
 
-function harness(allowNotifications = true, slowNative = false, initialStorage) {
+function harness(allowNotifications = true, slowNative = false, initialStorage, sdkInitiallyEnabled = false) {
   const storage = initialStorage || new Map();
   const scheduled = [];
   const callbacks = {};
@@ -22,7 +22,7 @@ function harness(allowNotifications = true, slowNative = false, initialStorage) 
   const sdk = {
     LOG_LEVEL_ERROR: 0,
     onGeofence(callback) { callbacks.geofence = callback; },
-    async ready() { return { enabled: false }; },
+    async ready() { return { enabled: sdkInitiallyEnabled }; },
     async removeGeofences() { return nativeStep(() => { state.removes++; state.geofences = []; }); },
     async addGeofences(fences) { if(state.failNextAdds>0){state.failNextAdds--;return Promise.reject(Error('simulated addGeofences failure'));}return nativeStep(() => { state.geofences = fences; }); },
     async startGeofences() { return nativeStep(() => { state.starts++; }); },
@@ -190,6 +190,35 @@ async function main() {
   assert.equal(malformed.scheduled.length,0,'ne jamais notifier une entrée locale invalide ou un callback ancien');
   malformed.api.onGeofence({action:'ENTER',identifier:place.id});
   assert.equal(malformed.scheduled.length,1,'un lieu valide continue de notifier');
+  // Simulate a boot restore: the SDK reports enabled although no explicit
+  // opt-in has ever been saved. It must be stopped, not treated as consent.
+  const originalPlaces='[{"id":"manual-private","name":"Lieu personnel"}]';
+  const noConsentStore=new Map([['nearby-places-v1',originalPlaces]]);
+  const bootWithoutConsent=harness(true,false,noConsentStore,true);
+  bootWithoutConsent.api.setPlaces([place]);
+  bootWithoutConsent.api.wire();
+  assert.equal(await bootWithoutConsent.callbacks.deviceready(),true);
+  assert.equal(bootWithoutConsent.state.stops,1,'SDK actif au boot sans opt-in doit être arrêté');
+  assert.equal(JSON.parse(noConsentStore.get('nearby-places-proximity-v1')).enabled,false,'désactivation locale persistée');
+  assert.equal(noConsentStore.get('nearby-places-v1'),originalPlaces,'les données de lieux ne sont pas modifiées par la reprise');
+  bootWithoutConsent.api.onGeofence({action:'ENTER',identifier:place.id});
+  assert.equal(bootWithoutConsent.scheduled.length,0,'aucune notification après restauration native non autorisée');
+
+  const declinedStore=new Map([['nearby-places-proximity-v1',JSON.stringify({enabled:false})]]);
+  const bootOptedOut=harness(true,false,declinedStore,true);
+  bootOptedOut.api.wire();
+  await bootOptedOut.callbacks.deviceready();
+  assert.equal(bootOptedOut.state.stops,1,'refus conservé malgré état actif du SDK');
+
+  const acceptedStore=new Map([['nearby-places-proximity-v1',JSON.stringify({enabled:true})]]);
+  const bootOptedIn=harness(true,false,acceptedStore,true);
+  bootOptedIn.api.setPlaces([place]);
+  bootOptedIn.api.wire();
+  assert.equal(await bootOptedIn.callbacks.deviceready(),true);
+  assert.equal(bootOptedIn.state.stops,0,'reprise autorisée par opt-in persisté');
+  bootOptedIn.api.onGeofence({action:'ENTER',identifier:place.id});
+  assert.equal(bootOptedIn.scheduled.length,1,'opt-in historique et SDK actif permettent la notification simulée');
+  console.log('PASS consentement au démarrage (simulé) : SDK restauré sans opt-in arrêté, données préservées, opt-in historique respecté');
   console.log('PASS zones iOS (simulées) : entrées locales invalides filtrées sans suppression, callbacks périmés ignorés');
   console.log('PASS proximité (simulée) : rayon, opt-in, test notification +10s, callbacks fictifs, arrêt, sérialisation SDK, reprise après erreur add et stop');
 }
