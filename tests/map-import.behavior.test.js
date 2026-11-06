@@ -23,7 +23,7 @@ function harness() {
     setItem(key,value){store.set(key,String(value));},
     removeItem(key){store.delete(key);}
   };
-  const context={window:{confirm(){return confirmAllowed;}},document,localStorage,URL,URLSearchParams,AbortController,
+  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0)fn();return 1;},clearTimeout(){},
     fetch(url){
       if(String(url).includes('/p/okRedirect')) return Promise.resolve({url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});
@@ -73,7 +73,7 @@ assert.equal(list.length,7,'URL de partage extraite du texte');
 checkPlace(list[6],35.711,139.782);
 list=await h.importURL('https://maps.app.goo.gl/shortCode');
 assert.equal(list.length,7,'lien court non résolu ne crée rien');
-assert.match(h.status(),/Import du lieu : CORS/, 'échec réseau explicite sans création de lieu');
+assert.match(h.status(),/Import du lieu : Résolution iOS/, 'échec réseau natif explicite sans création de lieu');
 list=await h.importURL('https://maps.apple/p/badRedirect');
 assert.equal(list.length,7,'lien Apple court non résolu préserve les données');
 list=await h.importURL('https://maps.apple/p/okRedirect');
@@ -93,6 +93,6 @@ h.setConfirm(true);
 h.reset();
 assert.equal(h.store.has('nearby-places-v1'),false,'réinitialisation explicite seulement');
 assert.equal(h.store.has('nearby-places-catalogue-v1'),false,'cache réinitialisé explicitement');
-console.log('PASS imports simulés : Apple q/ll/redirection, Google POI, ChatGPT, texte partagé, anti-doublon, CORS, reset confirmé');
+console.log('PASS imports simulés : Apple q/ll/redirection native, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native, reset confirmé');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
