@@ -10,7 +10,7 @@ function harness(allowNotifications = true, slowNative = false, initialStorage) 
   const scheduled = [];
   const callbacks = {};
   const elements = {};
-  const state = { geofences: [], starts: 0, stops: 0, inFlight: 0, maxInFlight: 0 };
+  const state = { geofences: [], starts: 0, stops: 0, removes: 0, failNextAdds: 0, inFlight: 0, maxInFlight: 0 };
   async function nativeStep(update) {
     state.inFlight++;
     state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
@@ -23,8 +23,8 @@ function harness(allowNotifications = true, slowNative = false, initialStorage) 
     LOG_LEVEL_ERROR: 0,
     onGeofence(callback) { callbacks.geofence = callback; },
     async ready() { return { enabled: false }; },
-    async removeGeofences() { return nativeStep(() => { state.geofences = []; }); },
-    async addGeofences(fences) { return nativeStep(() => { state.geofences = fences; }); },
+    async removeGeofences() { return nativeStep(() => { state.removes++; state.geofences = []; }); },
+    async addGeofences(fences) { if(state.failNextAdds>0){state.failNextAdds--;return Promise.reject(Error('simulated addGeofences failure'));}return nativeStep(() => { state.geofences = fences; }); },
     async startGeofences() { return nativeStep(() => { state.starts++; }); },
     async stop() { return nativeStep(() => { state.stops++; }); }
   };
@@ -70,6 +70,13 @@ async function main() {
   assert.equal(await h.api.setRadius(50), false);
   assert.equal(await h.api.setRadius(150), false, 'rayon iOS inférieur à 200 m refusé');
   assert.equal(h.api.radius(), 750);
+  // A failed native add after a successful remove invalidates the previous fence cache.
+  h.state.failNextAdds=1;
+  assert.equal(await h.api.setRadius(800),false,'native add failure propagated to caller');
+  assert.equal(h.state.geofences.length,0,'failed add leaves no native fences');
+  assert.equal(await h.api.setRadius(750),true,'retry after failure must rebuild even for previously cached radius');
+  assert.equal(h.state.geofences.length,1,'retry restores native fence');
+  assert.equal(h.state.geofences[0].radius,750);
 
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
   assert.equal(h.scheduled.length, 0, 'pas de notification avant consentement explicite');
@@ -87,6 +94,10 @@ async function main() {
   assert.equal(await h.api.disable(), true);
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
   assert.equal(h.scheduled.length, 1, 'pas de notification après arrêt');
+  const removeCountAfterStop=h.state.removes;
+  assert.equal(await h.api.enable(),true,'surveillance relancée après stop');
+  assert.equal(h.state.removes,removeCountAfterStop+1,'restart rebuilds fences even if catalogue unchanged');
+  assert.equal(await h.api.disable(),true);
 
   assert.equal(await h.api.testNotification(), true, 'test +10 s même après arrêt du GPS');
   assert.equal(h.scheduled.length, 2);
@@ -154,6 +165,6 @@ async function main() {
   assert.equal(concurrent.state.maxInFlight, 1);
   concurrent.api.onGeofence({action:'ENTER', identifier:place.id});
   assert.equal(concurrent.scheduled.length, 0, 'aucune notification après demande d’arrêt');
-  console.log('PASS proximité (simulée) : rayon, opt-in, test notification +10s, callbacks fictifs, arrêt, sérialisation SDK');
+  console.log('PASS proximité (simulée) : rayon, opt-in, test notification +10s, callbacks fictifs, arrêt, sérialisation SDK, reprise après erreur add et stop');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
