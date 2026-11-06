@@ -102,7 +102,8 @@
       alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}};
     places.push(place);save();render();return place;
   }
-  function parseMapsLink(raw){
+  function parseMapsLink(raw,depth){
+    if((depth||0)>4)throw Error('Lien d’import imbriqué trop profondément');
     var input=String(raw||'').trim();
     if(!input)throw Error('Coller un lien Maps avant de lancer l’import');
     var extracted=input.match(/(?:nearbyplaces:\/\/|https:\/\/)[^\s<>]+/i);
@@ -111,7 +112,7 @@
     if(url.protocol==='https:' && host==='maps.apple' && /^\/p\/[A-Za-z0-9_-]+\/?$/.test(url.pathname))throw Error('Lien Apple Plans court : résolution nécessaire');
     if(url.protocol==='nearbyplaces:' && url.hostname==='import'){
       var embedded=url.searchParams.get('url');
-      if(embedded)return parseMapsLink(embedded);
+      if(embedded)return parseMapsLink(embedded,(depth||0)+1);
       coords=url.searchParams.get('ll');
       name=url.searchParams.get('name')||'';
     }else if(url.protocol==='https:' && (host==='maps.apple.com'||host==='www.maps.apple.com')){
@@ -139,7 +140,8 @@
     if(!validPosition(lat,lon))throw Error('Coordonnées invalides');
     return {name:name,latitude:lat,longitude:lon};
   }
-  function resolveMapsURL(value){
+  function resolveMapsURL(value,depth){
+    if((depth||0)>4)return Promise.reject(Error('Lien d’import imbriqué trop profondément'));
     trace('import-url','entrée : '+String(value||'').slice(0,250));
     // Links pasted from Shortcuts can contain a percent-encoded short Maps URL.
     // Resolve the inner URL before parsing the surrounding nearbyplaces://import URL.
@@ -148,7 +150,7 @@
     if(incoming && incoming.protocol==='nearbyplaces:' && incoming.hostname==='import'){
       var embedded=incoming.searchParams.get('url');
       if(embedded){
-        return resolveMapsURL(embedded).then(function(resolved){
+        return resolveMapsURL(embedded,(depth||0)+1).then(function(resolved){
           incoming.searchParams.set('url',resolved);
           return incoming.href;
         });
@@ -156,22 +158,24 @@
     }
     var match=String(value||'').match(/https:\/\/(?:maps\.apple\/p\/|maps\.app\.goo\.gl\/)[^\s<>]+/i);
     if(!match){trace('import-url','URL directe');return Promise.resolve(value);}
-    trace('import-url','résolution native : '+match[0]);
+    // Short URLs copied from shared prose may end with punctuation outside the URL.
+    var shortLink=match[0].replace(/[),.;]+$/,'');
+    trace('import-url','résolution native : '+shortLink);
     var resolver=window.NearbyResolver;
     if(!resolver || typeof resolver.resolve!=='function')return Promise.reject(Error('Résolveur iOS absent : installer le plugin local puis reconstruire'));
     return new Promise(function(resolve,reject){
-      resolver.resolve(match[0],function(result){
+      resolver.resolve(shortLink,function(result){
         if(!result || !Number.isInteger(Number(result.httpStatus)) || Number(result.httpStatus)<200 || Number(result.httpStatus)>=300){reject(Error('Réponse du résolveur iOS invalide'));return;}
         trace('import-native','HTTP '+result.httpStatus+' → '+String(result.url).slice(0,250));
         // Accept only a destination whose coordinates can actually be parsed.
         // A short Maps URL may return an HTML page with a usable canonical link.
         var candidates=[result && result.url, result && result.htmlMapURL];
         var target=candidates.find(function(candidate){
-          if(typeof candidate!=='string' || candidate===match[0])return false;
+          if(typeof candidate!=='string' || candidate===shortLink)return false;
           try{parseMapsLink(candidate);return true;}catch(error){return false;}
         });
         if(!target){reject(Error('Lien court sans destination Maps avec coordonnées exploitables'));return;}
-        resolve(String(value).replace(match[0],target));
+        resolve(String(value).replace(shortLink,target));
       },function(error){trace('import-native-error',String(error));reject(Error('Résolution iOS : '+String(error)));});
     });
   }
