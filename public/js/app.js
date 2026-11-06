@@ -179,7 +179,17 @@
       return false;
     });
   }
-  var pendingSharedURL=null;
+  // Cordova may deliver the URL before deviceready. Wait for plugins (especially NearbyResolver).
+  // Process a small FIFO so a second deep link cannot overwrite the first during startup.
+  var pendingSharedURLs=[], sharedReady=!window.cordova, processingSharedURL=false;
+  function flushPendingSharedURLs(){
+    if(!sharedReady || processingSharedURL || !pendingSharedURLs.length)return;
+    processingSharedURL=true;
+    var next=pendingSharedURLs.shift();
+    Promise.resolve().then(function(){return receiveSharedURL(next);})
+      .catch(function(error){trace('share-error',String(error));status('Import partagé : '+String(error));})
+      .then(function(){processingSharedURL=false;flushPendingSharedURLs();});
+  }
   window.handleOpenURL=function(url){
     trace('deeplink','reçu : '+String(url).slice(0,250));
     try{
@@ -187,13 +197,13 @@
       if(incoming.protocol!=='nearbyplaces:' || incoming.hostname!=='import')return;
       var shared=incoming.searchParams.get('url')||url;
       if(!shared)return;
-      pendingSharedURL=shared;
-      setTimeout(function(){if(pendingSharedURL){var value=pendingSharedURL;pendingSharedURL=null;receiveSharedURL(value);}},0);
+      if(pendingSharedURLs.length>=10){status('Trop de liens partagés en attente');return;}
+      pendingSharedURLs.push(shared);
+      setTimeout(flushPendingSharedURLs,0);
     }catch(error){status('Lien partagé invalide');}
   };
-  document.addEventListener('resume',function(){
-    if(pendingSharedURL){var value=pendingSharedURL;pendingSharedURL=null;receiveSharedURL(value);}
-  });
+  document.addEventListener('deviceready',function(){sharedReady=true;flushPendingSharedURLs();},{once:true});
+  document.addEventListener('resume',flushPendingSharedURLs);
   function registerNativeShare(){
     var plugin=window.cordova && window.cordova.openwith;
     if(!plugin){trace('share-init','plugin absent');status('Partage natif indisponible : extension non installée');return;}
@@ -203,16 +213,24 @@
       plugin.addHandler(function(intent){
         trace('share-intent','reçu : '+JSON.stringify(intent||{}).slice(0,500));
         var values=[];
-        if(intent && typeof intent.text==='string')values.push(intent.text);
-        if(intent && Array.isArray(intent.items))intent.items.forEach(function(item){
-          if(item && typeof item.data==='string' && /^https?:\/\//i.test(item.data))values.push(item.data);
-          if(item && typeof item.text==='string')values.push(item.text);
-        });
-        for(var i=0;i<values.length;i++){
-          receiveSharedURL(values[i]);return;
+        function candidate(value){
+          if(typeof value!=='string' || !/(?:https:\/\/|nearbyplaces:\/\/)/i.test(value))return;
+          if(values.length<10 && values.indexOf(value)===-1)values.push(value);
         }
-        trace('share-error','aucune URL exploitable');
-        status('Partage reçu, mais aucune URL exploitable avec coordonnées');
+        // The share description (intent.text) can be only a page title; prefer item.data.
+        if(intent && Array.isArray(intent.items))intent.items.forEach(function(item){
+          if(item){candidate(item.data);candidate(item.text);}
+        });
+        if(intent)candidate(intent.text);
+        function tryCandidate(index){
+          if(index>=values.length){
+            trace('share-error','aucune URL Maps exploitable');
+            status('Partage reçu, mais aucune URL exploitable avec coordonnées');
+            return Promise.resolve(false);
+          }
+          return receiveSharedURL(values[index]).then(function(ok){return ok?true:tryCandidate(index+1);});
+        }
+        tryCandidate(0);
       });
     }catch(error){trace('share-error','initialisation '+String(error));status('Initialisation partage : '+String(error));}
   }
