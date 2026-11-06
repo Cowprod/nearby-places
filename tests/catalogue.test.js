@@ -74,11 +74,11 @@ const resolverNative = read('local-plugins/cordova-plugin-nearby-resolver/src/io
 assert.equal(resolverPackage.name, 'cordova-plugin-nearby-resolver');
 assert.equal(pkg.devDependencies['cordova-plugin-nearby-resolver'], 'file:local-plugins/cordova-plugin-nearby-resolver');
 assert.ok(pkg.cordova.plugins['cordova-plugin-nearby-resolver'], 'plugin déclaré dans cordova.plugins');
-assert.match(resolverXML, /<source-file src="src\\/ios\\/NearbyResolver\\.m"\\s*\\/>/, 'fichier natif installé par Cordova');
+assert.ok(resolverXML.includes('<source-file src="src/ios/NearbyResolver.m"/>'), 'fichier natif installé par Cordova');
 assert.match(resolverNative, /NSURLSessionTaskDelegate/, 'contrôle natif des redirections');
-assert.match(resolverNative, /completionHandler\\(\\[self allowedURL:request\\.URL\\] \\? request : nil\\)/, 'redirection HTTPS et hôte autorisé');
-assert.match(resolverNative, /statusCode<200 \\|\\| statusCode>=300/, 'échecs HTTP rejetés');
-assert.match(resolverNative, /data\\.length<=262144/, 'analyse HTML bornée');
+assert.ok(resolverNative.includes('completionHandler([self allowedURL:request.URL] ? request : nil)'), 'redirection HTTPS et hôte autorisé');
+assert.ok(resolverNative.includes('statusCode<200 || statusCode>=300'), 'échecs HTTP rejetés');
+assert.ok(resolverNative.includes('data.length<=262144'), 'analyse HTML bornée');
 console.log('PASS résolveur iOS (statique) : sources locales, redirections et codes HTTP contrôlés');
 console.log('PASS catalogue:', fixtures.places.length, 'lieux');
 console.log('PASS Cordova:', 'configuration iOS, GPS au premier plan, JS syntaxe');
