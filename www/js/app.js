@@ -215,19 +215,34 @@
     var resolver=window.NearbyResolver;
     if(!resolver || typeof resolver.resolve!=='function')return Promise.reject(Error('Résolveur iOS absent : installer le plugin local puis reconstruire'));
     return new Promise(function(resolve,reject){
-      resolver.resolve(shortLink,function(result){
-        if(!result || !Number.isInteger(Number(result.httpStatus)) || Number(result.httpStatus)<200 || Number(result.httpStatus)>=300){reject(Error('Réponse du résolveur iOS invalide'));return;}
-        trace('import-native','HTTP '+result.httpStatus+' → '+String(result.url).slice(0,250));
-        // Accept only a destination whose coordinates can actually be parsed.
-        // A short Maps URL may return an HTML page with a usable canonical link.
-        var candidates=[result && result.url, result && result.htmlMapURL];
-        var target=candidates.find(function(candidate){
-          if(typeof candidate!=='string' || candidate===shortLink)return false;
-          try{parseMapsLink(candidate);return true;}catch(error){return false;}
+      // A Cordova bridge that never calls back must not block future shared URLs.
+      // Native URLSession has an 18s resource timeout; 22s bounds bridge stalls.
+      var settled=false;
+      var timer=setTimeout(function(){complete(reject,Error('Résolution iOS : délai dépassé (22 s)'));},22000);
+      function complete(callback,value){
+        if(settled)return;
+        settled=true;clearTimeout(timer);
+        callback(value);
+      }
+      try{
+        resolver.resolve(shortLink,function(result){
+          if(settled)return;
+          if(!result || !Number.isInteger(Number(result.httpStatus)) || Number(result.httpStatus)<200 || Number(result.httpStatus)>=300){complete(reject,Error('Réponse du résolveur iOS invalide'));return;}
+          trace('import-native','HTTP '+result.httpStatus+' → '+String(result.url).slice(0,250));
+          // Only accept a destination with coordinates, never a redirect to arbitrary hosts.
+          var candidates=[result && result.url, result && result.htmlMapURL];
+          var target=candidates.find(function(candidate){
+            if(typeof candidate!=='string' || candidate===shortLink)return false;
+            try{parseMapsLink(candidate);return true;}catch(error){return false;}
+          });
+          if(!target){complete(reject,Error('Lien court sans destination Maps avec coordonnées exploitables'));return;}
+          complete(resolve,String(value).replace(shortLink,target));
+        },function(error){
+          if(settled)return;
+          trace('import-native-error',String(error));
+          complete(reject,Error('Résolution iOS : '+String(error)));
         });
-        if(!target){reject(Error('Lien court sans destination Maps avec coordonnées exploitables'));return;}
-        resolve(String(value).replace(shortLink,target));
-      },function(error){trace('import-native-error',String(error));reject(Error('Résolution iOS : '+String(error)));});
+      }catch(error){complete(reject,Error('Résolution iOS : '+String(error)));}
     });
   }
   var pendingImport=null, importQueue=[];
