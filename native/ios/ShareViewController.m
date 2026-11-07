@@ -190,10 +190,10 @@
                 [self debug:[NSString stringWithFormat:@"public.text  = %@", item]];
                 NSString *uti = @"public.plain-text";
                 NSDictionary *dict = @{
-                    @"text" : self.contentText,
+                    @"text" : self.contentText ?: @"",
                     @"data" : item ?: @"",
                     @"uti": uti,
-                    @"utis": itemProvider.registeredTypeIdentifiers,
+                    @"utis": itemProvider.registeredTypeIdentifiers ?: @[],
                     @"name": @"",
                     @"type": [self mimeTypeFromUti:uti],
                 };
@@ -207,16 +207,16 @@
         // IMAGE case
         else if ([itemProvider hasItemConformingToTypeIdentifier:@"public.image"]) {
             [itemProvider loadItemForTypeIdentifier:@"public.image" options:nil completionHandler: ^(NSURL *item, NSError *error) {
-                --remainingAttachments;
+                __sync_sub_and_fetch(&remainingAttachments, 1);
                 if (item != nil) {
                     [self debug:[NSString stringWithFormat:@"public.image  = %@", item]];
                     NSString *uti = @"public.image";
                     NSString *imageName = [[item path] lastPathComponent];
                     NSDictionary *dict = @{
-                        @"text" : self.contentText,
+                        @"text" : self.contentText ?: @"",
                         @"data" : item.absoluteString,
                         @"uti": uti,
-                        @"utis": itemProvider.registeredTypeIdentifiers,
+                        @"utis": itemProvider.registeredTypeIdentifiers ?: @[],
                         @"name": imageName,
                         @"type": [self mimeTypeFromUti:uti],
                     };
@@ -231,7 +231,11 @@
 
         // Other files
         else {
-            __block NSString *uti = itemProvider.registeredTypeIdentifiers[0];
+            NSString *uti = itemProvider.registeredTypeIdentifiers.firstObject;
+            if (uti == nil) {
+                if (__sync_sub_and_fetch(&remainingAttachments, 1) == 0) [self sendResults:results];
+                continue;
+            }
             [itemProvider loadItemForTypeIdentifier:uti options:nil completionHandler: ^(id<NSSecureCoding> item, NSError *error) {
 
                 NSString *baseUti = nil;
@@ -255,23 +259,23 @@
                 }
                 [self debug:[NSString stringWithFormat:@"%@ = %@", baseUti, item]];
 
-                __block NSURL *fileUrl = item;
+                NSURL *fileUrl = [item isKindOfClass:[NSURL class]] ? (NSURL *)item : nil;
 
                 if (fileUrl != nil) {
                     NSString *data = fileUrl.absoluteString;
                     NSString *suggestedName = fileUrl.lastPathComponent;
                     NSDictionary *dict = @{
-                        @"text" : self.contentText,
+                        @"text" : self.contentText ?: @"",
                         @"data" : data,
                         @"uti"  : baseUti,
                         @"utis" : itemProvider.registeredTypeIdentifiers,
                         @"name" : suggestedName,
                         @"type" : [self mimeTypeFromUti:uti],
                     };
-                    [items addObject:dict];
+                    @synchronized(items) { [items addObject:dict]; }
                 }
 
-                --remainingAttachments;
+                __sync_sub_and_fetch(&remainingAttachments, 1);
                 if (remainingAttachments == 0) {
                     [self sendResults:results];
                 }
