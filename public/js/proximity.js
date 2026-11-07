@@ -109,7 +109,7 @@ function notify(place){
  // Local notifications are generated when the native SDK delivers a JavaScript event.
  // iOS may terminate the WebView; this is NOT guaranteed background delivery.
  try {
-   local.schedule({id:notificationId(place.id),title:'Lieu à proximité',text:place.name+' est à proximité (distance géographique estimée).',foreground:true});
+   local.schedule({id:notificationId(place.id),title:'Lieu à proximité',text:place.name+' est à proximité (distance géographique estimée).',iOSForeground:true});
    history[place.id]=now;storeSet(COOLDOWN,history);
    status('Notification de proximité : '+place.name);logEvent('notification',place.name);
  }catch(error){status('Erreur notification : '+String(error));}
@@ -129,7 +129,7 @@ function testNotification(){
        title:'Nearby Places · test',
        text:'Notification de test après 10 secondes, sans géofencing.',
        trigger:{in:10,unit:'second'},
-       foreground:true
+       iOSForeground:true
      });
      status('Demande notification '+testId+' envoyée (+10 s) · confirmation native à vérifier');
      logEvent('test-notification','id '+testId+' : demande JS envoyée à +10 s (pas une confirmation iOS)');
