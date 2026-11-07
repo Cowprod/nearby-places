@@ -142,15 +142,24 @@
     }
 }
 - (void) viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
     [self.view endEditing:YES];
 
     [self setup];
     [self debug:@"[viewDidAppear]"];
 
+    if (self.extensionContext.inputItems.count == 0) {
+        [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:1 userInfo:nil]];
+        return;
+    }
     __block int remainingAttachments = ((NSExtensionItem*)self.extensionContext.inputItems[0]).attachments.count;
+    if (remainingAttachments == 0) {
+        [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:2 userInfo:nil]];
+        return;
+    }
     __block NSMutableArray *items = [[NSMutableArray alloc] init];
     __block NSDictionary *results = @{
-        @"text" : self.contentText,
+        @"text" : self.contentText ?: @"",
         @"backURL": self.backURL != nil ? self.backURL : @"",
         @"items": items,
     };
@@ -158,21 +167,37 @@
     for (NSItemProvider* itemProvider in ((NSExtensionItem*)self.extensionContext.inputItems[0]).attachments) {
         [self debug:[NSString stringWithFormat:@"item provider registered indentifiers = %@", itemProvider.registeredTypeIdentifiers]];
 
+        // Apple Plans supplies public.url, sometimes alongside public.text.
+        if ([itemProvider hasItemConformingToTypeIdentifier:@"public.url"]) {
+            [itemProvider loadItemForTypeIdentifier:@"public.url" options:nil completionHandler:^(id item, NSError *error) {
+                NSString *value = [item isKindOfClass:[NSURL class]] ? [(NSURL *)item absoluteString] :
+                                  ([item isKindOfClass:[NSString class]] ? (NSString *)item : nil);
+                if (value.length) {
+                    @synchronized(items) {
+                        [items addObject:@{@"text": self.contentText ?: @"", @"data": value,
+                                           @"uti": @"public.url", @"utis": itemProvider.registeredTypeIdentifiers ?: @[],
+                                           @"name": @"", @"type": @"text/uri-list"}];
+                    }
+                }
+                if (__sync_sub_and_fetch(&remainingAttachments, 1) == 0) [self sendResults:results];
+            }];
+        }
         // TEXT case
-        if ([itemProvider hasItemConformingToTypeIdentifier:@"public.text"]) {
+        else if ([itemProvider hasItemConformingToTypeIdentifier:@"public.text"]) {
             [itemProvider loadItemForTypeIdentifier:@"public.text" options:nil completionHandler: ^(NSString* item, NSError *error) {
-                --remainingAttachments;
+                // Keep shared attachment mutations serialized on concurrent provider callbacks.
+                __sync_sub_and_fetch(&remainingAttachments, 1);
                 [self debug:[NSString stringWithFormat:@"public.text  = %@", item]];
                 NSString *uti = @"public.plain-text";
                 NSDictionary *dict = @{
                     @"text" : self.contentText,
-                    @"data" : item,
+                    @"data" : item ?: @"",
                     @"uti": uti,
                     @"utis": itemProvider.registeredTypeIdentifiers,
                     @"name": @"",
                     @"type": [self mimeTypeFromUti:uti],
                 };
-                [items addObject:dict];
+                @synchronized(items) { [items addObject:dict]; }
                 if (remainingAttachments == 0) {
                     [self sendResults:results];
                 }
@@ -195,7 +220,7 @@
                         @"name": imageName,
                         @"type": [self mimeTypeFromUti:uti],
                     };
-                    [items addObject:dict];
+                    @synchronized(items) { [items addObject:dict]; }
                 }
 
                 if (remainingAttachments == 0) {
@@ -263,10 +288,12 @@
         // Emit a URL that opens the cordova app
         NSString *url = [NSString stringWithFormat:@"%@://shared", SHAREEXT_URL_SCHEME];
 
-        [self openURL:[NSURL URLWithString:url]];
-
-        // Shut down the extension
-        [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
+        // The responder-chain openURL technique is not a supported iOS extension API.
+        // Persist the intent first. Attempt handoff on the main queue, then complete.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self openURL:[NSURL URLWithString:url]];
+            [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
+        });
     });
 }
 
@@ -329,7 +356,7 @@
 // This is called at the point where the Post dialog is about to be shown.
 // We use it to store the _hostBundleID
 - (void) willMoveToParentViewController: (UIViewController*)parent {
-    NSString *hostBundleID = [parent valueForKey:(@"_hostBundleID")];
+    NSString *hostBundleID = nil; // Avoid private UIKit KVC key _hostBundleID.
     self.backURL = [self backURLFromBundleID:hostBundleID];
 }
 
