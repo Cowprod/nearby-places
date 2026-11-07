@@ -35,6 +35,18 @@
       var button=document.createElement('button');button.textContent=p.visited?'Réactiver':'Visité';
       button.onclick=function(){p.visited=!p.visited;save();render(position);};
       head.append(title,button);card.append(head);
+      var remove=document.createElement('button');remove.textContent='Supprimer';
+      remove.onclick=function(){
+        if(!window.confirm('Supprimer « '+title.textContent+' » de Mes lieux ?'))return;
+        var previous=places.slice(),deleted=readJSON('nearby-deleted-place-ids-v1',[]);
+        var cataloguePlace=p.id && !(p.source && p.source.type==='manual');
+        try{
+          if(cataloguePlace)localStorage.setItem('nearby-deleted-place-ids-v1',JSON.stringify(Array.from(new Set(deleted.concat([p.id])))));
+          places=places.filter(function(item){return item!==p;});
+          save();render(position);status('Lieu supprimé');
+        }catch(error){places=previous;status('Suppression impossible : '+error.message);}
+      };
+      head.append(remove);
       var meta=document.createElement('p');meta.className='tag';
       var categories=Array.isArray(p.categories)?p.categories.filter(function(c){return typeof c==='string';}).join(', '):'';
       meta.textContent=categories+' · '+(validCoords?
@@ -91,7 +103,8 @@
       return false;
     }
     var byId=new Map(previous.filter(function(p){return p && typeof p.id==='string' && p.id;}).map(function(p){return [p.id,p];}));
-    var incoming=data.places.map(function(p){
+    var deletedIds=new Set(readJSON('nearby-deleted-place-ids-v1',[]));
+    var incoming=data.places.filter(function(p){return !deletedIds.has(p.id);}).map(function(p){
       var old=byId.get(p.id);
       return Object.assign({},p,{visited:old ? !!old.visited : !!p.visited});
     });
@@ -356,6 +369,11 @@
   // it has been persisted locally (or identified as an existing coordinate).
   var nativeShareBusy=false;
   var SHARE_RESULTS_KEY='nearby-share-results-v1';
+  var SHARE_PAUSED_KEY='nearby-share-paused-v1';
+  function pausedShares(){var ids=readJSON(SHARE_PAUSED_KEY,[]);return Array.isArray(ids)?ids:[];}
+  function pauseShare(id){
+    localStorage.setItem(SHARE_PAUSED_KEY,JSON.stringify(Array.from(new Set(pausedShares().concat([id])))));
+  }
   function shareResults(){
     var stored=readJSON(SHARE_RESULTS_KEY,[]);
     return Array.isArray(stored)?stored:[];
@@ -368,6 +386,25 @@
       var row=document.createElement('p');
       row.textContent=result.name+' — '+result.message;
       row.style.color=result.failed?'#ff7373':'#5bd7bb';
+      if(result.failed && result.id!=='queue-read-error'){
+        var remove=document.createElement('button');remove.textContent='Supprimer cet import';
+        remove.disabled=nativeShareBusy;
+        remove.onclick=function(){
+          if(nativeShareBusy)return;
+          if(!window.confirm('Supprimer définitivement l’import en attente « '+result.name+' » ?'))return;
+          var resolver=window.NearbyResolver;
+          if(!resolver || typeof resolver.ackShared!=='function'){status('Suppression indisponible : module natif absent');return;}
+          nativeShareBusy=true;renderShareResults();
+          ackNativeShare(resolver,result.id).then(function(){
+            localStorage.setItem(SHARE_RESULTS_KEY,JSON.stringify(shareResults().filter(function(item){return item.id!==result.id;})));
+            localStorage.setItem(SHARE_PAUSED_KEY,JSON.stringify(pausedShares().filter(function(id){return id!==result.id;})));
+            status('Import en attente supprimé');
+          }).catch(function(error){status('Suppression impossible : '+error.message);}).finally(function(){
+            nativeShareBusy=false;renderShareResults();
+          });
+        };
+        row.append(remove);
+      }
       list.append(row);
     });
   }
@@ -404,16 +441,19 @@
       });
     });
   }
-  function importPendingNativeShare(){
+  function importPendingNativeShare(retryFailed){
     var resolver=window.NearbyResolver;
     if(nativeShareBusy || !resolver || typeof resolver.readShared!=='function' || typeof resolver.ackShared!=='function')return;
     nativeShareBusy=true;
-    var attempted=[];
+    if(retryFailed===true)localStorage.setItem(SHARE_PAUSED_KEY,'[]');
+    var attempted=Array.from(new Set(pausedShares().concat(retryFailed===true?[]:shareResults().filter(function(item){return item.failed;}).map(function(item){return item.id;}))));
+    renderShareResults();
     function next(){
     resolver.readShared(function(intent){
-      if(!intent || !intent.shareID){nativeShareBusy=false;return;}
+      if(!intent || !intent.shareID){nativeShareBusy=false;renderShareResults();return;}
       if(attempted.includes(intent.shareID)){
         nativeShareBusy=false;
+        renderShareResults();
         status('Lecture des imports interrompue : le module a renvoyé un partage déjà traité.');
         return;
       }
@@ -424,6 +464,7 @@
       }).catch(function(error){
         trace('share-error','import conservé : '+String(error));
         status('Import partagé en attente : '+error.message);
+        pauseShare(intent.shareID);
         recordShareResult(intent,'Échec — '+error.message+' Réessayez avec « Réessayer les imports ».',true);
         next();
       });
@@ -446,7 +487,7 @@
   }
   document.addEventListener('deviceready',initializeNativeShare,{once:true});
   document.addEventListener('resume',importPendingNativeShare);
-  $('share-retry').onclick=importPendingNativeShare;
+  $('share-retry').onclick=function(){importPendingNativeShare(true);};
   renderShareResults();
   $('maps-add').onclick=function(){
     var value=$('maps-url').value;

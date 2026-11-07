@@ -113,7 +113,7 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
         if (![shareID isEqualToString:rawID]) [remaining addObject:item];
     }
     [defaults setObject:remaining forKey:NearbyQueueKey];
-    if (![defaults synchronize]) {
+    if (remaining.count != [(NSArray *)(stored ?: @[]) count] && ![defaults synchronize]) {
         [self sendError:@"Acquittement de l’import impossible" command:command];
         return;
     }

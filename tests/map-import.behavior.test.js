@@ -67,6 +67,9 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     inputValue(id){return document.getElementById(id).value;},
     formOpen(){return document.getElementById('import-dialog').hidden===false;},
     renderCards(){return document.getElementById('places').children;},
+    removePlace(index){document.getElementById('places').children[index].children[0].children.find(item=>item.textContent==='Supprimer').onclick();},
+    removePending(){document.getElementById('share-result-list').children.find(item=>item.children.length).children[0].onclick();},
+    retryShares(){document.getElementById('share-retry').onclick();},
     reset(){document.getElementById('reset').onclick();}};
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
@@ -80,6 +83,12 @@ const sorted=harness(false,[],false,JSON.stringify([
 assert.deepEqual(sorted.renderCards().map(card=>card.children[0].children[0].textContent),
   ['Culture récent','Culture ancien','Restaurant','Visité récent'],
   'tri par non visité, catégorie puis date de saisie décroissante');
+sorted.removePlace(0);
+assert.equal(sorted.renderCards().length,4,'annulation de suppression préserve le lieu');
+sorted.setConfirm(true);
+sorted.removePlace(0);
+assert.equal(sorted.renderCards().length,3,'suppression confirmée retire seulement le lieu choisi');
+assert.equal(JSON.parse(sorted.store.get('nearby-places-v1')).some(p=>p.name==='Culture récent'),false);
 // Malformed local storage must never be silently replaced with remote data.
 const unreadableRaw='{"truncated":';
 const unreadable=harness(false,[],true,unreadableRaw);
@@ -102,6 +111,12 @@ assert.equal(legacy.store.get('nearby-places-v1'),legacyRaw,'render is read-only
 assert.equal(legacy.renderCards().length,3,'null record skipped without deleting it');
 assert.ok(legacy.renderCards().some(card=>card.children.some(child=>String(child.textContent).includes('Coordonnées invalides'))),'bad coordinates signaled in UI');
 const validRemote=JSON.parse(fs.readFileSync('data/places.sample.json','utf8'));
+const deletedCatalogue=harness(false,[],true,JSON.stringify([validRemote.places[0]]));
+deletedCatalogue.setConfirm(true);
+deletedCatalogue.removePlace(0);
+deletedCatalogue.resolveFetch(0,validRemote);
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(JSON.parse(deletedCatalogue.store.get('nearby-places-v1')).some(p=>p.id===validRemote.places[0].id),false,'le rafraîchissement ne réintroduit pas un lieu supprimé du catalogue');
 legacy.resolveFetch(0,validRemote);
 await new Promise(resolve=>setImmediate(resolve));
 let retained=JSON.parse(legacy.store.get('nearby-places-v1'));
@@ -399,9 +414,18 @@ queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
   const results=JSON.parse(cold.store.get('nearby-share-results-v1'));
   assert.equal(results.find(item=>item.id==='share-bad').failed,true,'échec conservé dans le bilan persistant');
   assert.equal(results.find(item=>item.id==='share-after-error').failed,false,'réussite suivante conservée dans le bilan');
+  const beforeResume=JSON.stringify(cold.store.get('nearby-share-results-v1'));
   cold.fire('resume');
   await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(JSON.stringify(cold.store.get('nearby-share-results-v1')),beforeResume,'les erreurs en pause ne sont pas relancées automatiquement');
+  cold.retryShares();
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(JSON.parse(cold.store.get('nearby-share-results-v1')).filter(item=>item.id==='share-bad').length,1,'une nouvelle tentative actualise le bilan sans doublon');
+  cold.setConfirm(true);
+  cold.removePending();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(cold.nativeQueue.length,0,'suppression explicite retire le fichier en attente');
+  assert.equal(JSON.parse(cold.store.get('nearby-share-results-v1')).some(item=>item.id==='share-bad'),false,'le bilan du partage supprimé disparaît');
   console.log('PASS partage iOS (simulé) : formulaire natif, persistance avant acquittement, doublons évités et échec conservé');
 console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native/HTTP/NULL, reset confirmé');
 }
