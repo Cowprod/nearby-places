@@ -193,7 +193,10 @@ function syncResolver(root) {
   ];
   for (const [from, to] of targets) {
     const target = path.join(root, to);
-    if (fs.existsSync(target)) copyIfChanged(path.join(source, from), target);
+    const transform = from.endsWith('.js')
+      ? value => 'cordova.define("cordova-plugin-nearby-resolver.NearbyResolver", function(require, exports, module) {\n'+value+'\n});\n'
+      : null;
+    if (fs.existsSync(target)) copyIfChanged(path.join(source, from), target, transform);
   }
 }
 

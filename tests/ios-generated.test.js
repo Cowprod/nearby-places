@@ -4,9 +4,23 @@ const fs = require('node:fs');
 const path = require('node:path');
 const plist = require('plist');
 const xcode = require('xcode');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname,'..');
 const read = file => fs.readFileSync(path.join(root,file),'utf8');
+let resolverModule;
+const calls=[];
+const cordova={exec(...args){calls.push(args);},define(id,factory){
+  assert.equal(id,'cordova-plugin-nearby-resolver.NearbyResolver');
+  const module={exports:{}};
+  factory(()=>{},module.exports,module);
+  resolverModule=module.exports;
+}};
+vm.runInNewContext(read('platforms/ios/www/plugins/cordova-plugin-nearby-resolver/www/resolver.js'),{cordova});
+assert.ok(resolverModule,'generated plugin registers with the Cordova loader');
+resolverModule.readShared(()=>{},()=>{});
+assert.equal(calls[0][2],'NearbyResolver');
+assert.equal(calls[0][3],'readShared');
 for (const name of ['ShareViewController.h','ShareViewController.m','MainInterface.storyboard']) {
   assert.equal(read('platforms/ios/ShareExtension/'+name),read('native/ios/'+name),name+' generated from Git source');
 }
