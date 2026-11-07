@@ -23,6 +23,25 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
 }
 
 - (void)readShared:(CDVInvokedUrlCommand *)command {
+    NSURL *container = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:NearbyAppGroup];
+    if (!container) { [self sendError:@"Conteneur App Group inaccessible" command:command]; return; }
+    NSURL *directory = [container URLByAppendingPathComponent:@"NearbyShares" isDirectory:YES];
+    NSError *fileError = nil;
+    NSArray *files = [NSFileManager.defaultManager contentsOfDirectoryAtURL:directory includingPropertiesForKeys:nil options:0 error:&fileError];
+    if (fileError && fileError.code != NSFileReadNoSuchFileError) {
+        [self sendError:fileError.localizedDescription command:command]; return;
+    }
+    NSArray *sorted = [files sortedArrayUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b) { return [a.lastPathComponent compare:b.lastPathComponent]; }];
+    for (NSURL *file in sorted) {
+        if (![file.pathExtension isEqualToString:@"json"]) continue;
+        NSData *data = [NSData dataWithContentsOfURL:file options:0 error:&fileError];
+        id record = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&fileError] : nil;
+        if (![record isKindOfClass:NSDictionary.class] || ![record[@"shareID"] isEqualToString:file.lastPathComponent.stringByDeletingPathExtension]) {
+            [self sendError:@"Import partagé illisible ; fichier conservé" command:command]; return;
+        }
+        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:record] callbackId:command.callbackId];
+        return;
+    }
     NSUserDefaults *defaults = [self sharedDefaults];
     id stored = [defaults objectForKey:NearbyQueueKey];
     if (stored && ![stored isKindOfClass:NSArray.class]) {
@@ -60,6 +79,18 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
     id rawID = command.arguments.firstObject;
     if (![rawID isKindOfClass:NSString.class] || [(NSString *)rawID length] == 0) {
         [self sendError:@"Identifiant d’import manquant" command:command];
+        return;
+    }
+    if (![[NSUUID alloc] initWithUUIDString:rawID]) {
+        [self sendError:@"Identifiant partagé invalide" command:command]; return;
+    }
+    NSURL *container = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:NearbyAppGroup];
+    NSURL *directory = [container URLByAppendingPathComponent:@"NearbyShares" isDirectory:YES];
+    NSURL *file = [directory URLByAppendingPathComponent:[rawID stringByAppendingPathExtension:@"json"]];
+    if (file && [NSFileManager.defaultManager fileExistsAtPath:file.path]) {
+        NSError *error = nil;
+        if (![NSFileManager.defaultManager removeItemAtURL:file error:&error]) { [self sendError:error.localizedDescription command:command]; return; }
+        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES] callbackId:command.callbackId];
         return;
     }
     NSUserDefaults *defaults = [self sharedDefaults];

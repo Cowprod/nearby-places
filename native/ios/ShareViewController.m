@@ -273,11 +273,38 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.urlLabel.text = self.sharedURL;
     self.urlLabel.hidden = NO;
     self.nameField.text = [self prefilledName];
+    [self resolveSharedName];
     self.nameField.enabled = YES;
     self.commentView.editable = YES;
     self.categoryPicker.userInteractionEnabled = YES;
     self.saveButton.enabled = YES;
     if (!self.nameField.text.length) [self.nameField becomeFirstResponder];
+}
+
+- (void)resolveSharedName {
+    NSURL *url = [NSURL URLWithString:self.sharedURL];
+    if (![url.host.lowercaseString isEqualToString:@"maps.apple"]) return;
+    NSString *originalName = self.nameField.text ?: @"";
+    NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
+    configuration.timeoutIntervalForResource = 18;
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
+    [[session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSURLComponents *components = [NSURLComponents componentsWithURL:response.URL resolvingAgainstBaseURL:NO];
+        NSString *resolvedName = nil;
+        for (NSURLQueryItem *item in components.queryItems) {
+            if ([item.name isEqualToString:@"name"]) resolvedName = item.value;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!error && [response isKindOfClass:NSHTTPURLResponse.class] &&
+                [(NSHTTPURLResponse *)response statusCode] == 200 &&
+                [components.host.lowercaseString isEqualToString:@"maps.apple.com"] && resolvedName.length) {
+                self.sharedURL = components.URL.absoluteString;
+                self.urlLabel.text = self.sharedURL;
+                if ([self.nameField.text isEqualToString:originalName]) self.nameField.text = resolvedName;
+            }
+        });
+        [session finishTasksAndInvalidate];
+    }] resume];
 }
 
 - (void)showError:(NSString *)message {
@@ -326,10 +353,23 @@ static const NSUInteger NearbyQueueLimit = 50;
         @"nearbyURL": self.sharedURL,
         @"rawText": [self.sharedTexts componentsJoinedByString:@"\n"] ?: @""
     };
-    [queue addObject:record];
-    [defaults setObject:queue forKey:NearbyQueueKey];
-    if (![defaults synchronize]) {
-        [self showError:@"L’enregistrement partagé a échoué. L’extension reste ouverte pour réessayer."];
+    NSError *writeError = nil;
+    NSURL *container = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:NearbyAppGroup];
+    if (!container) {
+        [self showError:@"Le conteneur App Group est inaccessible. Vérifiez la signature de l’extension."];
+        return;
+    }
+    NSURL *directory = [container URLByAppendingPathComponent:@"NearbyShares" isDirectory:YES];
+    BOOL created = [NSFileManager.defaultManager createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:&writeError];
+    NSArray *pendingFiles = created ? [NSFileManager.defaultManager contentsOfDirectoryAtURL:directory includingPropertiesForKeys:nil options:0 error:&writeError] : nil;
+    if (pendingFiles.count >= NearbyQueueLimit) {
+        [self showError:@"La file d’import est pleine. Ouvrez Nearby Places avant de réessayer."];
+        return;
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:record options:0 error:&writeError];
+    NSURL *file = [directory URLByAppendingPathComponent:[record[@"shareID"] stringByAppendingPathExtension:@"json"]];
+    if (!created || !pendingFiles || !data || ![data writeToURL:file options:NSDataWritingAtomic error:&writeError]) {
+        [self showError:[NSString stringWithFormat:@"Enregistrement impossible : %@", writeError.localizedDescription ?: @"stockage indisponible"]];
         return;
     }
     self.saveButton.enabled = NO;
