@@ -7,6 +7,7 @@
   <config-file target="config.xml" parent="/*"><feature name="NearbyResolver"><param name="ios-package" value="NearbyResolver"/></feature></config-file>
   <source-file src="src/ios/NearbyResolver.m"/>
   <header-file src="src/ios/NearbyMapsResolver.h"/>
+  <header-file src="src/ios/NearbyPlacePicker.h"/>
   <framework src="MapKit.framework"/>
  </platform>
 </plugin>

@@ -1,5 +1,6 @@
 #import <Cordova/CDV.h>
 #import "NearbyMapsResolver.h"
+#import "NearbyPlacePicker.h"
 
 static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
 static NSString * const NearbyQueueKey = @"nearbyShareQueue";
@@ -7,12 +8,62 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
 
 @interface NearbyResolver : CDVPlugin <NSURLSessionTaskDelegate>
 - (void)resolve:(CDVInvokedUrlCommand *)command;
+- (void)chooseShared:(CDVInvokedUrlCommand *)command;
 - (void)readShared:(CDVInvokedUrlCommand *)command;
 - (void)ackShared:(CDVInvokedUrlCommand *)command;
 - (void)syncCategories:(CDVInvokedUrlCommand *)command;
 @end
 
 @implementation NearbyResolver
+- (void)chooseShared:(CDVInvokedUrlCommand *)command {
+    NSString *shareID = command.arguments.firstObject;
+    if (![shareID isKindOfClass:NSString.class] || ![[NSUUID alloc] initWithUUIDString:shareID]) {
+        [self sendError:@"Identifiant partagé invalide" command:command]; return;
+    }
+    NSURL *container = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:NearbyAppGroup];
+    NSURL *file = [[container URLByAppendingPathComponent:@"NearbyShares"] URLByAppendingPathComponent:[shareID stringByAppendingPathExtension:@"json"]];
+    NSData *data = file ? [NSData dataWithContentsOfURL:file] : nil;
+    id object = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    if (!object) {
+        for (NSDictionary *item in [[self sharedDefaults] arrayForKey:NearbyQueueKey]) {
+            if ([item isKindOfClass:NSDictionary.class] && [item[@"shareID"] isEqualToString:shareID]) { object=item; break; }
+        }
+    }
+    if (![object isKindOfClass:NSDictionary.class] || ![object[@"shareID"] isEqualToString:shareID]) {
+        [self sendError:@"Import introuvable ou illisible ; aucune donnée modifiée" command:command]; return;
+    }
+    NSMutableDictionary *record = [object mutableCopy];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.viewController.presentedViewController) {
+            [self sendError:@"Fermez la fenêtre ouverte avant de choisir le lieu" command:command]; return;
+        }
+        NearbyPlacePicker *picker = [[NearbyPlacePicker alloc] init];
+        picker.placeName = [record[@"nearbyName"] isKindOfClass:NSString.class] ? record[@"nearbyName"] : @"";
+        picker.completion = ^(NSDictionary *selection, NSString *error) {
+            if (error) { [self sendError:error command:command]; return; }
+            record[@"nearbyName"] = selection[@"name"];
+            record[@"nearbyURL"] = [NSString stringWithFormat:@"https://maps.apple.com/?coordinate=%.8f,%.8f",[selection[@"latitude"] doubleValue],[selection[@"longitude"] doubleValue]];
+            // Persist the user's correction before returning to JavaScript.
+            if (file && [NSFileManager.defaultManager fileExistsAtPath:file.path]) {
+                NSError *writeError = nil;
+                NSData *updated = [NSJSONSerialization dataWithJSONObject:record options:0 error:&writeError];
+                if (!updated || ![updated writeToURL:file options:NSDataWritingAtomic error:&writeError]) {
+                    [self sendError:writeError.localizedDescription ?: @"Correction non enregistrée" command:command]; return;
+                }
+            } else {
+                NSMutableArray *queue = [[[self sharedDefaults] arrayForKey:NearbyQueueKey] mutableCopy];
+                NSUInteger index = [queue indexOfObjectPassingTest:^BOOL(id item, NSUInteger idx, BOOL *stop) { return [item isKindOfClass:NSDictionary.class] && [item[@"shareID"] isEqualToString:shareID]; }];
+                if (!queue || index == NSNotFound) { [self sendError:@"Import supprimé pendant la sélection" command:command]; return; }
+                queue[index]=record;
+                [[self sharedDefaults] setObject:queue forKey:NearbyQueueKey];
+            }
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:record] callbackId:command.callbackId];
+        };
+        UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:picker];
+        navigation.modalPresentationStyle = UIModalPresentationFullScreen;
+        [self.viewController presentViewController:navigation animated:YES completion:nil];
+    });
+}
 
 - (NSUserDefaults *)sharedDefaults {
     return [[NSUserDefaults alloc] initWithSuiteName:NearbyAppGroup];

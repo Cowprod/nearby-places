@@ -7,6 +7,7 @@ const source = fs.readFileSync('www/js/app.js', 'utf8');
 function harness(native = false, earlyURLs = [], controlledFetch = false, seedLocal = null) {
   const store = new Map(), elements = new Map(), listeners = new Map();
   const nativeResolutions=[], networkCalls=[], nativeTimers=[], nativeQueue=[], nativeAcks=[];
+  const picker={};
   let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
@@ -27,6 +28,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
   if(seedLocal!==null)store.set('nearby-places-v1',seedLocal);
   const resolver={resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/neverCompletes'))return;if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}};
   if(native){
+    resolver.chooseShared=(id,success,error)=>{picker.intent=nativeQueue.find(item=>item.shareID===id);picker.success=success;picker.error=error;};
     resolver.readShared=(success,error,excluded=[])=>success(nativeQueue.find(item=>!excluded.includes(item.shareID))||{});
     resolver.ackShared=(shareID,success)=>{const index=nativeQueue.findIndex(item=>item.shareID===shareID);if(index>=0)nativeQueue.splice(index,1);nativeAcks.push(shareID);success(true);};
     resolver.syncCategories=(categories,success)=>success(true);
@@ -68,7 +70,10 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     formOpen(){return document.getElementById('import-dialog').hidden===false;},
     renderCards(){return document.getElementById('places').children;},
     removePlace(index){document.getElementById('places').children[index].children[0].children.find(item=>item.textContent==='Supprimer').onclick();},
-    removePending(){document.getElementById('share-result-list').children.find(item=>item.children.length).children[0].onclick();},
+    removePending(){document.getElementById('share-result-list').children.find(item=>item.children.length).children.find(item=>item.textContent==='Supprimer cet import').onclick();},
+    choosePending(){document.getElementById('share-result-list').children.find(item=>item.children.length).children.find(item=>item.textContent==='Choisir le lieu sur une carte').onclick();},
+    cancelChoice(){picker.error('Sélection annulée ; import conservé');},
+    confirmChoice(lat,lon){picker.success({...picker.intent,nearbyURL:'https://maps.apple.com/?coordinate='+lat+','+lon});},
     retryShares(){document.getElementById('share-retry').onclick();},
     reset(){document.getElementById('reset').onclick();}};
 }
@@ -427,6 +432,24 @@ queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
   assert.equal(cold.nativeQueue.length,0,'suppression explicite retire le fichier en attente');
   assert.equal(JSON.parse(cold.store.get('nearby-share-results-v1')).some(item=>item.id==='share-bad'),false,'le bilan du partage supprimé disparaît');
   console.log('PASS partage iOS (simulé) : formulaire natif, persistance avant acquittement, doublons évités et échec conservé');
+  const selection=harness(true);
+  selection.fire('deviceready');
+  selection.share({schemaVersion:1,shareID:'choice-test',nearbyURL:'https://maps.app.goo.gl/ambiguous',nearbyName:'Lieu à choisir',nearbyComment:'À conserver',nearbyCategory:'musique'});
+  await new Promise(resolve=>setImmediate(resolve));
+  selection.choosePending();
+  assert.equal(selection.nativeAcks.length,0,'ouvrir la carte ne consomme pas le partage');
+  selection.cancelChoice();
+  assert.equal(selection.nativeQueue.length,1,'annuler la sélection conserve le partage');
+  assert.equal(selection.store.has('nearby-places-v1'),false,'aucun lieu ajouté sans confirmation');
+  selection.choosePending();
+  selection.confirmChoice(35.7100211,139.8107243);
+  await new Promise(resolve=>setImmediate(resolve));
+  const chosen=JSON.parse(selection.store.get('nearby-places-v1'))[0];
+  checkPlace(chosen,35.7100211,139.8107243);
+  assert.equal(chosen.comment,'À conserver');
+  assert.deepEqual(chosen.categories,['musique']);
+  assert.equal(selection.nativeQueue.length,0,'partage acquitté après persistance du point confirmé');
+  console.log('PASS sélection cartographique (simulée) : annulation sans perte, confirmation explicite, commentaire et catégorie conservés');
 console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native/HTTP/NULL, reset confirmé');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

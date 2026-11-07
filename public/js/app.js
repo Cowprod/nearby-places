@@ -387,6 +387,26 @@
       row.textContent=result.name+' — '+result.message;
       row.style.color=result.failed?'#ff7373':'#5bd7bb';
       if(result.failed && result.id!=='queue-read-error'){
+        var choose=document.createElement('button');choose.textContent='Choisir le lieu sur une carte';
+        choose.disabled=nativeShareBusy;
+        choose.onclick=function(){
+          if(nativeShareBusy)return;
+          var resolver=window.NearbyResolver;
+          if(!resolver || typeof resolver.chooseShared!=='function'){status('Sélection cartographique indisponible : module natif absent');return;}
+          nativeShareBusy=true;renderShareResults();
+          status('Choisissez un lieu sur la carte puis confirmez.');
+          resolver.chooseShared(result.id,function(intent){
+            persistNativeShare(resolver,intent).then(function(){
+              localStorage.setItem(SHARE_PAUSED_KEY,JSON.stringify(pausedShares().filter(function(id){return id!==result.id;})));
+            }).catch(function(error){
+              recordShareResult(intent,'Correction conservée — '+error.message,true);
+              status('Import non terminé : '+error.message);
+            }).finally(function(){nativeShareBusy=false;renderShareResults();});
+          },function(error){
+            nativeShareBusy=false;renderShareResults();status(String(error));
+          });
+        };
+        row.append(choose);
         var remove=document.createElement('button');remove.textContent='Supprimer cet import';
         remove.disabled=nativeShareBusy;
         remove.onclick=function(){

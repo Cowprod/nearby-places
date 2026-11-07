@@ -11,6 +11,9 @@ const read = file => fs.readFileSync(path.join(root,file),'utf8');
 const sharedResolver=read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyMapsResolver.h');
 assert.equal(read('platforms/ios/ShareExtension/NearbyMapsResolver.h'),sharedResolver,'extension uses the versioned shared resolver');
 assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyMapsResolver.h'),sharedResolver,'app uses the same resolver');
+const picker=read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyPlacePicker.h');
+assert.equal(read('platforms/ios/ShareExtension/NearbyPlacePicker.h'),picker,'extension picker generated from Git');
+assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyPlacePicker.h'),picker,'app picker generated from Git');
 let resolverModule;
 const calls=[];
 const cordova={exec(...args){calls.push(args);},define(id,factory){

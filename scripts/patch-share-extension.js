@@ -171,6 +171,9 @@ function sync(root) {
     return false;
   }
   let changed = false;
+  for (const destination of [generatedRoot,path.join(root,'platforms/ios/App/Plugins/cordova-plugin-nearby-resolver')]) {
+    copyIfChanged(path.join(root,'local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyPlacePicker.h'),path.join(destination,'NearbyPlacePicker.h'));
+  }
   copyIfChanged(path.join(root,'local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyMapsResolver.h'),path.join(generatedRoot,'NearbyMapsResolver.h'));
   copyIfChanged(path.join(root,'local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyMapsResolver.h'),path.join(root,'platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyMapsResolver.h'));
   for (const name of NATIVE_FILES) {
