@@ -26,5 +26,25 @@ function sync(root) {
   console.log('Nearby Places: native ShareExtension synchronized from Git');
   return true;
 }
-if (require.main === module) sync(process.cwd());
+function syncResolver(root) {
+  const source = path.join(root, 'local-plugins/cordova-plugin-nearby-resolver');
+  const nativeSource = path.join(source, 'src/ios/NearbyResolver.m');
+  const jsSource = path.join(source, 'www/resolver.js');
+  const targets = [
+    [nativeSource, path.join(root, 'platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyResolver.m')],
+    [jsSource, path.join(root, 'platforms/ios/www/plugins/cordova-plugin-nearby-resolver/www/resolver.js')]
+  ];
+  for (const [from, to] of targets) {
+    if (!fs.existsSync(to)) {
+      console.log('Nearby Places: resolver generated target not found: '+to);
+      continue;
+    }
+    const expected = fs.readFileSync(from, 'utf8');
+    if (fs.readFileSync(to, 'utf8') !== expected) {
+      fs.writeFileSync(to, expected);
+      console.log('Nearby Places: resolver synchronized: '+path.basename(to));
+    }
+  }
+}
+if (require.main === module) { sync(process.cwd()); syncResolver(process.cwd()); }
 module.exports = { patch, sync };
