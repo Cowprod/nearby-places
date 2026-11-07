@@ -52,6 +52,22 @@ function checkProximityNow(){
  },function(error){var message='GPS erreur '+error.code+' : '+error.message;logEvent('proximity-error',message);show(message);},{enableHighAccuracy:true,maximumAge:0,timeout:20000});
 }
 function notificationPlugin(){return root.cordova && root.cordova.plugins && root.cordova.plugins.notification && root.cordova.plugins.notification.local;}
+// A stalled Cordova permission callback must not leave the diagnostic button or
+// geofence opt-in waiting forever. Late callbacks cannot schedule notifications.
+function requestNotificationPermission(local){
+ return new Promise(function(resolve){
+   var finished=false;
+   var timer=setTimeout(function(){finish(false,'timeout');},60000);
+   function finish(granted,reason){
+     if(finished)return;
+     finished=true;clearTimeout(timer);
+     if(reason==='timeout')logEvent('notification-permission','aucune réponse native après 60 s');
+     resolve({granted:!!granted,reason:reason||(granted?'granted':'denied')});
+   }
+   try{local.requestPermission(function(granted){finish(!!granted);});}
+   catch(error){logEvent('notification-permission','exception : '+String(error));finish(false,'error');}
+ });
+}
 // The plugin cancels a pending notification when its numeric ID is reused.
 // Reserve a signed Int32 range separate from proximity IDs; keep legacy callbacks.
 var LEGACY_TEST_NOTIFICATION_ID=1999999999, TEST_ID_BASE=2100000000, TEST_ID_SPAN=40000000;
@@ -130,11 +146,14 @@ function notify(place){
 function testNotification(){
  var local=notificationPlugin();
  if(!local){status('Test impossible : plugin de notifications indisponible');logEvent('test-notification','plugin absent');return Promise.resolve(false);}
- return new Promise(function(resolve){
-   try{local.requestPermission(function(granted){resolve(!!granted);});}
-   catch(error){status('Permission notifications : '+String(error));resolve(false);}
- }).then(function(granted){
-   if(!granted){status('Test annulé : notifications non autorisées');logEvent('test-notification','permission refusée');return false;}
+ return requestNotificationPermission(local).then(function(permission){
+   if(!permission.granted){
+     var message=permission.reason==='timeout'?'aucune réponse native après 60 s':
+       (permission.reason==='error'?'erreur du plugin':'notifications non autorisées');
+     status('Test annulé : '+message);
+     logEvent('test-notification','permission '+permission.reason);
+     return false;
+   }
    try{
      var testId=nextTestNotificationId();
      local.schedule({
@@ -231,11 +250,13 @@ function enable(){
  var local=notificationPlugin();
  if(!local){status('Plugin de notification manquant');return Promise.resolve(false);}
  var requestRevision=++controlRevision;
- return new Promise(function(resolve){
-   try{local.requestPermission(function(granted){resolve(!!granted);});}catch(error){resolve(false);}
- }).then(function(granted){
+ return requestNotificationPermission(local).then(function(permission){
    if(requestRevision!==controlRevision)return false;
-   if(!granted){status('Permission notifications refusée');return false;}
+   if(!permission.granted){
+     status(permission.reason==='timeout'?'Permission notifications : aucune réponse native après 60 s':
+       (permission.reason==='error'?'Permission notifications : erreur du plugin':'Permission notifications refusée'));
+     return false;
+   }
    return serialNative(function(){
      if(requestRevision!==controlRevision)return false;
      return syncNative().then(function(ok){
