@@ -27,7 +27,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
   if(seedLocal!==null)store.set('nearby-places-v1',seedLocal);
   const resolver={resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/neverCompletes'))return;if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}};
   if(native){
-    resolver.readShared=success=>success(nativeQueue[0]||{});
+    resolver.readShared=(success,error,excluded=[])=>success(nativeQueue.find(item=>!excluded.includes(item.shareID))||{});
     resolver.ackShared=(shareID,success)=>{const index=nativeQueue.findIndex(item=>item.shareID===shareID);if(index>=0)nativeQueue.splice(index,1);nativeAcks.push(shareID);success(true);};
     resolver.syncCategories=(categories,success)=>success(true);
   }
@@ -391,6 +391,17 @@ queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
   assert.equal(cold.nativeQueue.length,1,'un échec de résolution reste durablement en attente');
   assert.equal(cold.nativeAcks.includes('share-bad'),false,'aucun acquittement en cas d’échec');
   assert.match(cold.status(),/en attente/,'l’échec conservé est visible');
+  cold.share({schemaVersion:1,shareID:'share-after-error',nearbyURL:'https://maps.apple.com/?ll=35.805,139.805',nearbyName:'Après échec',nearbyCategory:'culture'});
+  await new Promise(resolve=>setImmediate(resolve));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(JSON.parse(cold.store.get('nearby-places-v1')).some(p=>p.name==='Après échec'),true,'un échec conservé ne bloque pas les imports suivants');
+  assert.equal(cold.nativeQueue.length,1,'seul le partage en échec reste en attente');
+  const results=JSON.parse(cold.store.get('nearby-share-results-v1'));
+  assert.equal(results.find(item=>item.id==='share-bad').failed,true,'échec conservé dans le bilan persistant');
+  assert.equal(results.find(item=>item.id==='share-after-error').failed,false,'réussite suivante conservée dans le bilan');
+  cold.fire('resume');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(JSON.parse(cold.store.get('nearby-share-results-v1')).filter(item=>item.id==='share-bad').length,1,'une nouvelle tentative actualise le bilan sans doublon');
   console.log('PASS partage iOS (simulé) : formulaire natif, persistance avant acquittement, doublons évités et échec conservé');
 console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native/HTTP/NULL, reset confirmé');
 }

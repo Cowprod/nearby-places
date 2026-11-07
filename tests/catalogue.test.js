@@ -79,7 +79,7 @@ assert.equal(pkg.scripts['ios:add'], 'cordova platform add ios@8.1.1');
 assert.ok(pkg.cordova.plugins['cordova-plugin-geolocation']);
 const resolverPackage = JSON.parse(read('local-plugins/cordova-plugin-nearby-resolver/package.json'));
 const resolverXML = read('local-plugins/cordova-plugin-nearby-resolver/plugin.xml');
-const resolverNative = read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyResolver.m');
+const resolverNative = read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyResolver.m')+read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyMapsResolver.h');
 assert.equal(resolverPackage.name, 'cordova-plugin-nearby-resolver');
 assert.equal(pkg.dependencies['cordova-plugin-nearby-resolver'], 'file:local-plugins/cordova-plugin-nearby-resolver');
 assert.ok(pkg.cordova.plugins['cordova-plugin-nearby-resolver'], 'plugin déclaré dans cordova.plugins');

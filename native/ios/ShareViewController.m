@@ -1,4 +1,5 @@
 #import "ShareViewController.h"
+#import "NearbyMapsResolver.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
@@ -20,6 +21,7 @@ static const NSUInteger NearbyQueueLimit = 50;
 @property(nonatomic, copy) NSString *sharedURL;
 @property(nonatomic, strong) NSMutableArray<NSString *> *sharedTexts;
 @property(nonatomic, assign) BOOL startedLoading;
+@property(nonatomic, assign) NSUInteger validationGeneration;
 @end
 
 @implementation ShareViewController
@@ -317,11 +319,49 @@ static const NSUInteger NearbyQueueLimit = 50;
 }
 
 - (void)cancel {
+    self.validationGeneration++;
     NSError *error = [NSError errorWithDomain:@"fr.cowprod.nearbyplaces.share" code:NSUserCancelledError userInfo:nil];
     [self.extensionContext cancelRequestWithError:error];
 }
 
 - (void)save {
+    if (![self.nameField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length) {
+        self.statusLabel.text = @"Le nom du lieu est obligatoire.";
+        [self.nameField becomeFirstResponder]; return;
+    }
+    self.saveButton.enabled = NO;
+    self.statusLabel.textColor = UIColor.secondaryLabelColor;
+    self.statusLabel.text = @"Vérification du lieu et de ses coordonnées…";
+    [self.activityIndicator startAnimating];
+    self.activityIndicator.hidden = NO;
+    [self.view endEditing:YES];
+    NearbyMapsResolver *resolver = [[NearbyMapsResolver alloc] init];
+    NSUInteger generation = ++self.validationGeneration;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 45 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (self.validationGeneration != generation) return;
+        self.validationGeneration++;
+        [self showError:@"La vérification prend trop de temps. Vos informations sont conservées dans ce formulaire ; réessayez."];
+        self.saveButton.enabled = YES;
+    });
+    [resolver resolveURL:self.sharedURL completion:^(NSDictionary *result, NSString *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (self.validationGeneration != generation) return;
+            self.validationGeneration++;
+            [self.activityIndicator stopAnimating];
+            self.activityIndicator.hidden = YES;
+            NSString *validated = [NearbyMapsResolver validatedPlaceURL:result[@"htmlMapURL"] ?: result[@"url"]];
+            if (error || !validated) {
+                [self showError:error ?: @"Les coordonnées du lieu sont introuvables. Rien n’a été enregistré."];
+                self.saveButton.enabled = YES;
+                return;
+            }
+            self.sharedURL = validated;
+            [self persistResolvedPlace];
+        });
+    }];
+}
+
+- (void)persistResolvedPlace {
     NSString *name = [self.nameField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (!name.length) {
         self.statusLabel.textColor = UIColor.systemRedColor;
@@ -374,7 +414,14 @@ static const NSUInteger NearbyQueueLimit = 50;
         return;
     }
     self.saveButton.enabled = NO;
-    [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
+    [self.view endEditing:YES];
+    UIAlertController *confirmation = [UIAlertController alertControllerWithTitle:@"Lieu vérifié et sauvegardé"
+        message:@"Les coordonnées sont vérifiées. Le lieu sera ajouté automatiquement à Mes lieux à la prochaine ouverture de Nearby Places."
+        preferredStyle:UIAlertControllerStyleAlert];
+    [confirmation addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
+    }]];
+    [self presentViewController:confirmation animated:YES completion:nil];
 }
 
 - (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView { return 1; }

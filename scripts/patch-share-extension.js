@@ -171,6 +171,8 @@ function sync(root) {
     return false;
   }
   let changed = false;
+  copyIfChanged(path.join(root,'local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyMapsResolver.h'),path.join(generatedRoot,'NearbyMapsResolver.h'));
+  copyIfChanged(path.join(root,'local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyMapsResolver.h'),path.join(root,'platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyMapsResolver.h'));
   for (const name of NATIVE_FILES) {
     const transform = name.endsWith('.plist') ? value => patch(value, metadata) : null;
     changed = copyIfChanged(path.join(nativeRoot, name), path.join(generatedRoot, name), transform) || changed;

@@ -355,12 +355,35 @@
   // The extension writes a durable FIFO. A record is acknowledged only after
   // it has been persisted locally (or identified as an existing coordinate).
   var nativeShareBusy=false;
+  var SHARE_RESULTS_KEY='nearby-share-results-v1';
+  function shareResults(){
+    var stored=readJSON(SHARE_RESULTS_KEY,[]);
+    return Array.isArray(stored)?stored:[];
+  }
+  function renderShareResults(){
+    var section=$('share-results'),list=$('share-result-list'),results=shareResults();
+    section.hidden=!results.length;
+    list.replaceChildren();
+    results.forEach(function(result){
+      var row=document.createElement('p');
+      row.textContent=result.name+' — '+result.message;
+      row.style.color=result.failed?'#ff7373':'#5bd7bb';
+      list.append(row);
+    });
+  }
+  function recordShareResult(intent,message,failed){
+    var results=shareResults().filter(function(item){return item.id!==intent.shareID;});
+    results.unshift({id:intent.shareID,name:String(intent.nearbyName||'Lieu partagé'),message:message,failed:failed});
+    localStorage.setItem(SHARE_RESULTS_KEY,JSON.stringify(results.slice(0,50)));
+    renderShareResults();
+  }
   function ackNativeShare(resolver,shareID){
     return new Promise(function(resolve,reject){
       resolver.ackShared(shareID,resolve,function(error){reject(Error(String(error)));});
     });
   }
   function persistNativeShare(resolver,intent){
+    if(intent && intent.readError)return Promise.reject(Error(intent.readError));
     if(!intent || typeof intent.shareID!=='string' || !intent.shareID || typeof intent.nearbyURL!=='string' || !intent.nearbyURL){
       return Promise.reject(Error('Enregistrement partagé incomplet ; il reste dans la file'));
     }
@@ -376,6 +399,7 @@
       return ackNativeShare(resolver,intent.shareID).then(function(){
         trace('share-pending',duplicate?'doublon acquitté':'enregistré '+name);
         status(duplicate?'Ce lieu partagé existe déjà':'Lieu partagé enregistré localement');
+        recordShareResult(intent,duplicate?'Déjà présent dans Mes lieux':'Import réussi',false);
         return true;
       });
     });
@@ -384,18 +408,33 @@
     var resolver=window.NearbyResolver;
     if(nativeShareBusy || !resolver || typeof resolver.readShared!=='function' || typeof resolver.ackShared!=='function')return;
     nativeShareBusy=true;
+    var attempted=[];
+    function next(){
     resolver.readShared(function(intent){
       if(!intent || !intent.shareID){nativeShareBusy=false;return;}
+      if(attempted.includes(intent.shareID)){
+        nativeShareBusy=false;
+        status('Lecture des imports interrompue : le module a renvoyé un partage déjà traité.');
+        return;
+      }
+      attempted.push(intent.shareID);
       trace('share-pending','App Group : '+String(intent.nearbyURL||'').slice(0,180));
       persistNativeShare(resolver,intent).then(function(){
-        nativeShareBusy=false;
-        importPendingNativeShare();
+        next();
       }).catch(function(error){
-        nativeShareBusy=false;
         trace('share-error','import conservé : '+String(error));
         status('Import partagé en attente : '+error.message);
+        recordShareResult(intent,'Échec — '+error.message+' Réessayez avec « Réessayer les imports ».',true);
+        next();
       });
-    },function(error){nativeShareBusy=false;trace('share-error','lecture App Group : '+String(error));});
+    },function(error){
+      nativeShareBusy=false;
+      trace('share-error','lecture App Group : '+String(error));
+      recordShareResult({shareID:'queue-read-error',nearbyName:'Lecture des partages'},String(error),true);
+      status('Lecture des imports impossible : '+String(error));
+    },attempted.slice());
+    }
+    next();
   }
   function initializeNativeShare(){
     var resolver=window.NearbyResolver;
@@ -407,6 +446,8 @@
   }
   document.addEventListener('deviceready',initializeNativeShare,{once:true});
   document.addEventListener('resume',importPendingNativeShare);
+  $('share-retry').onclick=importPendingNativeShare;
+  renderShareResults();
   $('maps-add').onclick=function(){
     var value=$('maps-url').value;
     trace('import-click','bouton pressé : '+String(value).slice(0,250));

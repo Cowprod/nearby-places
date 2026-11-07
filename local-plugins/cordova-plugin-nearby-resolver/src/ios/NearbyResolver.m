@@ -1,5 +1,5 @@
 #import <Cordova/CDV.h>
-#import <MapKit/MapKit.h>
+#import "NearbyMapsResolver.h"
 
 static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
 static NSString * const NearbyQueueKey = @"nearbyShareQueue";
@@ -24,6 +24,7 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
 }
 
 - (void)readShared:(CDVInvokedUrlCommand *)command {
+    NSArray *excluded = [command.arguments.firstObject isKindOfClass:NSArray.class] ? command.arguments.firstObject : @[];
     NSURL *container = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:NearbyAppGroup];
     if (!container) { [self sendError:@"Conteneur App Group inaccessible" command:command]; return; }
     NSURL *directory = [container URLByAppendingPathComponent:@"NearbyShares" isDirectory:YES];
@@ -35,10 +36,13 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
     NSArray *sorted = [files sortedArrayUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b) { return [a.lastPathComponent compare:b.lastPathComponent]; }];
     for (NSURL *file in sorted) {
         if (![file.pathExtension isEqualToString:@"json"]) continue;
+        if ([excluded containsObject:file.lastPathComponent.stringByDeletingPathExtension]) continue;
         NSData *data = [NSData dataWithContentsOfURL:file options:0 error:&fileError];
         id record = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&fileError] : nil;
         if (![record isKindOfClass:NSDictionary.class] || ![record[@"shareID"] isEqualToString:file.lastPathComponent.stringByDeletingPathExtension]) {
-            [self sendError:@"Import partagé illisible ; fichier conservé" command:command]; return;
+            NSDictionary *invalid = @{ @"shareID": file.lastPathComponent.stringByDeletingPathExtension,
+                @"nearbyName": @"Partage illisible", @"readError": @"Le fichier partagé est illisible ; il a été conservé." };
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:invalid] callbackId:command.callbackId]; return;
         }
         [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:record] callbackId:command.callbackId];
         return;
@@ -71,7 +75,10 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
         [self sendError:@"Premier import partagé illisible ; aucun élément supprimé" command:command];
         return;
     }
-    NSDictionary *next = queue.firstObject;
+    NSDictionary *next = nil;
+    for (id record in queue) {
+        if ([record isKindOfClass:NSDictionary.class] && ![excluded containsObject:record[@"shareID"] ?: @""]) { next = record; break; }
+    }
     CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:next ?: @{}];
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
@@ -139,108 +146,12 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
 
-- (BOOL)allowedURL:(NSURL *)url {
-    if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) return NO;
-    NSString *host = url.host.lowercaseString ?: @"";
-    return [host isEqualToString:@"maps.apple"] || [host isEqualToString:@"maps.apple.com"] || [host isEqualToString:@"www.maps.apple.com"] ||
-        [host isEqualToString:@"maps.app.goo.gl"] || [host isEqualToString:@"goo.gl"] ||
-        [@[@"google.com",@"www.google.com",@"maps.google.com",@"google.co.jp",@"www.google.co.jp",@"maps.google.co.jp"] containsObject:host];
-}
-
-- (BOOL)isAllowedShortURL:(NSURL *)url {
-    NSString *host = url.host.lowercaseString ?: @"";
-    if (![url.scheme.lowercaseString isEqualToString:@"https"]) return NO;
-    return [host isEqualToString:@"maps.apple"] || [host isEqualToString:@"maps.app.goo.gl"] ||
-        ([host isEqualToString:@"goo.gl"] && [url.path hasPrefix:@"/maps"]);
-}
-
-- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task
- willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request
- completionHandler:(void (^)(NSURLRequest * _Nullable))completionHandler {
-    completionHandler([self allowedURL:request.URL] ? request : nil);
-}
-
 - (void)resolve:(CDVInvokedUrlCommand *)command {
-    id raw = command.arguments.firstObject;
-    if (![raw isKindOfClass:NSString.class] || [(NSString *)raw length] > 2048) {
-        [self sendError:@"URL invalide" command:command];
-        return;
-    }
-    NSURL *url = [NSURL URLWithString:(NSString *)raw];
-    if (![self isAllowedShortURL:url]) {
-        [self sendError:@"Domaine de lien court non autorisé" command:command];
-        return;
-    }
-    NSURLSessionConfiguration *config = NSURLSessionConfiguration.ephemeralSessionConfiguration;
-    config.timeoutIntervalForRequest = 12;
-    config.timeoutIntervalForResource = 18;
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
-    NSURLSessionDataTask *task = [session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            [self sendError:error.localizedDescription command:command];
-            [session finishTasksAndInvalidate];
-            return;
-        }
-        NSURL *finalURL = response.URL;
-        NSInteger statusCode = [response isKindOfClass:NSHTTPURLResponse.class] ? [(NSHTTPURLResponse *)response statusCode] : 0;
-        if (statusCode < 200 || statusCode >= 300 || ![self allowedURL:finalURL]) {
-            [self sendError:@"Redirection ou réponse Maps non autorisée" command:command];
-            [session finishTasksAndInvalidate];
-            return;
-        }
-        NSMutableDictionary *result = [NSMutableDictionary dictionaryWithDictionary:@{
-            @"url": finalURL.absoluteString ?: @"",
-            @"httpStatus": @(statusCode)
-        }];
-        NSURLComponents *components = [NSURLComponents componentsWithURL:finalURL resolvingAgainstBaseURL:NO];
-        NSString *googleQuery = nil;
-        for (NSURLQueryItem *item in components.queryItems) {
-            if ([item.name isEqualToString:@"q"]) googleQuery = [item.value stringByReplacingOccurrencesOfString:@"+" withString:@" "];
-        }
-        if ([finalURL.host.lowercaseString isEqualToString:@"www.google.com"] && googleQuery.length && [finalURL.absoluteString containsString:@"ftid="]) {
-            MKLocalSearchRequest *request = [[MKLocalSearchRequest alloc] init];
-            request.naturalLanguageQuery = googleQuery;
-            MKLocalSearch *search = [[MKLocalSearch alloc] initWithRequest:request];
-            [search startWithCompletionHandler:^(MKLocalSearchResponse *searchResponse, NSError *searchError) {
-                NSString *expectedName = [[googleQuery componentsSeparatedByString:@","] firstObject];
-                if (searchError || searchResponse.mapItems.count != 1) {
-                    [self sendError:@"Adresse Google Maps ambiguë ; partage conservé" command:command]; return;
-                }
-                CLLocationCoordinate2D addressCoordinate = searchResponse.mapItems.firstObject.placemark.coordinate;
-                MKLocalSearchRequest *poiRequest = [[MKLocalSearchRequest alloc] init];
-                poiRequest.naturalLanguageQuery = expectedName;
-                poiRequest.region = MKCoordinateRegionMakeWithDistance(addressCoordinate, 1000, 1000);
-                poiRequest.resultTypes = MKLocalSearchResultTypePointOfInterest;
-                MKLocalSearch *poiSearch = [[MKLocalSearch alloc] initWithRequest:poiRequest];
-                [poiSearch startWithCompletionHandler:^(MKLocalSearchResponse *poiResponse, NSError *poiError) {
-                NSMutableArray<MKMapItem *> *matches = [NSMutableArray array];
-                CLLocation *addressLocation = [[CLLocation alloc] initWithLatitude:addressCoordinate.latitude longitude:addressCoordinate.longitude];
-                for (MKMapItem *item in poiResponse.mapItems) {
-                    if ([item.name compare:expectedName options:NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch] == NSOrderedSame && CLLocationCoordinate2DIsValid(item.placemark.coordinate) && [item.placemark.location distanceFromLocation:addressLocation] < 1000) [matches addObject:item];
-                }
-                if (poiError || matches.count != 1) {
-                    [self sendError:@"La fiche Google Maps n’a pas pu être identifiée sans ambiguïté. Le partage est conservé." command:command];
-                } else {
-                    MKMapItem *item = matches.firstObject;
-                    result[@"htmlMapURL"] = [NSString stringWithFormat:@"https://maps.apple.com/?coordinate=%.8f,%.8f&name=%@", item.placemark.coordinate.latitude, item.placemark.coordinate.longitude, [item.name stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet]];
-                    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result] callbackId:command.callbackId];
-                }
-                }];
-            }];
-            [session finishTasksAndInvalidate];
-            return;
-        }
-        NSString *html = data.length <= 262144 ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
-        if (html) {
-            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(?:https?://maps\\.apple\\.com/[^\\\"'<> ]+|https?://(?:www\\.)?google\\.[a-z.]+/maps/[^\\\"'<> ]+)" options:NSRegularExpressionCaseInsensitive error:nil];
-            NSTextCheckingResult *match = [regex firstMatchInString:html options:0 range:NSMakeRange(0, html.length)];
-            if (match) result[@"htmlMapURL"] = [[html substringWithRange:match.range] stringByReplacingOccurrencesOfString:@"&amp;" withString:@"&"];
-        }
-        CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-        [session finishTasksAndInvalidate];
+    NearbyMapsResolver *resolver = [[NearbyMapsResolver alloc] init];
+    [resolver resolveURL:command.arguments.firstObject completion:^(NSDictionary *result, NSString *error) {
+        if (error) { [self sendError:error command:command]; return; }
+        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result] callbackId:command.callbackId];
     }];
-    [task resume];
 }
 
 @end
