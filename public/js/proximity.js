@@ -86,7 +86,20 @@ function registerNotificationEvents(){
  }catch(error){logEvent('notification-events','écoute native indisponible : '+String(error));}
 }
 function notificationId(id){var n=7;for(var i=0;i<id.length;i++)n=(Math.imul(n,31)+id.charCodeAt(i))|0;return (n>>>0)%2000000000+1;}
-function currentPlaces(){return catalogue.filter(function(p){return p && typeof p.id==='string' && p.id.length>0 && !p.visited && (!p.alert || p.alert.enabled!==false) && Number.isFinite(p.latitude) && Math.abs(p.latitude)<=90 && Number.isFinite(p.longitude) && Math.abs(p.longitude)<=180;});}
+function currentPlaces(){
+ // A restored catalogue may contain duplicate identifiers. Keep all local data,
+ // but submit each valid identifier only once to the native geofence manager.
+ var seen=new Set();
+ return catalogue.filter(function(p){
+  if(!p || typeof p.id!=='string' || !p.id || p.visited ||
+    (p.alert && p.alert.enabled===false) ||
+    !Number.isFinite(p.latitude) || Math.abs(p.latitude)>90 ||
+    !Number.isFinite(p.longitude) || Math.abs(p.longitude)>180 ||
+    seen.has(p.id))return false;
+  seen.add(p.id);
+  return true;
+ });
+}
 function radius(){
  var saved=storeGet('nearby-places-radius-m',500);
  var n=Number(saved);

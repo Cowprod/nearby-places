@@ -181,6 +181,7 @@ async function main() {
   await malformed.callbacks.deviceready();
   assert.equal(await malformed.api.setPlaces([
     place, null,
+    { ...place, latitude:35.0, longitude:139.0 }, // duplicate ID must not reach Core Location
     { ...place, id:'bad-nan', latitude:NaN },
     { ...place, id:'bad-infinity', latitude:Infinity },
     { ...place, id:'bad-lat', latitude:91 },
@@ -193,6 +194,8 @@ async function main() {
   assert.equal(await malformed.api.enable(),true);
   assert.equal(malformed.state.geofences.length,1,'seule une zone géographique valide doit atteindre le SDK iOS');
   assert.equal(malformed.state.geofences[0].identifier,place.id);
+  assert.equal(malformed.state.geofences[0].latitude,place.latitude,
+    'first valid duplicate ID wins without mutating the local catalogue');
   for(const id of ['bad-nan','bad-infinity','bad-lat','bad-lon','bad-string','']) {
     malformed.api.onGeofence({action:'ENTER',identifier:id});
   }
