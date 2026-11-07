@@ -337,6 +337,28 @@
   }
   document.addEventListener('deviceready',function(){sharedReady=true;flushPendingSharedURLs();},{once:true});
   document.addEventListener('resume',flushPendingSharedURLs);
+  // Shares saved by the extension are available even when iOS refuses to launch us.
+  function importPendingNativeShare(){
+    var resolver=window.NearbyResolver;
+    if(!resolver || typeof resolver.readShared!=='function')return;
+    resolver.readShared(function(intent){
+      if(!intent || !intent.nearbyURL)return;
+      trace('share-pending','App Group : '+String(intent.nearbyURL).slice(0,180));
+      receiveSharedURL(intent.nearbyURL).then(function(ok){
+        if(!ok || !pendingImport)return;
+        if(intent.nearbyName)$('import-name').value=String(intent.nearbyName);
+        if(intent.nearbyComment)$('import-comment').value=String(intent.nearbyComment);
+        if(intent.nearbyCategory){
+          var category=String(intent.nearbyCategory).trim().toLowerCase();
+          var select=$('import-category');
+          if(Array.from(select.options).some(function(option){return option.value===category;}))select.value=category;
+        }
+        trace('share-pending','formulaire prérempli');
+      });
+    },function(error){trace('share-error','lecture App Group : '+String(error));});
+  }
+  document.addEventListener('deviceready',importPendingNativeShare,{once:true});
+  document.addEventListener('resume',importPendingNativeShare);
   function registerNativeShare(){
     var plugin=window.cordova && window.cordova.openwith;
     if(!plugin){trace('share-init','plugin absent');status('Partage natif indisponible : extension non installée');return;}
