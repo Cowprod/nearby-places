@@ -91,6 +91,7 @@ async function main() {
   assert.equal(h.scheduled.length, 0, 'ni sortie, ni lieu désactivé, ni lieu visité');
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
   assert.equal(h.scheduled.length, 1, 'une notification après activation');
+  assert.equal(h.scheduled[0].iOSForeground,true,'option iOSForeground du plugin 1.2.3 pour une bannière au premier plan');
   h.api.onGeofence({ action: 'ENTER', identifier: place.id });
   assert.equal(h.scheduled.length, 1, 'cooldown anti-doublon');
   assert.equal(await h.api.disable(), true);
@@ -108,6 +109,7 @@ async function main() {
   assert.equal(h.scheduled.length, 2);
   assert.equal(h.scheduled[1].trigger.in, 10);
   assert.equal(h.scheduled[1].trigger.unit, 'second');
+  assert.equal(h.scheduled[1].iOSForeground,true,'test +10s utilise la propriété iOSForeground actuelle');
   const firstTestId=h.scheduled[1].id;
   assert.ok(Number.isInteger(firstTestId) && firstTestId>=2100000000 && firstTestId<2140000000, 'ID test réservé dans Int32');
   assert.equal(await h.api.testNotification(), true, 'second test indépendant');
