@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync('www/js/app.js', 'utf8');
 function harness(native = false, earlyURLs = [], controlledFetch = false, seedLocal = null) {
   const store = new Map(), elements = new Map(), listeners = new Map(), hooks = {};
-  const nativeResolutions=[], networkCalls=[];
+  const nativeResolutions=[], networkCalls=[], nativeTimers=[];
   let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
@@ -25,8 +25,9 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     removeItem(key){store.delete(key);}
   };
   if(seedLocal!==null)store.set('nearby-places-v1',seedLocal);
-  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
-    setTimeout(fn,ms){if(ms===0)fn();return 1;},clearTimeout(){},
+  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/neverCompletes'))return;if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
+    setTimeout(fn,ms){if(ms===0){fn();return 0;}nativeTimers.push({fn,ms,cleared:false});return nativeTimers.length;},
+    clearTimeout(id){if(nativeTimers[id-1])nativeTimers[id-1].cleared=true;},
     fetch(url){
       if(controlledFetch)return new Promise((resolve,reject)=>networkCalls.push({url:String(url),resolve,reject}));
       if(String(url).includes('/p/okRedirect')) return Promise.resolve({url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});
@@ -50,6 +51,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
   }
   function status(){return document.getElementById('status').textContent;}
   return {importURL,status,store,window:context.window,nativeResolutions,networkCalls,
+    expireNativeResolvers(){nativeTimers.forEach(timer=>{if(timer.ms===22000&&!timer.cleared){timer.cleared=true;timer.fn();}});},
     resolveFetch(index,data){networkCalls[index].resolve({ok:true,json(){return Promise.resolve(data)}});},
     refresh(){document.getElementById('refresh').onclick();},
     manualAdd(){document.getElementById('add').onclick();},
@@ -171,6 +173,20 @@ assert.equal(routeSaved.name,'Une destination choisie');
 assert.equal(routeSaved.comment,'À visiter');
 assert.deepEqual(Array.from(routeSaved.categories),['musique']);
 console.log('PASS validation Apple Plans (simulée) : nom de destination saisi et confirmé avant sauvegarde');
+// A silent native bridge cannot block the next Apple Plans share forever.
+const hung=harness();
+hung.window.handleOpenURL('nearbyplaces://import?url='+encodeURIComponent('https://maps.apple/p/neverCompletes'));
+hung.window.handleOpenURL('nearbyplaces://import?ll=35.930,139.930&name=Reprise');
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(hung.formOpen(),false,'the second share waits until the first resolver completes');
+hung.expireNativeResolvers();
+await new Promise(resolve=>setImmediate(resolve));
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(hung.formOpen(),true,'native resolver timeout unblocks queued valid shares');
+assert.equal(hung.inputValue('import-name'),'Reprise');
+hung.confirmImport();
+assert.equal(JSON.parse(hung.store.get('nearby-places-v1')).length,1,'timed-out link never creates a fake place');
+console.log('PASS Apple Plans timeout (simulé) : pont natif muet borné à 22s, FIFO reprise sans perte');
 const h=harness();
 // Short Maps links percent-encoded into a Shortcuts/ChatGPT import URL must reach
 // the native resolver when pasted directly (not only via handleOpenURL).
