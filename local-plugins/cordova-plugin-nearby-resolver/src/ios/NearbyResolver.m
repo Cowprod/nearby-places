@@ -2,8 +2,20 @@
 #import <MapKit/MapKit.h>
 @interface NearbyResolver : CDVPlugin <NSURLSessionTaskDelegate>
 - (void)resolve:(CDVInvokedUrlCommand *)command;
+- (void)readShared:(CDVInvokedUrlCommand *)command;
 @end
 @implementation NearbyResolver
+- (void)readShared:(CDVInvokedUrlCommand *)command {
+ NSUserDefaults *defaults=[[NSUserDefaults alloc] initWithSuiteName:@"group.fr.cowprod.nearbyplaces.shareextension"];
+ NSDictionary *shared=[defaults dictionaryForKey:@"shared"];
+ if(!shared){
+  [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:@{}] callbackId:command.callbackId];
+  return;
+ }
+ [defaults removeObjectForKey:@"shared"];
+ [defaults synchronize];
+ [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:shared] callbackId:command.callbackId];
+}
 - (BOOL)allowedURL:(NSURL *)url {
  if(!url || ![url.scheme.lowercaseString isEqualToString:@"https"])return NO;
  NSString *host=url.host.lowercaseString;
