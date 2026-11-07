@@ -106,6 +106,49 @@ assert.equal(retained.some(p=>p&&p.id==='manual-damaged'),true,'import preserves
 assert.equal(retained.some(p=>p&&p.name==='Nouveau lieu'),true,'valid new place still saved');
 
 console.log('PASS données locales (simulation) : JSON illisible préservé, affichage défensif, fusion sans perte et import valide');
+// An asynchronous GitHub refresh must not erase local changes made after
+// the initial storage read, even if the local JSON becomes corrupt in-flight.
+const corruptedInFlight=harness(false,[],true);
+const partialJSON='[{"id":"manual-incomplete"';
+corruptedInFlight.store.set('nearby-places-v1',partialJSON);
+corruptedInFlight.resolveFetch(0,validRemote);
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(corruptedInFlight.store.get('nearby-places-v1'),partialJSON,
+  'a response arriving after local corruption must never overwrite raw data');
+assert.match(corruptedInFlight.status(),/fusion suspendue/,'the user sees a non-destructive merge error');
+const unexpectedShape=harness(false,[],true);
+unexpectedShape.store.set('nearby-places-v1','{"custom":"format"}');
+unexpectedShape.resolveFetch(0,validRemote);
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(unexpectedShape.store.get('nearby-places-v1'),'{"custom":"format"}',
+  'unexpected local structure must survive an in-flight catalogue refresh');
+
+// Restored local data can contain repeated manual IDs or unkeyed legacy
+// records. A Map-based merge previously erased all but one manual duplicate.
+const duplicateOriginal={id:'manual-duplicate-restored',name:'Premier lieu',
+  latitude:35.651,longitude:139.651,categories:['musique'],source:{type:'manual'}};
+const duplicateSecond={...duplicateOriginal,name:'Deuxième lieu',latitude:35.652,longitude:139.652};
+const remoteVisited={...validRemote.places[0],visited:true};
+const restoredRecords=[duplicateOriginal,duplicateSecond,remoteVisited,
+  {id:'manual-invalid-restored',name:'Donnée à réparer',latitude:'35.6',longitude:null,
+    categories:['musique'],source:{type:'manual'}},
+  {id:'',name:'Sans identifiant',latitude:35.653,longitude:139.653,categories:['culture']},null];
+const duplicateRestored=harness(false,[],true,JSON.stringify(restoredRecords));
+duplicateRestored.resolveFetch(0,validRemote);
+await new Promise(resolve=>setImmediate(resolve));
+const afterRefresh=JSON.parse(duplicateRestored.store.get('nearby-places-v1'));
+assert.deepEqual(afterRefresh.filter(p=>p && p.id==='manual-duplicate-restored').map(p=>p.name),
+  ['Premier lieu','Deuxième lieu'],'both restored manual records remain intact and ordered');
+assert.equal(afterRefresh.filter(p=>p && p.id==='manual-invalid-restored').length,1,
+  'invalid manual data is still available for recovery');
+assert.equal(afterRefresh.filter(p=>p && p.id==='').length,1,
+  'unkeyed records are retained exactly once');
+assert.equal(afterRefresh.filter(p=>p===null).length,1,'null legacy data is retained exactly once');
+assert.equal(afterRefresh.filter(p=>p && p.id===remoteVisited.id).length,1,
+  'remote entry stays single after catalogue reconciliation');
+assert.equal(afterRefresh.find(p=>p && p.id===remoteVisited.id).visited,true,
+  'remote visited state is retained without duplicating remote data');
+console.log('PASS fusion locale (simulation) : corruption en cours de chargement préservée, doublons manuels et historiques conservés');
 // A stale first HTTP response must never overwrite a newer catalogue/cache.
 const refreshing=harness(false,[],true);
 assert.equal(refreshing.networkCalls.length,1,'initial remote fetch started');

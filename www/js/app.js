@@ -62,28 +62,40 @@
     });
   }
   function mergeCatalogue(data, label){
-    var previous=readJSON(KEY,[]);
-    if(!Array.isArray(previous))previous=[];
-    var byId=new Map(previous.filter(function(p){return p && typeof p.id==='string';}).map(function(p){return [p.id,p];}));
+    // A network request may complete after localStorage becomes unreadable.
+    // Never overwrite the raw local data with a remote catalogue in that case.
+    var raw=localStorage.getItem(KEY),previous;
+    try{previous=raw===null?[]:JSON.parse(raw);}
+    catch(error){
+      status('Données locales illisibles : fusion suspendue pour éviter leur perte');
+      trace('storage-error','JSON local illisible pendant la fusion ; stockage préservé');
+      return false;
+    }
+    if(!Array.isArray(previous)){
+      status('Format local inattendu : fusion suspendue pour éviter la perte de données');
+      trace('storage-error','Catalogue local non tableau pendant la fusion ; stockage préservé');
+      return false;
+    }
+    var byId=new Map(previous.filter(function(p){return p && typeof p.id==='string' && p.id;}).map(function(p){return [p.id,p];}));
     var incoming=data.places.map(function(p){
       var old=byId.get(p.id);
-      byId.delete(p.id);
       return Object.assign({},p,{visited:old ? !!old.visited : !!p.visited});
     });
-    // Keep user-entered places and locally edited places when a catalogue is refreshed.
-    // Keep manual entries (even malformed) and orphaned local data for recovery.
-    // Never silently discard legacy records just because GPS coordinates are invalid.
-    var manuallyAdded=Array.from(byId.values()).filter(function(p){
+    // A Map deduplicates restored identifiers and would silently delete manual
+    // places with colliding IDs. Preserve each orphaned local record in order.
+    // Remote catalogue IDs are still reconciled with the authoritative remote.
+    var remoteIds=new Set(data.places.map(function(p){return p.id;}));
+    var preserved=previous.filter(function(p){
+      if(!p || typeof p!=='object' || typeof p.id!=='string' || !p.id)return true;
+      if(remoteIds.has(p.id))return false;
       return (p.source && p.source.type==='manual') ||
         !validPosition(p.latitude,p.longitude) ||
         typeof p.name!=='string' || !Array.isArray(p.categories);
     });
-    var unkeyed=previous.filter(function(p){
-      return !p || typeof p!=='object' || typeof p.id!=='string' || !p.id;
-    });
-    places=incoming.concat(manuallyAdded,unkeyed);
+    places=incoming.concat(preserved);
     save();render();
     status(places.length+' lieux · '+label);
+    return true;
   }
   function fetchCatalogue(url, timeoutMs){
     var controller=new AbortController();
