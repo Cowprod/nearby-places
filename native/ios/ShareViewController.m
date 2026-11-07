@@ -281,19 +281,67 @@
 }
 
 - (void) sendResults: (NSDictionary*)results {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        [self.userDefaults setObject:results forKey:@"shared"];
-        [self.userDefaults synchronize];
-
-        // Emit a URL that opens the cordova app
-        NSString *url = [NSString stringWithFormat:@"%@://shared", SHAREEXT_URL_SCHEME];
-
-        // The responder-chain openURL technique is not a supported iOS extension API.
-        // Persist the intent first. Attempt handoff on the main queue, then complete.
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self openURL:[NSURL URLWithString:url]];
+    // Share extensions cannot reliably launch their containing app.
+    // Present an explicit confirmation and persist to the shared App Group.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.presentedViewController != nil) return;
+        NSArray *items = results[@"items"];
+        NSString *sharedURL = @"";
+        for (NSDictionary *item in items) {
+            NSString *candidate = item[@"data"];
+            if ([candidate isKindOfClass:[NSString class]] &&
+                ([candidate hasPrefix:@"https://"] || [candidate hasPrefix:@"http://"])) {
+                sharedURL = candidate;
+                break;
+            }
+        }
+        if (sharedURL.length == 0) {
+            UIAlertController *error = [UIAlertController alertControllerWithTitle:@"Lien introuvable"
+                message:@"Plans n'a fourni aucune adresse exploitable."
+                preferredStyle:UIAlertControllerStyleAlert];
+            [error addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+                [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:3 userInfo:nil]];
+            }]];
+            [self presentViewController:error animated:YES completion:nil];
+            return;
+        }
+        NSString *urlToSave = sharedURL;
+        UIAlertController *dialog = [UIAlertController alertControllerWithTitle:@"Ajouter à Nearby Places"
+            message:@"Confirmez les informations. Ouvrez ensuite Nearby Places pour importer ce lieu."
+            preferredStyle:UIAlertControllerStyleAlert];
+        [dialog addTextFieldWithConfigurationHandler:^(UITextField *field) {
+            field.placeholder = @"Titre du lieu";
+            field.text = self.contentText ?: @"";
+        }];
+        [dialog addTextFieldWithConfigurationHandler:^(UITextField *field) {
+            field.placeholder = @"Commentaire (facultatif)";
+        }];
+        [dialog addTextFieldWithConfigurationHandler:^(UITextField *field) {
+            field.placeholder = @"Catégorie (ex. culture, restaurant)";
+            field.text = @"culture";
+        }];
+        [dialog addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+            [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:4 userInfo:nil]];
+        }]];
+        [dialog addAction:[UIAlertAction actionWithTitle:@"Enregistrer" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            NSString *name = [dialog.textFields[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *comment = dialog.textFields[1].text ?: @"";
+            NSString *category = dialog.textFields[2].text ?: @"culture";
+            NSMutableDictionary *saved = [results mutableCopy];
+            saved[@"nearbyName"] = name ?: @"";
+            saved[@"nearbyComment"] = comment;
+            saved[@"nearbyCategory"] = category;
+            saved[@"nearbyURL"] = urlToSave;
+            // OpenWith reads this exact key from the same App Group.
+            [self.userDefaults setObject:saved forKey:@"shared"];
+            BOOL persisted = [self.userDefaults synchronize];
+            if (!persisted) {
+                [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:5 userInfo:nil]];
+                return;
+            }
             [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
-        });
+        }]];
+        [self presentViewController:dialog animated:YES completion:nil];
     });
 }
 
