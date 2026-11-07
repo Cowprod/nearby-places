@@ -5,10 +5,11 @@ const vm = require('node:vm');
 
 const script = fs.readFileSync('www/js/proximity.js', 'utf8');
 
-function harness(allowNotifications = true, slowNative = false, initialStorage, sdkInitiallyEnabled = false) {
+function harness(allowNotifications = true, slowNative = false, initialStorage, sdkInitiallyEnabled = false, silentPermission = false) {
   const storage = initialStorage || new Map();
   const scheduled = [];
   const callbacks = {};
+  const pendingPermissionCallbacks = [];
   const elements = {};
   const state = { geofences: [], starts: 0, stops: 0, removes: 0, failNextAdds: 0, failNextStops: 0, inFlight: 0, maxInFlight: 0 };
   async function nativeStep(update) {
@@ -30,7 +31,7 @@ function harness(allowNotifications = true, slowNative = false, initialStorage, 
   };
   const root = {
     cordova: { plugins: { notification: { local: {
-      requestPermission(callback) { callback(allowNotifications); },
+      requestPermission(callback) { if(silentPermission)pendingPermissionCallbacks.push(callback);else callback(allowNotifications); },
       schedule(payload) { scheduled.push(payload); },
       on(name,callback) { callbacks['notification.'+name] = callback; }
     } } } },
@@ -45,8 +46,9 @@ function harness(allowNotifications = true, slowNative = false, initialStorage, 
     setItem(key, value) { storage.set(key, String(value)); },
     removeItem(key) { storage.delete(key); }
   };
-  vm.runInNewContext(script, { window: root, document, localStorage, console, Promise, Date, Math });
-  return { api: root.NearbyProximity, callbacks, elements, scheduled, state, storage };
+  vm.runInNewContext(script, { window: root, document, localStorage, console, Promise, Date, Math,
+    setTimeout(fn,ms) { return setTimeout(fn,silentPermission && ms===60000?5:ms); }, clearTimeout });
+  return { api: root.NearbyProximity, callbacks, elements, scheduled, state, storage, pendingPermissionCallbacks };
 }
 
 const place = {
@@ -151,6 +153,22 @@ async function main() {
   assert.equal(refused.state.starts, 0, 'permissions refusées : surveillance non démarrée');
   assert.equal(await refused.api.testNotification(), false, 'test notification sans permission refusé');
   assert.equal(refused.scheduled.length, 0);
+  // A native permission bridge may never call back. Neither the test button nor
+  // the geofence opt-in may hang or arm late after the safety timeout.
+  const silent=harness(true,false,undefined,false,true);
+  silent.api.wire();
+  await silent.callbacks.deviceready();
+  assert.equal(await silent.api.testNotification(),false,'test natif abandonné si permission sans callback après 60s simulées');
+  assert.equal(silent.scheduled.length,0,'aucune notification programmée après expiration');
+  assert.match(silent.elements['proximity-status'].textContent,/aucune réponse native après 60 s/);
+  silent.pendingPermissionCallbacks.shift()(true);
+  await Promise.resolve();
+  assert.equal(silent.scheduled.length,0,'un accord tardif ne programme pas la notification');
+  assert.equal(await silent.api.enable(),false,'activation géofencing bornée si permission sans réponse');
+  assert.equal(silent.state.starts,0,'aucun démarrage du SDK après timeout de permission');
+  silent.pendingPermissionCallbacks.shift()(true);
+  await Promise.resolve();
+  assert.equal(silent.state.starts,0,'accord tardif ne réactive pas le SDK');
   // Provoquer les anciennes courses remove/add et start/stop avec un SDK volontairement lent.
   const concurrent = harness(true, true);
   concurrent.api.wire();
