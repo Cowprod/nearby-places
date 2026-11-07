@@ -71,6 +71,15 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
 async function main() {
+const sorted=harness(false,[],false,JSON.stringify([
+  {id:'manual-100-a',name:'Culture ancien',latitude:35,longitude:139,categories:['culture'],visited:false},
+  {id:'manual-500-b',name:'Visité récent',latitude:35,longitude:139,categories:['culture'],visited:true},
+  {id:'manual-200-c',name:'Restaurant',latitude:35,longitude:139,categories:['resto'],visited:false},
+  {id:'manual-300-d',name:'Culture récent',latitude:35,longitude:139,categories:['culture'],visited:false}
+]));
+assert.deepEqual(sorted.renderCards().map(card=>card.children[0].children[0].textContent),
+  ['Culture récent','Culture ancien','Restaurant','Visité récent'],
+  'tri par non visité, catégorie puis date de saisie décroissante');
 // Malformed local storage must never be silently replaced with remote data.
 const unreadableRaw='{"truncated":';
 const unreadable=harness(false,[],true,unreadableRaw);

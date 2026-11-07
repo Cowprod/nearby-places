@@ -283,7 +283,8 @@ static const NSUInteger NearbyQueueLimit = 50;
 
 - (void)resolveSharedName {
     NSURL *url = [NSURL URLWithString:self.sharedURL];
-    if (![url.host.lowercaseString isEqualToString:@"maps.apple"]) return;
+    BOOL google = [url.host.lowercaseString isEqualToString:@"maps.app.goo.gl"];
+    if (![url.host.lowercaseString isEqualToString:@"maps.apple"] && !google) return;
     NSString *originalName = self.nameField.text ?: @"";
     NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
     configuration.timeoutIntervalForResource = 18;
@@ -292,13 +293,13 @@ static const NSUInteger NearbyQueueLimit = 50;
         NSURLComponents *components = [NSURLComponents componentsWithURL:response.URL resolvingAgainstBaseURL:NO];
         NSString *resolvedName = nil;
         for (NSURLQueryItem *item in components.queryItems) {
-            if ([item.name isEqualToString:@"name"]) resolvedName = item.value;
+            if ([item.name isEqualToString:@"name"] || (google && [item.name isEqualToString:@"q"])) resolvedName = google ? [[[item.value stringByReplacingOccurrencesOfString:@"+" withString:@" "] componentsSeparatedByString:@","] firstObject] : item.value;
         }
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!error && [response isKindOfClass:NSHTTPURLResponse.class] &&
                 [(NSHTTPURLResponse *)response statusCode] == 200 &&
-                [components.host.lowercaseString isEqualToString:@"maps.apple.com"] && resolvedName.length) {
-                self.sharedURL = components.URL.absoluteString;
+                ([components.host.lowercaseString isEqualToString:@"maps.apple.com"] || (google && [components.host.lowercaseString isEqualToString:@"www.google.com"])) && resolvedName.length) {
+                if (!google) self.sharedURL = components.URL.absoluteString;
                 self.urlLabel.text = self.sharedURL;
                 if ([self.nameField.text isEqualToString:originalName]) self.nameField.text = resolvedName;
             }

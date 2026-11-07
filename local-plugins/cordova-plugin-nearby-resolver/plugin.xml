@@ -6,5 +6,6 @@
  <platform name="ios">
   <config-file target="config.xml" parent="/*"><feature name="NearbyResolver"><param name="ios-package" value="NearbyResolver"/></feature></config-file>
   <source-file src="src/ios/NearbyResolver.m"/>
+  <framework src="MapKit.framework"/>
  </platform>
 </plugin>

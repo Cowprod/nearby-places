@@ -1,4 +1,5 @@
 #import <Cordova/CDV.h>
+#import <MapKit/MapKit.h>
 
 static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
 static NSString * const NearbyQueueKey = @"nearbyShareQueue";
@@ -191,6 +192,44 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
             @"url": finalURL.absoluteString ?: @"",
             @"httpStatus": @(statusCode)
         }];
+        NSURLComponents *components = [NSURLComponents componentsWithURL:finalURL resolvingAgainstBaseURL:NO];
+        NSString *googleQuery = nil;
+        for (NSURLQueryItem *item in components.queryItems) {
+            if ([item.name isEqualToString:@"q"]) googleQuery = [item.value stringByReplacingOccurrencesOfString:@"+" withString:@" "];
+        }
+        if ([finalURL.host.lowercaseString isEqualToString:@"www.google.com"] && googleQuery.length && [finalURL.absoluteString containsString:@"ftid="]) {
+            MKLocalSearchRequest *request = [[MKLocalSearchRequest alloc] init];
+            request.naturalLanguageQuery = googleQuery;
+            MKLocalSearch *search = [[MKLocalSearch alloc] initWithRequest:request];
+            [search startWithCompletionHandler:^(MKLocalSearchResponse *searchResponse, NSError *searchError) {
+                NSString *expectedName = [[googleQuery componentsSeparatedByString:@","] firstObject];
+                if (searchError || searchResponse.mapItems.count != 1) {
+                    [self sendError:@"Adresse Google Maps ambiguë ; partage conservé" command:command]; return;
+                }
+                CLLocationCoordinate2D addressCoordinate = searchResponse.mapItems.firstObject.placemark.coordinate;
+                MKLocalSearchRequest *poiRequest = [[MKLocalSearchRequest alloc] init];
+                poiRequest.naturalLanguageQuery = expectedName;
+                poiRequest.region = MKCoordinateRegionMakeWithDistance(addressCoordinate, 1000, 1000);
+                poiRequest.resultTypes = MKLocalSearchResultTypePointOfInterest;
+                MKLocalSearch *poiSearch = [[MKLocalSearch alloc] initWithRequest:poiRequest];
+                [poiSearch startWithCompletionHandler:^(MKLocalSearchResponse *poiResponse, NSError *poiError) {
+                NSMutableArray<MKMapItem *> *matches = [NSMutableArray array];
+                CLLocation *addressLocation = [[CLLocation alloc] initWithLatitude:addressCoordinate.latitude longitude:addressCoordinate.longitude];
+                for (MKMapItem *item in poiResponse.mapItems) {
+                    if ([item.name compare:expectedName options:NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch] == NSOrderedSame && CLLocationCoordinate2DIsValid(item.placemark.coordinate) && [item.placemark.location distanceFromLocation:addressLocation] < 1000) [matches addObject:item];
+                }
+                if (poiError || matches.count != 1) {
+                    [self sendError:@"La fiche Google Maps n’a pas pu être identifiée sans ambiguïté. Le partage est conservé." command:command];
+                } else {
+                    MKMapItem *item = matches.firstObject;
+                    result[@"htmlMapURL"] = [NSString stringWithFormat:@"https://maps.apple.com/?coordinate=%.8f,%.8f&name=%@", item.placemark.coordinate.latitude, item.placemark.coordinate.longitude, [item.name stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet]];
+                    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result] callbackId:command.callbackId];
+                }
+                }];
+            }];
+            [session finishTasksAndInvalidate];
+            return;
+        }
         NSString *html = data.length <= 262144 ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
         if (html) {
             NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(?:https?://maps\\.apple\\.com/[^\\\"'<> ]+|https?://(?:www\\.)?google\\.[a-z.]+/maps/[^\\\"'<> ]+)" options:NSRegularExpressionCaseInsensitive error:nil];

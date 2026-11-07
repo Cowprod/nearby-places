@@ -15,7 +15,17 @@
   function render(position){
     $('places').replaceChildren();
     // Local data may predate schema validation; render defensively without deleting it.
-    places.forEach(function(p){
+    places.map(function(place,index){return {place:place,index:index};}).sort(function(a,b){
+      var x=a.place||{},y=b.place||{};
+      var activity=Number(!!x.visited)-Number(!!y.visited);
+      if(activity)return activity;
+      function category(p){var id=Array.isArray(p.categories)?p.categories[0]:'';var item=NATIVE_CATEGORIES.find(function(c){return c.id===id;});return item?item.name:String(id||'');}
+      var group=category(x).localeCompare(category(y),'fr');
+      if(group)return group;
+      function entered(p){var old=String(p.id||'').match(/^manual-(\d+)-/);return Number(p.createdAt)||(old?Number(old[1]):0);}
+      return entered(y)-entered(x)||b.index-a.index;
+    }).forEach(function(entry){
+      var p=entry.place;
       if(!p || typeof p!=='object')return;
       var validCoords=validPosition(p.latitude,p.longitude);
       var card=document.createElement('section');card.className='place';
@@ -159,7 +169,7 @@
   function addManual(name,lat,lon,category,comment){
     if(!name || !validPosition(lat,lon))throw Error('Nom et coordonnées invalides');
     var place={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),name:name,
-      latitude:lat,longitude:lon,categories:[category||'culture'],comment:String(comment||'').trim(),visited:false,
+      latitude:lat,longitude:lon,categories:[category||'culture'],comment:String(comment||'').trim(),visited:false,createdAt:Date.now(),
       alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}};
     places.push(place);
     try{save();render();return place;}catch(error){places.pop();throw error;}
