@@ -29,11 +29,11 @@ On peut aussi demander un build sans signature avec `npm run ios:build` ; pour s
 
 En cas de défaut de configuration : `npm run ios:requirements`. Ne jamais versionner `platforms/`, `plugins/`, `node_modules/` ni les identifiants de signature.
 
-## Partage Apple Plans (première étape : lien profond iOS)
+## Partage Apple Plans et Google Maps
 - L'app accepte désormais le schéma `nearbyplaces://import?url=...`, où `url` contient un lien Apple Plans encodé en URL.
 - Un raccourci iOS depuis la feuille de partage peut recevoir une URL, construire `nearbyplaces://import?url=<URL encodée>`, puis utiliser l'action **Ouvrir les URL**. L'application doit être installée avec le nouveau plugin et recompilée.
 - L'import accepte les URL complètes Apple Plans avec coordonnées (`ll`, `coordinate`, `daddr` ou `q` numérique). Une **tentative** de résolution HTTP des liens courts `maps.apple/p/...` et `maps.app.goo.gl/...` est effectuée, mais elle peut échouer dans WKWebView (CORS ou redirection réservée au navigateur). Aucun lieu n'est créé sans coordonnées vérifiées.
-- Une Share Extension est désormais **déclarée** via `cordova-plugin-openwith-ios`, mais son fonctionnement, sa signature et son affichage dans la feuille Partager restent à valider sur Mac/iPhone ; le raccourci iOS reste une solution de repli.
+- La Share Extension native affiche un formulaire Nom / Commentaire / Catégorie, puis place l'import dans une FIFO de l'App Group. Elle ne tente jamais d'ouvrir l'application depuis l'extension.
 - Les lieux restent dans `localStorage` avec les mêmes clés et sont immédiatement transmis au module de géofencing.
 - Ne pas supprimer l'app lors de la mise à jour. Sauvegarder les lieux personnels avec **Exporter JSON** avant toute opération risquée.
 
@@ -93,13 +93,13 @@ Pour éviter d'installer un plugin de Share Extension non vérifié dans le proj
 
 Ce flux affiche le raccourci dans Partager mais **pas l'app elle-même**. La réception des liens courts Google Maps reste à valider : le raccourci peut avoir besoin de l'action « Développer l'URL » avant l'encodage, suivant la version iOS. Les liens dépourvus de coordonnées ne peuvent pas être ajoutés sans géocodage. Une extension native reste un chantier distinct, nécessitant une cible Xcode, un App Group et une validation de signature sur Mac.
 
-## Extension native iOS (expérimentale, configuration Xcode requise)
+## Extension native iOS
 
-Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExtension` pour recevoir les URL/textes depuis la feuille Partager. `www/js/app.js` reçoit `cordova.openwith.addHandler` et transmet les URL au parseur existant. Le plugin utilise le schéma distinct `nearbyplacesshare` pour réveiller l'application, et le schéma existant `nearbyplaces` pour les liens ChatGPT.
+Les sources de l'extension sont versionnées dans `native/ios/`. Le hook `scripts/patch-share-extension.js` recrée ou met à jour le target `ShareExt` après chaque `cordova prepare ios`, copie les sources et entitlements, puis vérifie les références Xcode. Le plugin OpenWith ancien n'est plus utilisé.
 
-**Configuration indispensable sur Mac :** après `cordova prepare ios`, ouvrir `platforms/ios/App.xcworkspace` ; dans Signing & Capabilities, activer **App Groups** sur **App** et **ShareExtension** avec exactement `group.fr.cowprod.nearbyplaces.shareextension`, choisir la même équipe de signature, et vérifier des identifiants de bundle distincts (`fr.cowprod.nearbyplaces` et `fr.cowprod.nearbyplaces.shareextension`). Vérifier que la cible extension possède le même deployment target minimum que l'application. Le plugin n'automatise pas l'activation App Groups.
+L'application et l'extension utilisent exactement `group.fr.cowprod.nearbyplaces.shareextension`. L'extension écrit une file durable ; l'application ne retire un élément qu'après persistance locale réussie ou détection d'un doublon. Une erreur de résolution laisse l'élément en attente et affiche un message.
 
-**Limites :** ce plugin ancien n'est pas encore validé avec Cordova iOS 8.1.1 / iOS 26 sur iPhone ; la compilation et le lancement doivent être contrôlés dans Xcode. Les liens courts Google Maps nécessitent encore une résolution. Ne pas désinstaller l'app existante ni supprimer `platforms/ios` pour tenter une réparation sans sauvegarde.
+**Validation restante :** l'apparition et le fonctionnement réel dans Apple Plans et Google Maps doivent être contrôlés sur iPhone. Ne pas désinstaller l'app existante : les lieux restent dans le même `localStorage`.
 
 ## Robustesse géofencing et tests du 6 novembre 2026
 
@@ -120,7 +120,7 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 ## Partage iOS : démarrage à froid et champs de l'extension (contrôles hors appareil)
 
 - Un lien profond `nearbyplaces://import` reçu **après chargement de `app.js` mais avant `deviceready`** est placé dans une file mémoire (10 liens maximum), puis importé lorsque les plugins Cordova sont disponibles. Les liens successifs ne s'écrasent plus. L'app ne stocke pas ces liens dans le catalogue tant qu'ils ne sont pas validés et dédoublonnés.
-- L'extension de partage `cordova-plugin-openwith-ios` peut envoyer le **titre descriptif** dans `intent.text`, tandis que l'URL se trouve dans `intent.items[].data`. L'application privilégie les URL des items, ignore les chaînes sans lien et essaie l'URL suivante si la précédente est rejetée.
+- L'extension lit les représentations publiques URL et texte, préremplit le nom lorsque les métadonnées le permettent, puis conserve le lien brut pour sa résolution par l'application.
 - Les tests Node simulent `deviceready`, deux liens arrivant avant l'initialisation et plusieurs champs d'un intent de partage. Ils ne prouvent **ni** la réception d'un lien avant que la fonction JavaScript `handleOpenURL` soit installée **ni** la remise d'un intent après terminaison du processus iOS. Ces cas restent à vérifier dans Xcode/simulateur puis sur iPhone seulement avec autorisation.
 - Aucune modification des clés `localStorage`, des cibles Xcode, de `platforms/ios` ni des identifiants de signature n'est nécessaire pour cette correction JavaScript. L'installation de l'extension reste à valider sur Mac.
 
@@ -160,12 +160,10 @@ Le plugin `cordova-plugin-openwith-ios@2.0.0` ajoute une cible Xcode `ShareExten
 - Scénarios Node exécutés : réponse réseau ancienne arrivant après la plus récente ; ajout manuel concurrent pendant un import en attente. Il s'agit de tests JavaScript simulés, **pas** d'une validation WKWebView, Xcode, Core Location ou iPhone verrouillé.
 - La notification locale à +10 secondes et les liens Apple Plans natifs nécessitent toujours un build iOS, puis un essai réel sur iPhone uniquement sur instruction. Préserver `platforms/ios`, la signature Xcode et l'application installée ; ne pas désinstaller l'application pour effectuer une mise à jour.
 
-## Garde-fou de compatibilité ShareExtension (7 novembre 2026 JST)
+## Reconstruction ShareExtension (7 novembre 2026 JST)
 
-- Le hook versionné `scripts/patch-share-extension.js` s'exécute après `cordova prepare ios`, **uniquement si le fichier natif de l'extension existe**. Lorsqu'une version d'OpenWith contient déjà un gestionnaire `public.url` qui fournit `item.data`, le hook conserve ce fichier tel quel : il n'injecte pas un deuxième gestionnaire de liens.
-- Pour un ancien gabarit connu dépourvu de cette prise en charge, la transformation reste déterministe et idempotente. En cas de gabarit inconnu, elle refuse l'écriture plutôt que de risquer de corrompre la cible Xcode ; un échec de prepare doit être diagnostiqué sur Mac, **sans supprimer `platforms/ios`**.
-- `npm test` inclut désormais `tests/share-extension.patch.test.js` : cas URL déjà natif, transformation d'une fixture synthétique, idempotence et refus de gabarits inattendus, avec interception des accès disque. Ce contrôle est purement **Node/statique** : il ne démontre ni que le plugin publié correspond à la fixture, ni une compilation Objective-C, ni l'apparition de Nearby Places dans la feuille Partager d'Apple Plans.
-- Aucun changement des identifiants Cordova, des permissions, des clés `localStorage`, des entitlements Xcode ou des données sur iPhone. La validation de la notification à +10 secondes, écran verrouillé, demeure strictement **non réalisée sur appareil**.
+- Le hook versionné synchronise les quatre fichiers natifs, les entitlements, les versions de bundle et le target Xcode. Une préparation Cordova n'utilise plus un fichier généré comme source de vérité.
+- `npm test` refuse la présence de KVC privé, vérifie l'App Group commun, le formulaire, la FIFO et l'acquittement explicite. Le build Xcode vérifie ensuite la compilation Objective-C ; seul l'essai réel depuis la feuille Partager reste manuel.
 
 ## Robustesse des zones iOS — contrôle hors appareil du 7 novembre 2026
 

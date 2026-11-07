@@ -5,8 +5,8 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync('www/js/app.js', 'utf8');
 function harness(native = false, earlyURLs = [], controlledFetch = false, seedLocal = null) {
-  const store = new Map(), elements = new Map(), listeners = new Map(), hooks = {};
-  const nativeResolutions=[], networkCalls=[], nativeTimers=[];
+  const store = new Map(), elements = new Map(), listeners = new Map();
+  const nativeResolutions=[], networkCalls=[], nativeTimers=[], nativeQueue=[], nativeAcks=[];
   let confirmAllowed = false;
   function element() {
     return { value:'', textContent:'', style:{}, children:[],
@@ -25,7 +25,13 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     removeItem(key){store.delete(key);}
   };
   if(seedLocal!==null)store.set('nearby-places-v1',seedLocal);
-  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:{resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/neverCompletes'))return;if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}}},document,localStorage,URL,URLSearchParams,AbortController,
+  const resolver={resolve(url,success,error){nativeResolutions.push(String(url));if(String(url).includes('/p/neverCompletes'))return;if(String(url).includes('/p/okRedirect'))success({httpStatus:200,url:'https://maps.apple.com/?ll=35.720%2C139.790&name=Resolved'});else if(String(url).includes('/p/htmlOnly'))success({httpStatus:200,url:'https://maps.apple/p/htmlOnly',htmlMapURL:'https://maps.apple.com/?ll=35.722%2C139.792&name=Recovered'});else if(String(url).includes('/p/untrusted'))success({httpStatus:200,url:'https://evil.example/?ll=35.1,139.1',htmlMapURL:'https://evil.example/?ll=35.2,139.2'});else if(String(url).includes('/p/nullResult'))success(null);else if(String(url).includes('/p/httpFailure'))success({httpStatus:404,url:'https://maps.apple.com/?ll=35.733,139.793'});else error('Réseau natif indisponible');}};
+  if(native){
+    resolver.readShared=success=>success(nativeQueue[0]||{});
+    resolver.ackShared=(shareID,success)=>{const index=nativeQueue.findIndex(item=>item.shareID===shareID);if(index>=0)nativeQueue.splice(index,1);nativeAcks.push(shareID);success(true);};
+    resolver.syncCategories=(categories,success)=>success(true);
+  }
+  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:resolver},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0){fn();return 0;}nativeTimers.push({fn,ms,cleared:false});return nativeTimers.length;},
     clearTimeout(id){if(nativeTimers[id-1])nativeTimers[id-1].cleared=true;},
     fetch(url){
@@ -34,10 +40,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
       if(String(url).includes('maps.apple/p/') || String(url).includes('maps.app.goo.gl/')) return Promise.reject(new Error('CORS: lien court inaccessible'));
       return new Promise(()=>{});
     },Promise,Date,Math,Number,Blob,console,Set,Map};
-  if(native)context.window.cordova={openwith:{
-    init(success){if(success)success();},
-    addHandler(callback){hooks.share=callback;}
-  }};
+  if(native)context.window.cordova={};
   vm.runInNewContext(fs.readFileSync('www/js/deeplink-bootstrap.js','utf8'),context,{filename:'www/js/deeplink-bootstrap.js'});
   earlyURLs.forEach(url=>context.window.handleOpenURL(url));
   vm.runInNewContext(source,context,{filename:'www/js/app.js'});
@@ -50,14 +53,14 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     return JSON.parse(store.get('nearby-places-v1')||'[]');
   }
   function status(){return document.getElementById('status').textContent;}
-  return {importURL,status,store,window:context.window,nativeResolutions,networkCalls,
+  return {importURL,status,store,window:context.window,nativeResolutions,networkCalls,nativeQueue,nativeAcks,
     expireNativeResolvers(){nativeTimers.forEach(timer=>{if(timer.ms===22000&&!timer.cleared){timer.cleared=true;timer.fn();}});},
     resolveFetch(index,data){networkCalls[index].resolve({ok:true,json(){return Promise.resolve(data)}});},
     refresh(){document.getElementById('refresh').onclick();},
     manualAdd(){document.getElementById('add').onclick();},
     setConfirm(value){confirmAllowed=value;},
     fire(event){(listeners.get(event)||[]).forEach(callback=>callback());},
-    share(intent){assert.equal(typeof hooks.share,'function','handler Share Extension non déclaré');hooks.share(intent);},
+    share(intent){nativeQueue.push(intent);(listeners.get('resume')||[]).forEach(callback=>callback());},
     confirmImport(){document.getElementById('import-confirm').onclick();},
     cancelImport(){document.getElementById('import-cancel').onclick();},
     input(id,value){document.getElementById(id).value=value;},
@@ -358,19 +361,28 @@ assert.equal(cold.formOpen(),true,'second lien attend confirmation');
 cold.confirmImport();
 let queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
 assert.deepEqual(queued.map(p=>p.name),['Premier','Second'],'deux liens profonds confirmés dans l’ordre');
-cold.share({text:'Titre de page sans URL',items:[{data:'https://maps.apple.com/?ll=35.803,139.803&name=Depuis+Partager',text:'Fiche Plans'}]});
-await new Promise(resolve=>setImmediate(resolve));
-cold.confirmImport();
+  cold.share({schemaVersion:1,shareID:'share-1',nearbyURL:'https://maps.apple.com/?ll=35.803,139.803&name=Ignoré',nearbyName:'Depuis Partager',nearbyComment:'Note native',nearbyCategory:'occasion'});
+  await new Promise(resolve=>setImmediate(resolve));
+  await new Promise(resolve=>setImmediate(resolve));
 queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
-assert.equal(queued.length,3,'le titre du partage ne masque pas l’URL de item.data');
+  assert.equal(queued.length,3,'le formulaire natif confirmé est importé automatiquement');
 assert.equal(queued[2].name,'Depuis Partager');
-cold.share({text:'Encore un titre',items:[{data:'https://evil.example/invalid'},{data:'https://maps.apple.com/?ll=35.804,139.804&name=Repli'}]});
+  assert.equal(queued[2].comment,'Note native');
+  assert.deepEqual(Array.from(queued[2].categories),['occasion']);
+  assert.deepEqual(cold.nativeAcks,['share-1'],'acquittement seulement après persistance locale');
+  assert.equal(cold.nativeQueue.length,0,'élément acquitté retiré de la FIFO');
+  cold.share({schemaVersion:1,shareID:'share-duplicate',nearbyURL:'https://maps.apple.com/?ll=35.803,139.803',nearbyName:'Doublon',nearbyCategory:'culture'});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(JSON.parse(cold.store.get('nearby-places-v1')).length,3,'relecture de la file ne duplique pas un lieu existant');
+  assert.equal(cold.nativeAcks.includes('share-duplicate'),true,'doublon reconnu puis acquitté');
+  cold.share({schemaVersion:1,shareID:'share-bad',nearbyURL:'https://evil.example/invalid',nearbyName:'Interdit',nearbyCategory:'culture'});
 await new Promise(resolve=>setImmediate(resolve));
-cold.confirmImport();
 queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
-assert.equal(queued.length,4,'un candidat rejeté n’empêche pas la lecture du suivant');
-assert.equal(queued[3].name,'Repli');
-console.log('PASS partage iOS (simulé) : attente deviceready, FIFO deep links, priorités item.data et repli sans perte');
+  assert.equal(queued.length,3,'un partage invalide ne crée aucun lieu');
+  assert.equal(cold.nativeQueue.length,1,'un échec de résolution reste durablement en attente');
+  assert.equal(cold.nativeAcks.includes('share-bad'),false,'aucun acquittement en cas d’échec');
+  assert.match(cold.status(),/en attente/,'l’échec conservé est visible');
+  console.log('PASS partage iOS (simulé) : formulaire natif, persistance avant acquittement, doublons évités et échec conservé');
 console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native/HTTP/NULL, reset confirmé');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
