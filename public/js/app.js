@@ -1,6 +1,10 @@
 (function () {
   'use strict';
   var KEY = 'nearby-places-v1', CATALOGUE_KEY = 'nearby-places-catalogue-v1', places = [], loadRevision = 0;
+  var NATIVE_CATEGORIES=[
+    {id:'culture',name:'Culture'},{id:'resto',name:'Restaurant'},{id:'musique',name:'Musique'},
+    {id:'transport',name:'Transport'},{id:'occasion',name:'Occasion'},{id:'modelisme',name:'Modélisme'}
+  ];
   var REMOTE_URL = 'https://raw.githubusercontent.com/Cowprod/nearby-places/main/data/places.sample.json';
   var $ = function (id) { return document.getElementById(id); };
   function validPosition(lat, lon) { return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; }
@@ -157,7 +161,8 @@
     var place={id:'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),name:name,
       latitude:lat,longitude:lon,categories:[category||'culture'],comment:String(comment||'').trim(),visited:false,
       alert:{enabled:true,walkingMinutes:15,cooldownHours:24},source:{type:'manual'}};
-    places.push(place);save();render();return place;
+    places.push(place);
+    try{save();render();return place;}catch(error){places.pop();throw error;}
   }
   function parseMapsLink(raw,depth){
     if((depth||0)>4)throw Error('Lien d’import imbriqué trop profondément');
@@ -181,8 +186,8 @@
         ? (url.searchParams.get('destination')||url.searchParams.get('daddr'))
         : (url.searchParams.get('coordinate')||url.searchParams.get('daddr')||url.searchParams.get('ll')||url.searchParams.get('q'));
       name=url.searchParams.get('name')||(directions?'Destination Apple Plans':url.searchParams.get('q'))||'Lieu Apple Plans';
-    }else if(url.protocol==='https:' && (host==='www.google.com'||host==='google.com'||host==='maps.google.com'||host==='maps.app.goo.gl')){
-      if(host==='maps.app.goo.gl')throw Error('Lien Google Maps raccourci : ouvrir dans le navigateur et copier l’URL complète.');
+    }else if(url.protocol==='https:' && (host==='maps.app.goo.gl'||host==='goo.gl'||['google.com','www.google.com','maps.google.com','google.co.jp','www.google.co.jp','maps.google.co.jp'].includes(host))){
+      if(host==='maps.app.goo.gl'||host==='goo.gl')throw Error('Lien Google Maps raccourci : résolution nécessaire');
       var at=url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
       var marker=url.pathname.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
       var query=url.searchParams.get('q')||url.searchParams.get('query');
@@ -219,7 +224,7 @@
         });
       }
     }
-    var match=String(value||'').match(/https:\/\/(?:maps\.apple\/p\/|maps\.app\.goo\.gl\/)[^\s<>]+/i);
+    var match=String(value||'').match(/https:\/\/(?:maps\.apple\/p\/|maps\.app\.goo\.gl\/|goo\.gl\/maps\/)[^\s<>]+/i);
     if(!match){trace('import-url','URL directe');return Promise.resolve(value);}
     // Short URLs copied from shared prose may end with punctuation outside the URL.
     var shortLink=match[0].replace(/[),.;]+$/,'');
@@ -337,37 +342,61 @@
   }
   document.addEventListener('deviceready',function(){sharedReady=true;flushPendingSharedURLs();},{once:true});
   document.addEventListener('resume',flushPendingSharedURLs);
-  function registerNativeShare(){
-    var plugin=window.cordova && window.cordova.openwith;
-    if(!plugin){trace('share-init','plugin absent');status('Partage natif indisponible : extension non installée');return;}
-    try{
-      trace('share-init','initialisation');
-      plugin.init(function(){trace('share-init','plugin prêt');console.log('Share Extension prête');},function(error){trace('share-error','init '+String(error));console.warn('Share Extension',error);});
-      plugin.addHandler(function(intent){
-        trace('share-intent','reçu : '+JSON.stringify(intent||{}).slice(0,500));
-        var values=[];
-        function candidate(value){
-          if(typeof value!=='string' || !/(?:https:\/\/|nearbyplaces:\/\/)/i.test(value))return;
-          if(values.length<10 && values.indexOf(value)===-1)values.push(value);
-        }
-        // The share description (intent.text) can be only a page title; prefer item.data.
-        if(intent && Array.isArray(intent.items))intent.items.forEach(function(item){
-          if(item){candidate(item.data);candidate(item.text);}
-        });
-        if(intent)candidate(intent.text);
-        function tryCandidate(index){
-          if(index>=values.length){
-            trace('share-error','aucune URL Maps exploitable');
-            status('Partage reçu, mais aucune URL exploitable avec coordonnées');
-            return Promise.resolve(false);
-          }
-          return receiveSharedURL(values[index]).then(function(ok){return ok?true:tryCandidate(index+1);});
-        }
-        tryCandidate(0);
-      });
-    }catch(error){trace('share-error','initialisation '+String(error));status('Initialisation partage : '+String(error));}
+  // The extension writes a durable FIFO. A record is acknowledged only after
+  // it has been persisted locally (or identified as an existing coordinate).
+  var nativeShareBusy=false;
+  function ackNativeShare(resolver,shareID){
+    return new Promise(function(resolve,reject){
+      resolver.ackShared(shareID,resolve,function(error){reject(Error(String(error)));});
+    });
   }
-  document.addEventListener('deviceready',registerNativeShare,{once:true});
+  function persistNativeShare(resolver,intent){
+    if(!intent || typeof intent.shareID!=='string' || !intent.shareID || typeof intent.nearbyURL!=='string' || !intent.nearbyURL){
+      return Promise.reject(Error('Enregistrement partagé incomplet ; il reste dans la file'));
+    }
+    var name=String(intent.nearbyName||'').trim();
+    if(!name)return Promise.reject(Error('Nom partagé manquant ; l’import reste en attente'));
+    var category=String(intent.nearbyCategory||'culture').trim().toLowerCase();
+    if(!NATIVE_CATEGORIES.some(function(item){return item.id===category;}))category='culture';
+    return resolveMapsURL(intent.nearbyURL).then(function(resolved){
+      var parsed=parseMapsLink(resolved);
+      var duplicate=places.some(function(p){return p && validPosition(p.latitude,p.longitude) &&
+        Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;});
+      if(!duplicate)addManual(name,parsed.latitude,parsed.longitude,category,String(intent.nearbyComment||''));
+      return ackNativeShare(resolver,intent.shareID).then(function(){
+        trace('share-pending',duplicate?'doublon acquitté':'enregistré '+name);
+        status(duplicate?'Ce lieu partagé existe déjà':'Lieu partagé enregistré localement');
+        return true;
+      });
+    });
+  }
+  function importPendingNativeShare(){
+    var resolver=window.NearbyResolver;
+    if(nativeShareBusy || !resolver || typeof resolver.readShared!=='function' || typeof resolver.ackShared!=='function')return;
+    nativeShareBusy=true;
+    resolver.readShared(function(intent){
+      if(!intent || !intent.shareID){nativeShareBusy=false;return;}
+      trace('share-pending','App Group : '+String(intent.nearbyURL||'').slice(0,180));
+      persistNativeShare(resolver,intent).then(function(){
+        nativeShareBusy=false;
+        importPendingNativeShare();
+      }).catch(function(error){
+        nativeShareBusy=false;
+        trace('share-error','import conservé : '+String(error));
+        status('Import partagé en attente : '+error.message);
+      });
+    },function(error){nativeShareBusy=false;trace('share-error','lecture App Group : '+String(error));});
+  }
+  function initializeNativeShare(){
+    var resolver=window.NearbyResolver;
+    if(!resolver){trace('share-init','résolveur absent');return;}
+    if(typeof resolver.syncCategories==='function')resolver.syncCategories(NATIVE_CATEGORIES,function(){
+      trace('share-init','catégories synchronisées');
+    },function(error){trace('share-error','catégories : '+String(error));});
+    importPendingNativeShare();
+  }
+  document.addEventListener('deviceready',initializeNativeShare,{once:true});
+  document.addEventListener('resume',importPendingNativeShare);
   $('maps-add').onclick=function(){
     var value=$('maps-url').value;
     trace('import-click','bouton pressé : '+String(value).slice(0,250));

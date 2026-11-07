@@ -1,425 +1,343 @@
-//
-//  ShareViewController.m
-//  OpenWith - Share Extension
-//
-
-//
-// The MIT License (MIT)
-//
-// Copyright (c) 2017 Jean-Christophe Hoelt
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-//
-
-#import <UIKit/UIKit.h>
-#import <Social/Social.h>
 #import "ShareViewController.h"
-#import <MobileCoreServices/MobileCoreServices.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-/*
- * Add base64 export to NSData
- */
-@interface NSData (Base64)
-- (NSString*)convertToBase64;
+static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
+static NSString * const NearbyQueueKey = @"nearbyShareQueue";
+static NSString * const NearbyCategoriesKey = @"nearbyCategories";
+static const NSUInteger NearbyQueueLimit = 50;
+
+@interface ShareViewController ()
+@property(nonatomic, strong) UIScrollView *scrollView;
+@property(nonatomic, strong) NSLayoutConstraint *scrollBottomConstraint;
+@property(nonatomic, strong) UIActivityIndicatorView *activityIndicator;
+@property(nonatomic, strong) UILabel *statusLabel;
+@property(nonatomic, strong) UILabel *urlLabel;
+@property(nonatomic, strong) UITextField *nameField;
+@property(nonatomic, strong) UITextView *commentView;
+@property(nonatomic, strong) UIPickerView *categoryPicker;
+@property(nonatomic, strong) UIButton *saveButton;
+@property(nonatomic, copy) NSArray<NSDictionary *> *categories;
+@property(nonatomic, copy) NSString *sharedURL;
+@property(nonatomic, strong) NSMutableArray<NSString *> *sharedTexts;
+@property(nonatomic, assign) BOOL startedLoading;
 @end
-
-@implementation NSData (Base64)
-- (NSString*)convertToBase64 {
-    const uint8_t* input = (const uint8_t*)[self bytes];
-    NSInteger length = [self length];
-
-    static char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-
-    NSMutableData* data = [NSMutableData dataWithLength:((length + 2) / 3) * 4];
-    uint8_t* output = (uint8_t*)data.mutableBytes;
-
-    NSInteger i;
-    for (i=0; i < length; i += 3) {
-        NSInteger value = 0;
-        NSInteger j;
-        for (j = i; j < (i + 3); j++) {
-            value <<= 8;
-
-            if (j < length) {
-                value |= (0xFF & input[j]);
-            }
-        }
-
-        NSInteger theIndex = (i / 3) * 4;
-        output[theIndex + 0] =                    table[(value >> 18) & 0x3F];
-        output[theIndex + 1] =                    table[(value >> 12) & 0x3F];
-        output[theIndex + 2] = (i + 1) < length ? table[(value >> 6)  & 0x3F] : '=';
-        output[theIndex + 3] = (i + 2) < length ? table[(value >> 0)  & 0x3F] : '=';
-    }
-
-    NSString *ret = [[NSString alloc] initWithData:data encoding:NSASCIIStringEncoding];
-#if ARC_DISABLED
-    [ret autorelease];
-#endif
-    return ret;
-}
-@end
-
-@interface ShareViewController : SLComposeServiceViewController <UIAlertViewDelegate> {
-    int _verbosityLevel;
-    NSUserDefaults *_userDefaults;
-    NSString *_backURL;
-
-    //- (void)sendResults
-}
-@property (nonatomic) int verbosityLevel;
-@property (nonatomic,retain) NSUserDefaults *userDefaults;
-@property (nonatomic,retain) NSString *backURL;
-@end
-
-/*
- * Constants
- */
-
-#define VERBOSITY_DEBUG  0
-#define VERBOSITY_INFO  10
-#define VERBOSITY_WARN  20
-#define VERBOSITY_ERROR 30
 
 @implementation ShareViewController
 
-@synthesize verbosityLevel = _verbosityLevel;
-@synthesize userDefaults = _userDefaults;
-@synthesize backURL = _backURL;
-
-- (void) log:(int)level message:(NSString*)message {
-    if (level >= self.verbosityLevel) {
-        NSLog(@"[ShareViewController.m]%@", message);
-    }
-}
-- (void) debug:(NSString*)message { [self log:VERBOSITY_DEBUG message:message]; }
-- (void) info:(NSString*)message { [self log:VERBOSITY_INFO message:message]; }
-- (void) warn:(NSString*)message { [self log:VERBOSITY_WARN message:message]; }
-- (void) error:(NSString*)message { [self log:VERBOSITY_ERROR message:message]; }
-
-- (void) setup {
-    self.userDefaults = [[NSUserDefaults alloc] initWithSuiteName:SHAREEXT_GROUP_IDENTIFIER];
-    self.verbosityLevel = [self.userDefaults integerForKey:@"verbosityLevel"];
-    [self debug:@"[setup]"];
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.sharedTexts = [NSMutableArray array];
+    self.categories = [self loadCategories];
+    [self buildForm];
+    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+    [center addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
+    [center addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
 }
 
-- (BOOL) isContentValid {
-    return YES;
-}
-
-- (void) openURL:(nonnull NSURL *)url {
-    SEL selector = NSSelectorFromString(@"openURL:");
-    UIResponder* responder = self;
-    while ((responder = [responder nextResponder]) != nil) {
-        NSLog(@"responder = %@", responder);
-        if([responder respondsToSelector:selector] == true) {
-            NSMethodSignature *methodSignature = [responder methodSignatureForSelector:selector];
-            NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:methodSignature];
-
-            [invocation setTarget: responder];
-            [invocation setSelector: selector];
-            [invocation setArgument: &url atIndex: 2];
-
-            [invocation invoke];
-            break;
-        }
-    }
-}
-- (void) viewDidAppear:(BOOL)animated {
+- (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    [self.view endEditing:YES];
+    if (self.startedLoading) return;
+    self.startedLoading = YES;
+    [self loadSharedContent];
+}
 
-    [self setup];
-    [self debug:@"[viewDidAppear]"];
+- (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
 
-    if (self.extensionContext.inputItems.count == 0) {
-        [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:1 userInfo:nil]];
+- (NSArray<NSDictionary *> *)canonicalCategories {
+    return @[
+        @{ @"id": @"culture", @"name": @"Culture" },
+        @{ @"id": @"resto", @"name": @"Restaurant" },
+        @{ @"id": @"musique", @"name": @"Musique" },
+        @{ @"id": @"transport", @"name": @"Transport" },
+        @{ @"id": @"occasion", @"name": @"Occasion" },
+        @{ @"id": @"modelisme", @"name": @"Modélisme" }
+    ];
+}
+
+- (NSArray<NSDictionary *> *)loadCategories {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:NearbyAppGroup];
+    id stored = [defaults objectForKey:NearbyCategoriesKey];
+    if (![stored isKindOfClass:NSArray.class] || [(NSArray *)stored count] == 0) return [self canonicalCategories];
+    NSMutableArray *valid = [NSMutableArray array];
+    for (id item in (NSArray *)stored) {
+        if (![item isKindOfClass:NSDictionary.class]) continue;
+        NSString *identifier = [item[@"id"] isKindOfClass:NSString.class] ? item[@"id"] : nil;
+        NSString *name = [item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : nil;
+        if (identifier.length && name.length) [valid addObject:@{ @"id": identifier, @"name": name }];
+    }
+    return valid.count ? valid : [self canonicalCategories];
+}
+
+- (UILabel *)fieldLabel:(NSString *)text {
+    UILabel *label = [[UILabel alloc] init];
+    label.text = text;
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    return label;
+}
+
+- (void)buildForm {
+    self.scrollView = [[UIScrollView alloc] init];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    [self.view addSubview:self.scrollView];
+    self.scrollBottomConstraint = [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        self.scrollBottomConstraint
+    ]];
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 10;
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollView addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:18],
+        [stack.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:20],
+        [stack.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor constant:-20],
+        [stack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-18]
+    ]];
+    UILabel *title = [[UILabel alloc] init];
+    title.text = @"Ajouter à Nearby Places";
+    title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
+    title.adjustsFontForContentSizeCategory = YES;
+    [stack addArrangedSubview:title];
+    self.activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    [self.activityIndicator startAnimating];
+    [stack addArrangedSubview:self.activityIndicator];
+    self.statusLabel = [[UILabel alloc] init];
+    self.statusLabel.text = @"Lecture du lieu partagé…";
+    self.statusLabel.numberOfLines = 0;
+    self.statusLabel.textColor = UIColor.secondaryLabelColor;
+    [stack addArrangedSubview:self.statusLabel];
+    self.urlLabel = [[UILabel alloc] init];
+    self.urlLabel.numberOfLines = 2;
+    self.urlLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    self.urlLabel.textColor = UIColor.secondaryLabelColor;
+    self.urlLabel.hidden = YES;
+    [stack addArrangedSubview:self.urlLabel];
+    [stack addArrangedSubview:[self fieldLabel:@"Nom *"]];
+    self.nameField = [[UITextField alloc] init];
+    self.nameField.placeholder = @"Nom du lieu";
+    self.nameField.borderStyle = UITextBorderStyleRoundedRect;
+    self.nameField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    self.nameField.returnKeyType = UIReturnKeyDone;
+    self.nameField.enabled = NO;
+    [self.nameField addTarget:self action:@selector(dismissKeyboard) forControlEvents:UIControlEventEditingDidEndOnExit];
+    [stack addArrangedSubview:self.nameField];
+    [stack addArrangedSubview:[self fieldLabel:@"Commentaire"]];
+    self.commentView = [[UITextView alloc] init];
+    self.commentView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    self.commentView.layer.borderColor = UIColor.separatorColor.CGColor;
+    self.commentView.layer.borderWidth = 1;
+    self.commentView.layer.cornerRadius = 8;
+    self.commentView.editable = NO;
+    [self.commentView.heightAnchor constraintEqualToConstant:88].active = YES;
+    [stack addArrangedSubview:self.commentView];
+    [stack addArrangedSubview:[self fieldLabel:@"Catégorie"]];
+    self.categoryPicker = [[UIPickerView alloc] init];
+    self.categoryPicker.dataSource = self;
+    self.categoryPicker.delegate = self;
+    self.categoryPicker.userInteractionEnabled = NO;
+    [self.categoryPicker.heightAnchor constraintEqualToConstant:132].active = YES;
+    [stack addArrangedSubview:self.categoryPicker];
+    UIStackView *buttons = [[UIStackView alloc] init];
+    buttons.axis = UILayoutConstraintAxisHorizontal;
+    buttons.spacing = 12;
+    buttons.distribution = UIStackViewDistributionFillEqually;
+    UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
+    [cancel setTitle:@"Annuler" forState:UIControlStateNormal];
+    [cancel addTarget:self action:@selector(cancel) forControlEvents:UIControlEventTouchUpInside];
+    [buttons addArrangedSubview:cancel];
+    self.saveButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.saveButton setTitle:@"Enregistrer" forState:UIControlStateNormal];
+    self.saveButton.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    self.saveButton.enabled = NO;
+    [self.saveButton addTarget:self action:@selector(save) forControlEvents:UIControlEventTouchUpInside];
+    [buttons addArrangedSubview:self.saveButton];
+    [stack addArrangedSubview:buttons];
+    self.preferredContentSize = CGSizeMake(0, 570);
+}
+
+- (void)dismissKeyboard { [self.view endEditing:YES]; }
+
+- (void)keyboardWillChange:(NSNotification *)notification {
+    CGRect keyboard = [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    CGRect local = [self.view convertRect:keyboard fromView:nil];
+    CGFloat overlap = MAX(0, CGRectGetMaxY(self.view.bounds) - CGRectGetMinY(local));
+    self.scrollBottomConstraint.constant = -overlap;
+    [self animateKeyboard:notification];
+}
+
+- (void)keyboardWillHide:(NSNotification *)notification {
+    self.scrollBottomConstraint.constant = 0;
+    [self animateKeyboard:notification];
+}
+
+- (void)animateKeyboard:(NSNotification *)notification {
+    NSTimeInterval duration = [notification.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    [UIView animateWithDuration:duration animations:^{ [self.view layoutIfNeeded]; }];
+}
+
+- (void)loadSharedContent {
+    NSArray *inputItems = self.extensionContext.inputItems;
+    if (inputItems.count == 0) {
+        [self showError:@"Aucune donnée n’a été fournie par l’application source."];
         return;
     }
-    __block int remainingAttachments = ((NSExtensionItem*)self.extensionContext.inputItems[0]).attachments.count;
-    if (remainingAttachments == 0) {
-        [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:2 userInfo:nil]];
-        return;
-    }
-    __block NSMutableArray *items = [[NSMutableArray alloc] init];
-    __block NSDictionary *results = @{
-        @"text" : self.contentText ?: @"",
-        @"backURL": self.backURL != nil ? self.backURL : @"",
-        @"items": items,
-    };
-
-    for (NSItemProvider* itemProvider in ((NSExtensionItem*)self.extensionContext.inputItems[0]).attachments) {
-        [self debug:[NSString stringWithFormat:@"item provider registered indentifiers = %@", itemProvider.registeredTypeIdentifiers]];
-
-        // Apple Plans supplies public.url, sometimes alongside public.text.
-        if ([itemProvider hasItemConformingToTypeIdentifier:@"public.url"]) {
-            [itemProvider loadItemForTypeIdentifier:@"public.url" options:nil completionHandler:^(id item, NSError *error) {
-                NSString *value = [item isKindOfClass:[NSURL class]] ? [(NSURL *)item absoluteString] :
-                                  ([item isKindOfClass:[NSString class]] ? (NSString *)item : nil);
-                if (value.length) {
-                    @synchronized(items) {
-                        [items addObject:@{@"text": self.contentText ?: @"", @"data": value,
-                                           @"uti": @"public.url", @"utis": itemProvider.registeredTypeIdentifiers ?: @[],
-                                           @"name": @"", @"type": @"text/uri-list"}];
-                    }
-                }
-                if (__sync_sub_and_fetch(&remainingAttachments, 1) == 0) [self sendResults:results];
-            }];
-        }
-        // TEXT case
-        else if ([itemProvider hasItemConformingToTypeIdentifier:@"public.text"]) {
-            [itemProvider loadItemForTypeIdentifier:@"public.text" options:nil completionHandler: ^(NSString* item, NSError *error) {
-                // Keep shared attachment mutations serialized on concurrent provider callbacks.
-                __sync_sub_and_fetch(&remainingAttachments, 1);
-                [self debug:[NSString stringWithFormat:@"public.text  = %@", item]];
-                NSString *uti = @"public.plain-text";
-                NSDictionary *dict = @{
-                    @"text" : self.contentText ?: @"",
-                    @"data" : item ?: @"",
-                    @"uti": uti,
-                    @"utis": itemProvider.registeredTypeIdentifiers ?: @[],
-                    @"name": @"",
-                    @"type": [self mimeTypeFromUti:uti],
-                };
-                @synchronized(items) { [items addObject:dict]; }
-                if (remainingAttachments == 0) {
-                    [self sendResults:results];
-                }
-            }];
-        }
-
-        // IMAGE case
-        else if ([itemProvider hasItemConformingToTypeIdentifier:@"public.image"]) {
-            [itemProvider loadItemForTypeIdentifier:@"public.image" options:nil completionHandler: ^(NSURL *item, NSError *error) {
-                __sync_sub_and_fetch(&remainingAttachments, 1);
-                if (item != nil) {
-                    [self debug:[NSString stringWithFormat:@"public.image  = %@", item]];
-                    NSString *uti = @"public.image";
-                    NSString *imageName = [[item path] lastPathComponent];
-                    NSDictionary *dict = @{
-                        @"text" : self.contentText ?: @"",
-                        @"data" : item.absoluteString,
-                        @"uti": uti,
-                        @"utis": itemProvider.registeredTypeIdentifiers ?: @[],
-                        @"name": imageName,
-                        @"type": [self mimeTypeFromUti:uti],
-                    };
-                    @synchronized(items) { [items addObject:dict]; }
-                }
-
-                if (remainingAttachments == 0) {
-                    [self sendResults:results];
-                }
-            }];
-        }
-
-        // Other files
-        else {
-            NSString *uti = itemProvider.registeredTypeIdentifiers.firstObject;
-            if (uti == nil) {
-                if (__sync_sub_and_fetch(&remainingAttachments, 1) == 0) [self sendResults:results];
-                continue;
-            }
-            [itemProvider loadItemForTypeIdentifier:uti options:nil completionHandler: ^(id<NSSecureCoding> item, NSError *error) {
-
-                NSString *baseUti = nil;
-                if (
-                    UTTypeConformsTo((__bridge CFStringRef _Nonnull)uti, kUTTypeAudiovisualContent)
-                    ) {
-                    baseUti = @"public.audiovisual-content";
-                    // @todo: make resize
-                }
-                else if ( UTTypeConformsTo((__bridge CFStringRef _Nonnull)uti,kUTTypeAudio)) {
-                    baseUti = @"public.audio";
-                }
-                else if ( UTTypeConformsTo((__bridge CFStringRef _Nonnull)uti,kUTTypeURL)) {
-                    baseUti = @"public.url";
-                }
-                else if ( UTTypeConformsTo((__bridge CFStringRef _Nonnull)uti,kUTTypeFileURL)) {
-                    baseUti = @"public.file-url";
-                }
-                else {
-                    baseUti = uti;
-                }
-                [self debug:[NSString stringWithFormat:@"%@ = %@", baseUti, item]];
-
-                NSURL *fileUrl = [item isKindOfClass:[NSURL class]] ? (NSURL *)item : nil;
-
-                if (fileUrl != nil) {
-                    NSString *data = fileUrl.absoluteString;
-                    NSString *suggestedName = fileUrl.lastPathComponent;
-                    NSDictionary *dict = @{
-                        @"text" : self.contentText ?: @"",
-                        @"data" : data,
-                        @"uti"  : baseUti,
-                        @"utis" : itemProvider.registeredTypeIdentifiers,
-                        @"name" : suggestedName,
-                        @"type" : [self mimeTypeFromUti:uti],
-                    };
-                    @synchronized(items) { [items addObject:dict]; }
-                }
-
-                __sync_sub_and_fetch(&remainingAttachments, 1);
-                if (remainingAttachments == 0) {
-                    [self sendResults:results];
-                }
-            }];
+    dispatch_group_t group = dispatch_group_create();
+    for (id object in inputItems) {
+        if (![object isKindOfClass:NSExtensionItem.class]) continue;
+        NSExtensionItem *item = object;
+        if (item.attributedTitle.string.length) [self.sharedTexts addObject:item.attributedTitle.string];
+        if (item.attributedContentText.string.length) [self.sharedTexts addObject:item.attributedContentText.string];
+        for (NSItemProvider *provider in item.attachments ?: @[]) {
+            [self loadType:UTTypeURL.identifier provider:provider group:group];
+            [self loadType:UTTypeText.identifier provider:provider group:group];
         }
     }
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{ [self finishLoading]; });
 }
 
-- (void) sendResults: (NSDictionary*)results {
-    // Share extensions cannot reliably launch their containing app.
-    // Present an explicit confirmation and persist to the shared App Group.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.presentedViewController != nil) return;
-        NSArray *items = results[@"items"];
-        NSString *sharedURL = @"";
-        for (NSDictionary *item in items) {
-            NSString *candidate = item[@"data"];
-            if ([candidate isKindOfClass:[NSString class]] &&
-                ([candidate hasPrefix:@"https://"] || [candidate hasPrefix:@"http://"])) {
-                sharedURL = candidate;
-                break;
+- (void)loadType:(NSString *)type provider:(NSItemProvider *)provider group:(dispatch_group_t)group {
+    if (![provider hasItemConformingToTypeIdentifier:type]) return;
+    dispatch_group_enter(group);
+    [provider loadItemForTypeIdentifier:type options:nil completionHandler:^(id<NSSecureCoding> value, NSError *error) {
+        if (!error && value) {
+            id object = (id)value;
+            @synchronized (self) {
+                if ([object isKindOfClass:NSURL.class]) {
+                    NSString *candidate = [(NSURL *)object absoluteString];
+                    if (!self.sharedURL.length && [self isSupportedMapsURL:candidate]) self.sharedURL = candidate;
+                } else if ([object isKindOfClass:NSString.class]) {
+                    NSString *text = (NSString *)object;
+                    if (text.length) [self.sharedTexts addObject:text];
+                    NSString *candidate = [self firstSupportedURLInText:text];
+                    if (!self.sharedURL.length && candidate.length) self.sharedURL = candidate;
+                }
             }
         }
-        if (sharedURL.length == 0) {
-            UIAlertController *error = [UIAlertController alertControllerWithTitle:@"Lien introuvable"
-                message:@"Plans n'a fourni aucune adresse exploitable."
-                preferredStyle:UIAlertControllerStyleAlert];
-            [error addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
-                [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:3 userInfo:nil]];
-            }]];
-            [self presentViewController:error animated:YES completion:nil];
-            return;
-        }
-        NSString *urlToSave = sharedURL;
-        UIAlertController *dialog = [UIAlertController alertControllerWithTitle:@"Ajouter à Nearby Places"
-            message:@"Confirmez les informations. Ouvrez ensuite Nearby Places pour importer ce lieu."
-            preferredStyle:UIAlertControllerStyleAlert];
-        [dialog addTextFieldWithConfigurationHandler:^(UITextField *field) {
-            field.placeholder = @"Titre du lieu";
-            field.text = self.contentText ?: @"";
-        }];
-        [dialog addTextFieldWithConfigurationHandler:^(UITextField *field) {
-            field.placeholder = @"Commentaire (facultatif)";
-        }];
-        [dialog addTextFieldWithConfigurationHandler:^(UITextField *field) {
-            field.placeholder = @"Catégorie (ex. culture, restaurant)";
-            field.text = @"culture";
-        }];
-        [dialog addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
-            [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:4 userInfo:nil]];
-        }]];
-        [dialog addAction:[UIAlertAction actionWithTitle:@"Enregistrer" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            NSString *name = [dialog.textFields[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            NSString *comment = dialog.textFields[1].text ?: @"";
-            NSString *category = dialog.textFields[2].text ?: @"culture";
-            NSMutableDictionary *saved = [results mutableCopy];
-            saved[@"nearbyName"] = name ?: @"";
-            saved[@"nearbyComment"] = comment;
-            saved[@"nearbyCategory"] = category;
-            saved[@"nearbyURL"] = urlToSave;
-            // OpenWith reads this exact key from the same App Group.
-            [self.userDefaults setObject:saved forKey:@"shared"];
-            BOOL persisted = [self.userDefaults synchronize];
-            if (!persisted) {
-                [self.extensionContext cancelRequestWithError:[NSError errorWithDomain:@"NearbyShare" code:5 userInfo:nil]];
-                return;
-            }
-            [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
-        }]];
-        [self presentViewController:dialog animated:YES completion:nil];
-    });
+        dispatch_group_leave(group);
+    }];
 }
 
-- (void) didSelectPost {
-    [self debug:@"[didSelectPost]"];
+- (BOOL)isSupportedMapsURL:(NSString *)value {
+    NSURL *url = [NSURL URLWithString:value ?: @""];
+    if (![url.scheme.lowercaseString isEqualToString:@"https"]) return NO;
+    NSString *host = url.host.lowercaseString ?: @"";
+    return [host isEqualToString:@"maps.apple"] || [host isEqualToString:@"maps.apple.com"] || [host isEqualToString:@"www.maps.apple.com"] ||
+        [host isEqualToString:@"maps.app.goo.gl"] || [host isEqualToString:@"goo.gl"] ||
+        [@[@"google.com",@"www.google.com",@"maps.google.com",@"google.co.jp",@"www.google.co.jp",@"maps.google.co.jp"] containsObject:host];
 }
 
-- (NSArray*) configurationItems {
-    // To add configuration options via table cells at the bottom of the sheet, return an array of SLComposeSheetConfigurationItem here.
-    return @[];
-}
-
-- (NSString*) backURLFromBundleID: (NSString*)bundleId {
-    if (bundleId == nil) return nil;
-    // App Store - com.apple.AppStore
-    if ([bundleId isEqualToString:@"com.apple.AppStore"]) return @"itms-apps://";
-    // Calculator - com.apple.calculator
-    // Calendar - com.apple.mobilecal
-    // Camera - com.apple.camera
-    // Clock - com.apple.mobiletimer
-    // Compass - com.apple.compass
-    // Contacts - com.apple.MobileAddressBook
-    // FaceTime - com.apple.facetime
-    // Find Friends - com.apple.mobileme.fmf1
-    // Find iPhone - com.apple.mobileme.fmip1
-    // Game Center - com.apple.gamecenter
-    // Health - com.apple.Health
-    // iBooks - com.apple.iBooks
-    // iTunes Store - com.apple.MobileStore
-    // Mail - com.apple.mobilemail - message://
-    if ([bundleId isEqualToString:@"com.apple.mobilemail"]) return @"message://";
-    // Maps - com.apple.Maps - maps://
-    if ([bundleId isEqualToString:@"com.apple.Maps"]) return @"maps://";
-    // Messages - com.apple.MobileSMS
-    // Music - com.apple.Music
-    // News - com.apple.news - applenews://
-    if ([bundleId isEqualToString:@"com.apple.news"]) return @"applenews://";
-    // Notes - com.apple.mobilenotes - mobilenotes://
-    if ([bundleId isEqualToString:@"com.apple.mobilenotes"]) return @"mobilenotes://";
-    // Phone - com.apple.mobilephone
-    // Photos - com.apple.mobileslideshow
-    if ([bundleId isEqualToString:@"com.apple.mobileslideshow"]) return @"photos-redirect://";
-    // Podcasts - com.apple.podcasts
-    // Reminders - com.apple.reminders - x-apple-reminder://
-    if ([bundleId isEqualToString:@"com.apple.reminders"]) return @"x-apple-reminder://";
-    // Safari - com.apple.mobilesafari
-    // Settings - com.apple.Preferences
-    // Stocks - com.apple.stocks
-    // Tips - com.apple.tips
-    // Videos - com.apple.videos - videos://
-    if ([bundleId isEqualToString:@"com.apple.videos"]) return @"videos://";
-    // Voice Memos - com.apple.VoiceMemos - voicememos://
-    if ([bundleId isEqualToString:@"com.apple.VoiceMemos"]) return @"voicememos://";
-    // Wallet - com.apple.Passbook
-    // Watch - com.apple.Bridge
-    // Weather - com.apple.weather
+- (NSString *)firstSupportedURLInText:(NSString *)text {
+    if (!text.length) return nil;
+    NSDataDetector *detector = [NSDataDetector dataDetectorWithTypes:NSTextCheckingTypeLink error:nil];
+    for (NSTextCheckingResult *match in [detector matchesInString:text options:0 range:NSMakeRange(0, text.length)]) {
+        NSString *candidate = match.URL.absoluteString;
+        if ([self isSupportedMapsURL:candidate]) return candidate;
+    }
     return nil;
 }
 
-// This is called at the point where the Post dialog is about to be shown.
-// We use it to store the _hostBundleID
-- (void) willMoveToParentViewController: (UIViewController*)parent {
-    NSString *hostBundleID = nil; // Avoid private UIKit KVC key _hostBundleID.
-    self.backURL = [self backURLFromBundleID:hostBundleID];
-}
-
-
-- (NSString *)mimeTypeFromUti: (NSString*)uti {
-    if (uti == nil) {
-        return nil;
+- (NSString *)prefilledName {
+    for (NSString *text in self.sharedTexts) {
+        for (NSString *line in [text componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
+            NSString *trimmed = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (trimmed.length && ![trimmed containsString:@"://"] && trimmed.length <= 160) return trimmed;
+        }
     }
-    CFStringRef cret = UTTypeCopyPreferredTagWithClass((__bridge CFStringRef)uti, kUTTagClassMIMEType);
-    NSString *ret = (__bridge_transfer NSString *)cret;
-    return ret == nil ? uti : ret;
+    NSURLComponents *components = [NSURLComponents componentsWithString:self.sharedURL];
+    for (NSURLQueryItem *item in components.queryItems ?: @[]) {
+        if (([item.name isEqualToString:@"name"] || [item.name isEqualToString:@"q"] || [item.name isEqualToString:@"query"]) && item.value.length) {
+            NSRegularExpression *coordinates = [NSRegularExpression regularExpressionWithPattern:@"^-?[0-9.]+\\s*,\\s*-?[0-9.]+$" options:0 error:nil];
+            if ([coordinates numberOfMatchesInString:item.value options:0 range:NSMakeRange(0, item.value.length)] == 0) return item.value;
+        }
+    }
+    NSArray *parts = components.URL.path.pathComponents;
+    NSUInteger placeIndex = [parts indexOfObject:@"place"];
+    if (placeIndex != NSNotFound && placeIndex + 1 < parts.count) return [parts[placeIndex + 1] stringByReplacingOccurrencesOfString:@"+" withString:@" "];
+    return @"";
 }
+
+- (void)finishLoading {
+    if (!self.sharedURL.length) {
+        [self showError:@"Le partage ne contient aucun lien Apple Plans ou Google Maps exploitable."];
+        return;
+    }
+    [self.activityIndicator stopAnimating];
+    self.activityIndicator.hidden = YES;
+    self.statusLabel.text = @"Vérifiez les informations avant l’enregistrement.";
+    self.urlLabel.text = self.sharedURL;
+    self.urlLabel.hidden = NO;
+    self.nameField.text = [self prefilledName];
+    self.nameField.enabled = YES;
+    self.commentView.editable = YES;
+    self.categoryPicker.userInteractionEnabled = YES;
+    self.saveButton.enabled = YES;
+    if (!self.nameField.text.length) [self.nameField becomeFirstResponder];
+}
+
+- (void)showError:(NSString *)message {
+    [self.activityIndicator stopAnimating];
+    self.activityIndicator.hidden = YES;
+    self.statusLabel.textColor = UIColor.systemRedColor;
+    self.statusLabel.text = message;
+    self.saveButton.enabled = NO;
+}
+
+- (void)cancel {
+    NSError *error = [NSError errorWithDomain:@"fr.cowprod.nearbyplaces.share" code:NSUserCancelledError userInfo:nil];
+    [self.extensionContext cancelRequestWithError:error];
+}
+
+- (void)save {
+    NSString *name = [self.nameField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (!name.length) {
+        self.statusLabel.textColor = UIColor.systemRedColor;
+        self.statusLabel.text = @"Le nom du lieu est obligatoire.";
+        [self.nameField becomeFirstResponder];
+        return;
+    }
+    if (!self.sharedURL.length) { [self showError:@"Le lien du lieu est manquant."]; return; }
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:NearbyAppGroup];
+    if (!defaults) { [self showError:@"Le stockage partagé Nearby Places est indisponible."]; return; }
+    id storedQueue = [defaults objectForKey:NearbyQueueKey];
+    if (storedQueue && ![storedQueue isKindOfClass:NSArray.class]) {
+        [self showError:@"La file d’import partagée est illisible. Aucun élément n’a été écrasé."];
+        return;
+    }
+    NSMutableArray *queue = storedQueue ? [(NSArray *)storedQueue mutableCopy] : [NSMutableArray array];
+    if (queue.count >= NearbyQueueLimit) {
+        [self showError:@"La file d’import est pleine. Ouvrez Nearby Places avant de réessayer."];
+        return;
+    }
+    NSInteger row = [self.categoryPicker selectedRowInComponent:0];
+    NSDictionary *category = row >= 0 && row < (NSInteger)self.categories.count ? self.categories[row] : self.categories.firstObject;
+    NSDictionary *record = @{
+        @"schemaVersion": @1,
+        @"shareID": NSUUID.UUID.UUIDString,
+        @"createdAt": @([NSDate.date timeIntervalSince1970]),
+        @"nearbyName": name,
+        @"nearbyComment": [self.commentView.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"",
+        @"nearbyCategory": category[@"id"] ?: @"culture",
+        @"nearbyURL": self.sharedURL,
+        @"rawText": [self.sharedTexts componentsJoinedByString:@"\n"] ?: @""
+    };
+    [queue addObject:record];
+    [defaults setObject:queue forKey:NearbyQueueKey];
+    if (![defaults synchronize]) {
+        [self showError:@"L’enregistrement partagé a échoué. L’extension reste ouverte pour réessayer."];
+        return;
+    }
+    self.saveButton.enabled = NO;
+    [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
+}
+
+- (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView { return 1; }
+- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component { return self.categories.count; }
+- (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component { return self.categories[row][@"name"]; }
 
 @end

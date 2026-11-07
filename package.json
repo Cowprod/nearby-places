@@ -8,18 +8,19 @@
     "ios:add": "cordova platform add ios@8.1.1",
     "ios:prepare": "cordova prepare ios",
     "ios:build": "cordova build ios --debug",
+    "ios:verify": "node tests/ios-generated.test.js",
     "ios:requirements": "cordova requirements ios"
   },
   "devDependencies": {
     "cordova": "13.0.0",
-    "cordova-plugin-geolocation": "5.0.0",
     "cordova-background-geolocation-lt": "5.5.1",
-    "cordova-plugin-local-notification": "1.2.3",
-    "cordova-plugin-customurlscheme": "5.0.2",
     "cordova-ios": "8.1.1",
+    "cordova-plugin-customurlscheme": "5.0.2",
     "cordova-plugin-device": "^3.0.0",
-    "cordova-plugin-openwith-ios": "2.0.0",
-    "cordova-plugin-nearby-resolver": "file:local-plugins/cordova-plugin-nearby-resolver"
+    "cordova-plugin-geolocation": "5.0.0",
+    "cordova-plugin-local-notification": "1.2.3",
+    "plist": "3.1.1",
+    "xcode": "3.0.1"
   },
   "cordova": {
     "platforms": [
@@ -37,10 +38,10 @@
         "URL_SCHEME": "nearbyplaces"
       },
       "cordova-plugin-device": {},
-      "cordova-plugin-openwith-ios": {
-        "IOS_URL_SCHEME": "nearbyplacesshare"
-      },
       "cordova-plugin-nearby-resolver": {}
     }
+  },
+  "dependencies": {
+    "cordova-plugin-nearby-resolver": "file:local-plugins/cordova-plugin-nearby-resolver"
   }
 }
