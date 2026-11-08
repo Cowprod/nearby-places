@@ -36,6 +36,8 @@
     collect(addTitle,document.querySelector('body > script'),tabs[2].nodes);
     collect(proximityTitle,importTitle,tabs[3].nodes);
     collect(backupTitle,addTitle,tabs[3].nodes);
+    var bulk = document.getElementById('collections-bulk');
+    if (bulk) tabs[3].nodes.push(bulk);
     var status = document.getElementById('status');
     if (status) status.insertAdjacentElement('afterend',nav);
     nav.insertAdjacentElement('afterend',main);
