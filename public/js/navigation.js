@@ -42,20 +42,6 @@
     collect(addTitle,document.querySelector('body > script'),tabs[1].nodes);
     collect(proximityTitle,importTitle,tabs[2].nodes);
     collect(backupTitle,addTitle,tabs[2].nodes);
-    // Group legacy flat controls into readable, responsive sections without changing IDs or listeners.
-    function groupControls(tabId, heading, startId, endId) {
-      var nodes=tabs[tabId].nodes, first=nodes.findIndex(function(n){return n.id===startId;});
-      if(first<0)return;
-      var last=endId?nodes.findIndex(function(n){return n.id===endId;}):nodes.length;
-      if(last<0||last<=first)return;
-      var group=document.createElement('section');
-      group.className='nearby-settings-card';
-      group.setAttribute('aria-label',heading);
-      var slice=nodes.splice(first,last-first);
-      slice.forEach(function(n){group.append(n);});
-      nodes.splice(first,0,group);
-    }
-    groupControls(1,'Importer un lien', '','');
     var diagnostics=document.getElementById('proximity-diagnostics');
     if(diagnostics){
       var diagDetails=document.createElement('details');
