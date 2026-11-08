@@ -33,7 +33,7 @@
     if (!placesTitle || !proximityTitle || !importTitle || !backupTitle || !addTitle) return;
     collect(placesTitle,proximityTitle,tabs[1].nodes);
     collect(importTitle,backupTitle,tabs[2].nodes);
-    collect(addTitle,null,tabs[2].nodes);
+    collect(addTitle,document.querySelector('body > script'),tabs[2].nodes);
     collect(proximityTitle,importTitle,tabs[3].nodes);
     collect(backupTitle,addTitle,tabs[3].nodes);
     var status = document.getElementById('status');
