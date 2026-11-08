@@ -9,7 +9,7 @@
   var $ = function (id) { return document.getElementById(id); };
   function validPosition(lat, lon) { return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; }
   function distanceMeters(a,b,c,d) { var r=Math.PI/180, x=(c-a)*r, y=(d-b)*r, q=Math.sin(x/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)**2;return 12742000*Math.asin(Math.min(1,Math.sqrt(q))); }
-  function save(){ localStorage.setItem(KEY,JSON.stringify(places)); if(window.NearbyProximity)window.NearbyProximity.setPlaces(places); }
+  function save(){ localStorage.setItem(KEY,JSON.stringify(places)); if(window.NearbyProximity)window.NearbyProximity.setPlaces(places); window.dispatchEvent(new Event('nearby-places-changed')); }
   function trace(kind,detail){if(window.NearbyProximity&&window.NearbyProximity.logEvent)window.NearbyProximity.logEvent(kind,detail);}
   function status(s){ $('status').textContent=s; }
   function confirmDeletion(parent,message,action){
@@ -173,6 +173,7 @@
     }
     places=local;
     render();
+    window.dispatchEvent(new Event('nearby-places-changed'));
     if(window.NearbyProximity)window.NearbyProximity.setPlaces(places);
     status(places.length+' lieux locaux · synchronisation GitHub…');
     fetchCatalogue(REMOTE_URL,8000).then(function(data){
