@@ -305,11 +305,36 @@
     });
   }
   var pendingImport=null, importQueue=[];
+  function populateImportCollections() {
+    var select = $('import-collection');
+    if (!select) return;
+    select.replaceChildren();
+    var none = document.createElement('option');
+    none.value = ''; none.textContent = 'Mes lieux (sans collection spécifique)';
+    select.append(none);
+    try {
+      var model = window.NearbyCollections;
+      if (!model) return;
+      var data = model.loadOrMigrate(localStorage, places);
+      data.collections.filter(function (c) { return c.id !== 'collection-default'; }).forEach(function (c) {
+        var option = document.createElement('option'); option.value = c.id; option.textContent = c.name; select.append(option);
+      });
+    } catch (error) { status('Collections indisponibles : ' + error.message); }
+  }
+  function assignImportedPlace(place, collectionId) {
+    if (!collectionId || !window.NearbyCollections) return;
+    var model = window.NearbyCollections;
+    var state = model.loadOrMigrate(localStorage, places);
+    model.attach(state, place.id, collectionId, null);
+    model.save(localStorage, state);
+    window.dispatchEvent(new Event('nearby-places-changed'));
+  }
   function showNextImport(){
     if(pendingImport || !importQueue.length)return;
     pendingImport=importQueue.shift();
     $('import-name').value=/^(?:Lieu (?:Apple Plans|Google Maps)|Destination Apple Plans)$/.test(pendingImport.name)?'':pendingImport.name;
     $('import-category').value='culture';
+    populateImportCollections();
     $('import-comment').value='';
     $('import-coordinates').textContent=pendingImport.latitude.toFixed(6)+', '+pendingImport.longitude.toFixed(6);
     $('import-dialog').hidden=false;
@@ -338,7 +363,10 @@
       pendingImport=null;$('import-dialog').hidden=true;
       status('Ce lieu existe déjà : import non enregistré');showNextImport();return;
     }
-    addManual(name,parsed.latitude,parsed.longitude,category,comment);
+    var collectionId = $('import-collection') ? $('import-collection').value : '';
+    var imported = addManual(name,parsed.latitude,parsed.longitude,category,comment);
+    try { assignImportedPlace(imported, collectionId); }
+    catch (error) { status('Lieu enregistré, mais affectation à la collection impossible : ' + error.message); return; }
     trace('import-result','OK '+name+' '+parsed.latitude+','+parsed.longitude);
     pendingImport=null;$('import-dialog').hidden=true;$('maps-url').value='';
     status('Lieu enregistré localement');showNextImport();
