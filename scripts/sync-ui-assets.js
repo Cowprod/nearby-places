@@ -4,7 +4,7 @@ const path=require('node:path');
 const root=path.resolve(__dirname,'..');
 const assets=[
  ['bootswatch/dist/litera/bootstrap.min.css','css/bootswatch-litera.min.css'],
- ['bootswatch/dist/litera/bootstrap.bundle.min.js','js/bootstrap.bundle.min.js'],
+ ['bootstrap/dist/js/bootstrap.bundle.min.js','js/bootstrap.bundle.min.js'],
  ['jquery/dist/jquery.min.js','js/jquery.min.js'],
  ['bootbox/dist/bootbox.min.js','js/bootbox.min.js'],
  ['@fortawesome/fontawesome-free/css/all.min.css','css/fontawesome.min.css'],
