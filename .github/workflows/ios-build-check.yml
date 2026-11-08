@@ -1,0 +1,50 @@
+name: Nearby Places - iOS compile check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config.xml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'www/**'
+      - 'native/ios/**'
+      - 'local-plugins/**'
+      - 'scripts/**'
+      - 'tests/ios-generated.test.js'
+      - '.github/workflows/ios-build-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run JavaScript tests
+        run: npm test
+      - name: Generate iOS project and Share Extension
+        run: |
+          npm run ios:add
+          npm run ios:prepare
+      - name: Verify generated native files and targets
+        run: npm run ios:verify
+      - name: Compile unsigned iOS simulator application
+        run: |
+          xcodebuild \
+            -workspace platforms/ios/App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
