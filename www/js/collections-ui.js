@@ -196,11 +196,34 @@
               var originalCategory=state.categories.find(function(c){return c.id===m.categoryId;});
               item.append(el('small',originalCategory?originalCategory.name:'Sans catégorie','muted collection-original-category'));
             }
+            var editor=el('div',null,'collection-place-editor');
+            editor.hidden=true;
+            var nameInput=el('input');nameInput.value=place.name||'';nameInput.setAttribute('aria-label','Nom du lieu');
+            var commentInput=el('textarea');commentInput.value=place.comment||'';commentInput.rows=3;commentInput.setAttribute('aria-label','Commentaire du lieu');
             var categorySelect=el('select');categorySelect.setAttribute('aria-label','Catégorie de '+(place.name||m.placeId));
             var none=el('option','Sans catégorie');none.value='';categorySelect.append(none);
             state.categories.filter(function(c){return c.scope==='global'||c.collectionId===collection.id;}).forEach(function(c){var option=el('option',c.name);option.value=c.id;categorySelect.append(option);});
             categorySelect.value=m.categoryId||'';
-            categorySelect.onchange=function(){try{api.attach(state,m.placeId,collection.id,categorySelect.value||null);persist();}catch(error){feedback.textContent=error.message;}};
+            var saveEdit=el('button','Enregistrer');
+            var cancelEdit=el('button','Annuler');
+            cancelEdit.onclick=function(){editor.hidden=true;};
+            saveEdit.onclick=function(){
+              var name=nameInput.value.trim(),categoryId=categorySelect.value||null;
+              if(!name){feedback.textContent='Nom obligatoire';return;}
+              var snapshot=JSON.stringify(state),beforeName=place.name,beforeComment=place.comment;
+              try{
+                api.attach(state,m.placeId,collection.id,categoryId);
+                api.save(localStorage,state);
+                window.NearbyPlaceActions.updatePlace(place.id,name,commentInput.value);
+                feedback.textContent='Lieu modifié';
+              }catch(error){
+                state=JSON.parse(snapshot);
+                try{api.save(localStorage,state);}catch(_){}
+                place.name=beforeName;place.comment=beforeComment;
+                feedback.textContent='Modification impossible : '+error.message;
+              }
+            };
+            editor.append(nameInput,commentInput,categorySelect,saveEdit,cancelEdit);
             var actions=el('div',null,'collection-place-actions');
             var visited=el('button',null,'collection-icon-button');
             visited.append(el('i',null,place.visited?'fa-solid fa-bell':'fa-solid fa-bell-slash'));
@@ -224,8 +247,19 @@
                 feedback.textContent=permanent?'Lieu supprimé définitivement':'Lieu retiré de cette collection';
               }catch(error){state=JSON.parse(previous);feedback.textContent='Suppression impossible : '+error.message;}
             };
-            actions.append(visited,trash);
-            item.append(categorySelect,actions);placeList.append(item);
+            var directions=el('a',null,'collection-icon-button');
+            directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=w';
+            directions.target='_blank';directions.rel='noopener noreferrer';
+            directions.setAttribute('aria-label','Itinéraire à pied vers '+place.name);
+            directions.title='Itinéraire à pied';
+            directions.append(el('i',null,'fa-solid fa-person-walking'));
+            var editPlace=el('button',null,'collection-icon-button');
+            editPlace.setAttribute('aria-label','Modifier '+place.name);
+            editPlace.title='Modifier le lieu';
+            editPlace.append(el('i',null,'fa-solid fa-pen'));
+            editPlace.onclick=function(){editor.hidden=!editor.hidden;};
+            actions.append(directions,editPlace,visited,trash);
+            item.append(actions,editor);placeList.append(item);
           }
           });
         });
