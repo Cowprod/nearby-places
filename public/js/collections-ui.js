@@ -29,7 +29,9 @@
     backButton.type = 'button';
     backButton.onclick = function () { selectedCollectionId = null; render(); };
     detailView.append(backButton);
-    var globals = el('section');
+    var globals = el('section', null, 'collections-global-categories');
+    globals.id = 'collections-global-categories';
+    panel.append(globals);
     var controls = el('div', null, 'collections-controls');
     var newName = el('input');
     newName.placeholder = 'Nouvelle collection';
@@ -102,7 +104,15 @@
       globals.replaceChildren();
       var places = readPlaces();
       var globalTitle = el('h3', 'Catégories globales');
-      var globalList = el('p', state.categories.filter(function(c){return c.scope === 'global';}).map(function(c){return c.name;}).join(' · '));
+      var globalList = el('ul', null, 'global-category-list');
+      state.categories.filter(function(c){return c.scope==='global';}).forEach(function(c){
+        var row=el('li');
+        var input=el('input'); input.value=c.name;input.setAttribute('aria-label','Nom de catégorie '+c.name);
+        var saveButton=el('button',null,'collection-icon-button');saveButton.append(el('i',null,'fa-solid fa-check'));
+        saveButton.setAttribute('aria-label','Enregistrer '+c.name);
+        saveButton.onclick=function(){var name=input.value.trim();if(!name){feedback.textContent='Nom obligatoire';return;}var old=c.name;c.name=name;try{persist();feedback.textContent='Catégorie modifiée';}catch(error){c.name=old;feedback.textContent=error.message;}};
+        row.append(input,saveButton);globalList.append(row);
+      });
       var globalInput = el('input'); globalInput.placeholder = 'Nouvelle catégorie globale'; globalInput.setAttribute('aria-label','Nouvelle catégorie globale');
       var globalButton = el('button','Ajouter');
       globalButton.onclick = function(){try{api.createCategory(state,globalInput.value,null);persist();feedback.textContent='Catégorie globale créée';}catch(error){feedback.textContent=error.message;}};
