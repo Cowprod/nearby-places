@@ -37,6 +37,11 @@
     try { state = api.loadOrMigrate(localStorage, readPlaces()); }
     catch (error) { feedback.textContent = error.message; controls.hidden = true; return; }
     function persist() { api.save(localStorage, state); render(); }
+    function refresh() {
+      try { if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); }
+      catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
+    }
+    window.addEventListener('nearby-places-changed',refresh);
     function render() {
       list.replaceChildren();
       globals.replaceChildren();
@@ -120,7 +125,7 @@
       try { api.createCollection(state, newName.value); newName.value = ''; persist(); feedback.textContent = 'Collection créée'; }
       catch (error) { feedback.textContent = error.message; }
     };
-    render();
+    refresh();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
