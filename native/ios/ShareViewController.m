@@ -464,7 +464,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.saveButton.enabled = NO;
     [self.view endEditing:YES];
     UIAlertController *confirmation = [UIAlertController alertControllerWithTitle:@"Lieu vérifié et sauvegardé"
-        message:@"Les coordonnées sont vérifiées. Le lieu sera ajouté automatiquement à Mes lieux à la prochaine ouverture de Nearby Places."
+        message:[NSString stringWithFormat:@"Les coordonnées sont vérifiées. Le lieu sera ajouté à « %@ » à la prochaine ouverture de Nearby Places.", collection[@"name"] ?: @"la collection sélectionnée"]
         preferredStyle:UIAlertControllerStyleAlert];
     [confirmation addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
