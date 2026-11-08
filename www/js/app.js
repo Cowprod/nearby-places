@@ -481,7 +481,11 @@
       var parsed=parseMapsLink(resolved);
       var duplicate=places.some(function(p){return p && validPosition(p.latitude,p.longitude) &&
         Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;});
-      if(!duplicate)addManual(name,parsed.latitude,parsed.longitude,category,String(intent.nearbyComment||''));
+      var imported = duplicate ? places.find(function(p){return p && validPosition(p.latitude,p.longitude) &&
+        Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;}) :
+        addManual(name,parsed.latitude,parsed.longitude,category,String(intent.nearbyComment||''));
+      var selectedCollection = String(intent.nearbyCollection || '');
+      if (selectedCollection && imported) assignImportedPlace(imported, selectedCollection);
       return ackNativeShare(resolver,intent.shareID).then(function(){
         trace('share-pending',duplicate?'doublon acquitté':'enregistré '+name);
         status(duplicate?'Ce lieu partagé existe déjà':'Lieu partagé enregistré localement');
@@ -530,12 +534,24 @@
     }
     next();
   }
+  function synchronizeNativeCollections() {
+    var resolver = window.NearbyResolver, model = window.NearbyCollections;
+    if (!resolver || typeof resolver.syncCollections !== 'function' || !model) return;
+    try {
+      var state = model.loadOrMigrate(localStorage, places);
+      resolver.syncCollections(state.collections.map(function(c){return {id:c.id,name:c.name};}),
+        function(){trace('share-init','collections synchronisées');},
+        function(error){trace('share-error','collections : '+String(error));});
+    } catch(error) { trace('share-error','collections : '+error.message); }
+  }
+  window.addEventListener('nearby-places-changed', synchronizeNativeCollections);
   function initializeNativeShare(){
     var resolver=window.NearbyResolver;
     if(!resolver){trace('share-init','résolveur absent');return;}
     if(typeof resolver.syncCategories==='function')resolver.syncCategories(NATIVE_CATEGORIES,function(){
       trace('share-init','catégories synchronisées');
     },function(error){trace('share-error','catégories : '+String(error));});
+    synchronizeNativeCollections();
     importPendingNativeShare();
   }
   document.addEventListener('deviceready',initializeNativeShare,{once:true});
