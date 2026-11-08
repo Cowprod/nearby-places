@@ -268,7 +268,7 @@
               }else if(window.confirm(message)){performDelete();}
             };
             var directions=el('a',null,'collection-icon-button');
-            directions.href='https://maps.apple.com/?q='+encodeURIComponent(place.name||'Lieu')+'&ll='+encodeURIComponent(place.latitude+','+place.longitude)+'&daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=w';
+            directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=w&q='+encodeURIComponent(place.name||'Lieu');
             directions.target='_blank';directions.rel='noopener noreferrer';
             directions.setAttribute('aria-label','Plans : itinéraire à pied vers '+place.name);
             directions.title='Plans';
