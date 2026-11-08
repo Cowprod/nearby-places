@@ -31,7 +31,7 @@
     detailView.append(backButton);
     var globals = el('section', null, 'collections-global-categories');
     globals.id = 'collections-global-categories';
-    panel.append(globals);
+
     var controls = el('div', null, 'collections-controls');
     var newName = el('input');
     newName.placeholder = 'Nouvelle collection';
@@ -48,7 +48,7 @@
     var feedback = el('p', '', 'muted');
     feedback.setAttribute('role', 'status');
     controls.append(newName, add);
-    panel.append(title, notice, controls, list, detailView, feedback, bulk);
+    panel.append(title, notice, controls, list, detailView, feedback, bulk, globals);
     var selectedCollectionId = null;
     anchor.insertAdjacentElement('afterend', panel);
     var state;
