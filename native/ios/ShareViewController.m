@@ -1,6 +1,5 @@
 #import "ShareViewController.h"
 #import "NearbyMapsResolver.h"
-#import "NearbyPlacePicker.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
@@ -18,7 +17,6 @@ static const NSUInteger NearbyQueueLimit = 50;
 @property(nonatomic, strong) UITextView *commentView;
 @property(nonatomic, strong) UIPickerView *categoryPicker;
 @property(nonatomic, strong) UIButton *saveButton;
-@property(nonatomic, strong) UIButton *choosePlaceButton;
 @property(nonatomic, copy) NSArray<NSDictionary *> *categories;
 @property(nonatomic, copy) NSString *sharedURL;
 @property(nonatomic, strong) NSMutableArray<NSString *> *sharedTexts;
@@ -162,11 +160,6 @@ static const NSUInteger NearbyQueueLimit = 50;
     [self.saveButton addTarget:self action:@selector(save) forControlEvents:UIControlEventTouchUpInside];
     [buttons addArrangedSubview:self.saveButton];
     [stack addArrangedSubview:buttons];
-    self.choosePlaceButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.choosePlaceButton setTitle:@"Choisir le lieu sur une carte" forState:UIControlStateNormal];
-    [self.choosePlaceButton addTarget:self action:@selector(choosePlace) forControlEvents:UIControlEventTouchUpInside];
-    self.choosePlaceButton.hidden = YES;
-    [stack addArrangedSubview:self.choosePlaceButton];
     self.preferredContentSize = CGSizeMake(0, 570);
 }
 
@@ -323,23 +316,8 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.statusLabel.textColor = UIColor.systemRedColor;
     self.statusLabel.text = message;
     self.saveButton.enabled = NO;
-    self.choosePlaceButton.hidden = !self.sharedURL.length;
 }
 
-- (void)choosePlace {
-    self.validationGeneration++;
-    NearbyPlacePicker *picker = [[NearbyPlacePicker alloc] init];
-    picker.placeName = self.nameField.text ?: @"";
-    picker.completion = ^(NSDictionary *selection, NSString *error) {
-        if (error) { self.statusLabel.text = error; return; }
-        self.nameField.text = selection[@"name"];
-        self.sharedURL = [NSString stringWithFormat:@"https://maps.apple.com/?coordinate=%.8f,%.8f",[selection[@"latitude"] doubleValue],[selection[@"longitude"] doubleValue]];
-        [self persistResolvedPlace];
-    };
-    UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:picker];
-    navigation.modalPresentationStyle = UIModalPresentationFullScreen;
-    [self presentViewController:navigation animated:YES completion:nil];
-}
 
 - (void)cancel {
     self.validationGeneration++;

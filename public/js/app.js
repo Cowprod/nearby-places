@@ -12,6 +12,23 @@
   function save(){ localStorage.setItem(KEY,JSON.stringify(places)); if(window.NearbyProximity)window.NearbyProximity.setPlaces(places); }
   function trace(kind,detail){if(window.NearbyProximity&&window.NearbyProximity.logEvent)window.NearbyProximity.logEvent(kind,detail);}
   function status(s){ $('status').textContent=s; }
+  function confirmDeletion(parent,message,action){
+    if(parent.deletionPanel)return;
+    var panel=document.createElement('section');
+    panel.className='place';
+    panel.setAttribute('role','alert');
+    var text=document.createElement('p');text.textContent=message;
+    var confirm=document.createElement('button');confirm.textContent='Confirmer la suppression';
+    var cancel=document.createElement('button');cancel.textContent='Annuler';
+    function close(){panel.remove();parent.deletionPanel=null;}
+    confirm.onclick=function(){close();action();};
+    cancel.onclick=close;
+    panel.append(text,confirm,cancel);
+    parent.deletionPanel=panel;
+    parent.append(panel);
+    cancel.focus();
+    panel.scrollIntoView({block:'center',behavior:'smooth'});
+  }
   function render(position){
     $('places').replaceChildren();
     // Local data may predate schema validation; render defensively without deleting it.
@@ -37,7 +54,7 @@
       head.append(title,button);card.append(head);
       var remove=document.createElement('button');remove.textContent='Supprimer';
       remove.onclick=function(){
-        if(!window.confirm('Supprimer « '+title.textContent+' » de Mes lieux ?'))return;
+        confirmDeletion(card,'Supprimer « '+title.textContent+' » de Mes lieux ?',function(){
         var previous=places.slice(),deleted=readJSON('nearby-deleted-place-ids-v1',[]);
         var cataloguePlace=p.id && !(p.source && p.source.type==='manual');
         try{
@@ -45,6 +62,7 @@
           places=places.filter(function(item){return item!==p;});
           save();render(position);status('Lieu supprimé');
         }catch(error){places=previous;status('Suppression impossible : '+error.message);}
+        });
       };
       head.append(remove);
       var meta=document.createElement('p');meta.className='tag';
@@ -387,31 +405,12 @@
       row.textContent=result.name+' — '+result.message;
       row.style.color=result.failed?'#ff7373':'#5bd7bb';
       if(result.failed && result.id!=='queue-read-error'){
-        var choose=document.createElement('button');choose.textContent='Choisir le lieu sur une carte';
-        choose.disabled=nativeShareBusy;
-        choose.onclick=function(){
-          if(nativeShareBusy)return;
-          var resolver=window.NearbyResolver;
-          if(!resolver || typeof resolver.chooseShared!=='function'){status('Sélection cartographique indisponible : module natif absent');return;}
-          nativeShareBusy=true;renderShareResults();
-          status('Choisissez un lieu sur la carte puis confirmez.');
-          resolver.chooseShared(result.id,function(intent){
-            persistNativeShare(resolver,intent).then(function(){
-              localStorage.setItem(SHARE_PAUSED_KEY,JSON.stringify(pausedShares().filter(function(id){return id!==result.id;})));
-            }).catch(function(error){
-              recordShareResult(intent,'Correction conservée — '+error.message,true);
-              status('Import non terminé : '+error.message);
-            }).finally(function(){nativeShareBusy=false;renderShareResults();});
-          },function(error){
-            nativeShareBusy=false;renderShareResults();status(String(error));
-          });
-        };
-        row.append(choose);
         var remove=document.createElement('button');remove.textContent='Supprimer cet import';
         remove.disabled=nativeShareBusy;
         remove.onclick=function(){
           if(nativeShareBusy)return;
-          if(!window.confirm('Supprimer définitivement l’import en attente « '+result.name+' » ?'))return;
+          confirmDeletion(row,'Supprimer définitivement l’import en attente « '+result.name+' » ?',function(){
+          if(nativeShareBusy){status('Un import est en cours. Réessayez la suppression à la fin du traitement.');return;}
           var resolver=window.NearbyResolver;
           if(!resolver || typeof resolver.ackShared!=='function'){status('Suppression indisponible : module natif absent');return;}
           nativeShareBusy=true;renderShareResults();
@@ -421,6 +420,7 @@
             status('Import en attente supprimé');
           }).catch(function(error){status('Suppression impossible : '+error.message);}).finally(function(){
             nativeShareBusy=false;renderShareResults();
+          });
           });
         };
         row.append(remove);

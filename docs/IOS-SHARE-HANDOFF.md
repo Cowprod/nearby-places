@@ -36,13 +36,13 @@ L'app lit le partage et ne l'acquitte qu'après enregistrement local ou
 reconnaissance d'un doublon. Les anciennes données NSUserDefaults restent lues.
 
 Un import en échec est mis en pause, sans nouvelle tentative automatique.
-Le bilan permet de réessayer, supprimer l'import après confirmation, ou
-choisir un lieu sur une carte. Le sélecteur natif propose une recherche
-nom/adresse, des candidats, un point par appui long et une confirmation.
-Annuler conserve l'import. La correction d'un fichier en attente est
-persistée avant son retour au JavaScript, puis importée et acquittée.
-Le commentaire et la catégorie sont conservés.
-Le même sélecteur est disponible dans l'extension après une erreur.
+Le bilan permet de réessayer ou supprimer l'import après confirmation.
+L'option de sélection sur carte a été retirée de l'app et de l'extension
+à la demande de l'utilisateur après essai. Son code natif historique reste
+versionné, mais aucun bouton du parcours courant ne l'appelle.
+Les confirmations de suppression sont intégrées aux cartes de l'interface
+(Confirmer la suppression / Annuler), sans utiliser `window.confirm`,
+dont l'absence de dialogue a été reproduite dans la WebView du simulateur.
 
 Les lieux sont triés : non visités, catégorie alphabétique, saisie récente.
 Leur suppression est confirmée. Les lieux du catalogue supprimés sont
@@ -68,9 +68,10 @@ Le parcours candidat → confirmation → lieu enregistré, le placement par
 appui long et l'annulation avec conservation du fichier ont été vérifiés
 dans le simulateur iOS 26. Les tests JavaScript couvrent également
 annulation, confirmation, commentaire/catégorie, anti-doublon et suppression.
-La sélection cartographique depuis une véritable Share Extension doit
-encore être vérifiée sur l'iPhone physique. Ne pas annoncer cette validation
-sur la seule base de la compilation ou de l'installation.
+Ce parcours cartographique est historique et n'est plus exposé dans l'UI.
+Les nouvelles confirmations de suppression sont testées en JavaScript et
+doivent aussi être contrôlées dans l'interface iPhone. Ne pas annoncer une
+validation physique sur la seule base de la compilation ou de l'installation.
 
 ## Contraintes et limites restantes
 
