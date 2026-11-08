@@ -343,11 +343,11 @@
       });
     } catch (error) { status('Collections indisponibles : ' + error.message); }
   }
-  function assignImportedPlace(place, collectionId) {
+  function assignImportedPlace(place, collectionId, categoryId) {
     if (!collectionId || !window.NearbyCollections) throw Error('Collection obligatoire ou indisponible');
     var model = window.NearbyCollections;
     var state = model.loadOrMigrate(localStorage, places);
-    model.attach(state, place.id, collectionId, null);
+    model.attach(state, place.id, collectionId, categoryId || null);
     model.save(localStorage, state);
     if (typeof window.dispatchEvent === 'function' && typeof Event === 'function') window.dispatchEvent(new Event('nearby-places-changed'));
   }
@@ -498,18 +498,24 @@
     }
     var name=String(intent.nearbyName||'').trim();
     if(!name)return Promise.reject(Error('Nom partagé manquant ; l’import reste en attente'));
-    var category=String(intent.nearbyCategory||'culture').trim().toLowerCase();
-    if(!NATIVE_CATEGORIES.some(function(item){return item.id===category;}))category='culture';
+    var category=String(intent.nearbyCategory||'').trim();
+    var selectedCollection = String(intent.nearbyCollection || '');
+    if (!selectedCollection) return Promise.reject(Error('Collection absente du partage : import non validé'));
+    var model=window.NearbyCollections;
+    if (!model) return Promise.reject(Error('Gestion des collections indisponible'));
+    var collectionState=model.loadOrMigrate(localStorage,places);
+    if (!collectionState.collections.some(function(c){return c.id===selectedCollection;}))return Promise.reject(Error('Collection introuvable : import conservé en attente'));
+    var selectedCategory=collectionState.categories.find(function(c){return c.id===category && (c.scope==='global'||c.collectionId===selectedCollection);});
+    if (!selectedCategory)return Promise.reject(Error('Catégorie invalide pour cette collection : import conservé en attente'));
+    var legacyCategory=selectedCategory.scope==='global'?selectedCategory.id:'culture';
     return resolveMapsURL(intent.nearbyURL).then(function(resolved){
       var parsed=parseMapsLink(resolved);
       var duplicate=places.some(function(p){return p && validPosition(p.latitude,p.longitude) &&
         Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;});
       var imported = duplicate ? places.find(function(p){return p && validPosition(p.latitude,p.longitude) &&
         Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;}) :
-        addManual(name,parsed.latitude,parsed.longitude,category,String(intent.nearbyComment||''));
-      var selectedCollection = String(intent.nearbyCollection || '');
-      if (!selectedCollection) throw Error('Collection absente du partage : import non validé');
-      if (imported) assignImportedPlace(imported, selectedCollection);
+        addManual(name,parsed.latitude,parsed.longitude,legacyCategory,String(intent.nearbyComment||''));
+      if (imported) assignImportedPlace(imported, selectedCollection, category);
       return ackNativeShare(resolver,intent.shareID).then(function(){
         trace('share-pending',duplicate?'doublon acquitté':'enregistré '+name);
         status(duplicate?'Ce lieu partagé existe déjà':'Lieu partagé enregistré localement');
@@ -563,6 +569,7 @@
     if (!resolver || typeof resolver.syncCollections !== 'function' || !model) return;
     try {
       var state = model.loadOrMigrate(localStorage, places);
+      if(typeof resolver.syncCategories==='function')resolver.syncCategories(state.categories.map(function(c){return {id:c.id,name:c.name,collectionId:c.scope==='collection'?c.collectionId:''};}),function(){trace('share-init','catégories synchronisées');},function(error){trace('share-error','catégories : '+String(error));});
       resolver.syncCollections(state.collections.map(function(c){return {id:c.id,name:c.name};}),
         function(){trace('share-init','collections synchronisées');},
         function(error){trace('share-error','collections : '+String(error));});
@@ -575,9 +582,6 @@
   function initializeNativeShare(){
     var resolver=window.NearbyResolver;
     if(!resolver){trace('share-init','résolveur absent');return;}
-    if(typeof resolver.syncCategories==='function')resolver.syncCategories(NATIVE_CATEGORIES,function(){
-      trace('share-init','catégories synchronisées');
-    },function(error){trace('share-error','catégories : '+String(error));});
     synchronizeNativeCollections();
     importPendingNativeShare();
   }
