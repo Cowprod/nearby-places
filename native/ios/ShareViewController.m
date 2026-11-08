@@ -4,6 +4,7 @@
 
 static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
 static NSString * const NearbyQueueKey = @"nearbyShareQueue";
+static NSString * const NearbyCollectionsKey = @"nearbyCollections";
 static NSString * const NearbyCategoriesKey = @"nearbyCategories";
 static const NSUInteger NearbyQueueLimit = 50;
 
@@ -16,6 +17,8 @@ static const NSUInteger NearbyQueueLimit = 50;
 @property(nonatomic, strong) UITextField *nameField;
 @property(nonatomic, strong) UITextView *commentView;
 @property(nonatomic, strong) UIPickerView *categoryPicker;
+@property(nonatomic, strong) UIPickerView *collectionPicker;
+@property(nonatomic, copy) NSArray<NSDictionary *> *collections;
 @property(nonatomic, strong) UIButton *saveButton;
 @property(nonatomic, copy) NSArray<NSDictionary *> *categories;
 @property(nonatomic, copy) NSString *sharedURL;
@@ -31,6 +34,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.view.backgroundColor = UIColor.systemBackgroundColor;
     self.sharedTexts = [NSMutableArray array];
     self.categories = [self loadCategories];
+    self.collections = [self loadCollections];
     [self buildForm];
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     [center addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
@@ -69,6 +73,22 @@ static const NSUInteger NearbyQueueLimit = 50;
         if (identifier.length && name.length) [valid addObject:@{ @"id": identifier, @"name": name }];
     }
     return valid.count ? valid : [self canonicalCategories];
+}
+
+- (NSArray<NSDictionary *> *)loadCollections {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:NearbyAppGroup];
+    id stored = [defaults objectForKey:NearbyCollectionsKey];
+    NSMutableArray *choices = [NSMutableArray arrayWithObject:@{@"id":@"", @"name":@"Mes lieux (aucune collection)"}];
+    if (![stored isKindOfClass:NSArray.class]) return choices;
+    for (id item in (NSArray *)stored) {
+        if (![item isKindOfClass:NSDictionary.class]) continue;
+        NSString *identifier = [item[@"id"] isKindOfClass:NSString.class] ? item[@"id"] : nil;
+        NSString *name = [item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : nil;
+        if (identifier.length && name.length && ![identifier isEqualToString:@"collection-default"]) {
+            [choices addObject:@{@"id":identifier,@"name":name}];
+        }
+    }
+    return choices;
 }
 
 - (UILabel *)fieldLabel:(NSString *)text {
@@ -145,6 +165,13 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.categoryPicker.userInteractionEnabled = NO;
     [self.categoryPicker.heightAnchor constraintEqualToConstant:132].active = YES;
     [stack addArrangedSubview:self.categoryPicker];
+    [stack addArrangedSubview:[self fieldLabel:@"Collection"]];
+    self.collectionPicker = [[UIPickerView alloc] init];
+    self.collectionPicker.dataSource = self;
+    self.collectionPicker.delegate = self;
+    self.collectionPicker.userInteractionEnabled = NO;
+    [self.collectionPicker.heightAnchor constraintEqualToConstant:132].active = YES;
+    [stack addArrangedSubview:self.collectionPicker];
     UIStackView *buttons = [[UIStackView alloc] init];
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.spacing = 12;
@@ -279,6 +306,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.nameField.enabled = YES;
     self.commentView.editable = YES;
     self.categoryPicker.userInteractionEnabled = YES;
+    self.collectionPicker.userInteractionEnabled = YES;
     self.saveButton.enabled = YES;
     if (!self.nameField.text.length) [self.nameField becomeFirstResponder];
 }
@@ -385,6 +413,8 @@ static const NSUInteger NearbyQueueLimit = 50;
     }
     NSInteger row = [self.categoryPicker selectedRowInComponent:0];
     NSDictionary *category = row >= 0 && row < (NSInteger)self.categories.count ? self.categories[row] : self.categories.firstObject;
+    NSInteger collectionRow = [self.collectionPicker selectedRowInComponent:0];
+    NSDictionary *collection = collectionRow >= 0 && collectionRow < (NSInteger)self.collections.count ? self.collections[collectionRow] : self.collections.firstObject;
     NSDictionary *record = @{
         @"schemaVersion": @1,
         @"shareID": NSUUID.UUID.UUIDString,
@@ -392,6 +422,7 @@ static const NSUInteger NearbyQueueLimit = 50;
         @"nearbyName": name,
         @"nearbyComment": [self.commentView.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"",
         @"nearbyCategory": category[@"id"] ?: @"culture",
+        @"nearbyCollection": collection[@"id"] ?: @"",
         @"nearbyURL": self.sharedURL,
         @"rawText": [self.sharedTexts componentsJoinedByString:@"\n"] ?: @""
     };
@@ -426,7 +457,7 @@ static const NSUInteger NearbyQueueLimit = 50;
 }
 
 - (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView { return 1; }
-- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component { return self.categories.count; }
-- (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component { return self.categories[row][@"name"]; }
+- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections.count : self.categories.count; }
+- (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections[row][@"name"] : self.categories[row][@"name"]; }
 
 @end
