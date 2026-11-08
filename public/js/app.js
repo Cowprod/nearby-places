@@ -544,7 +544,7 @@
         function(error){trace('share-error','collections : '+String(error));});
     } catch(error) { trace('share-error','collections : '+error.message); }
   }
-  window.addEventListener('nearby-places-changed', synchronizeNativeCollections);
+  if (typeof window.addEventListener === 'function') window.addEventListener('nearby-places-changed', synchronizeNativeCollections);
   function initializeNativeShare(){
     var resolver=window.NearbyResolver;
     if(!resolver){trace('share-init','résolveur absent');return;}
