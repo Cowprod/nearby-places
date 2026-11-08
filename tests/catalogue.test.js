@@ -24,9 +24,10 @@ for (const p of fixtures.places) {
   assert.ok(typeof p.visited === 'boolean');
 }
 assert.deepEqual(JSON.parse(read('www/data/places.sample.json')), fixtures, 'catalogue Cordova vs source');
-for (const file of ['index.html', 'js/app.js', 'js/proximity.js', 'js/deeplink-bootstrap.js', 'data/places.sample.json']) {
+for (const file of ['index.html', 'js/app.js', 'js/proximity.js', 'js/deeplink-bootstrap.js', 'js/collections-model.js', 'js/collections-ui.js', 'js/navigation.js', 'data/places.sample.json']) {
   assert.equal(read('public/' + file), read('www/' + file), 'preview différente de Cordova: ' + file);
 }
+for (const file of ['js/collections-model.js','js/collections-ui.js','js/navigation.js']) new vm.Script(read('www/' + file), {filename:'www/' + file});
 new vm.Script(read('www/js/app.js'), {filename: 'www/js/app.js'});
 new vm.Script(read('www/js/deeplink-bootstrap.js'), {filename: 'www/js/deeplink-bootstrap.js'});
 new vm.Script(read('www/js/proximity.js'), {filename: 'www/js/proximity.js'});
@@ -59,6 +60,7 @@ for (const id of ['maps-url','maps-add','export','import','proximity-diagnostics
   assert.ok(read('www/index.html').includes('id="'+id+'"'), 'contrôle '+id);
 }
 assert.match(appScript, /function parseMapsLink/);
+assert.match(appScript, /collectionsV2/, 'sauvegarde complète du modèle collections');
 assert.match(appScript, /window.handleOpenURL/);
 assert.ok(appScript.includes("incoming.protocol!=='nearbyplaces:'"));
 assert.equal(pkg.cordova.plugins['cordova-plugin-customurlscheme'].URL_SCHEME,'nearbyplaces');
