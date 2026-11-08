@@ -30,13 +30,22 @@
     var backupTitle = byTitle('Sauvegarde des lieux personnels');
     var addTitle = byTitle('Ajouter un lieu');
     if (!placesTitle || !proximityTitle || !importTitle || !backupTitle || !addTitle) return;
-    collect(placesTitle,proximityTitle,tabs[2].nodes);
+    // Legacy catalogue is retained in the DOM for app.js, but is not shown as a second list.
+    var legacyPlaces = [];
+    collect(placesTitle,proximityTitle,legacyPlaces);
+    var legacyContainer = document.createElement('div');
+    legacyContainer.id = 'nearby-legacy-places';
+    legacyContainer.hidden = true;
+    legacyPlaces.forEach(function(node){legacyContainer.append(node);});
+    tabs[2].nodes.push(legacyContainer);
     collect(importTitle,backupTitle,tabs[1].nodes);
     collect(addTitle,document.querySelector('body > script'),tabs[1].nodes);
     collect(proximityTitle,importTitle,tabs[2].nodes);
     collect(backupTitle,addTitle,tabs[2].nodes);
     var bulk = document.getElementById('collections-bulk');
     if (bulk) tabs[2].nodes.push(bulk);
+    var globalCategories = document.getElementById('collections-global-categories');
+    if (globalCategories) tabs[2].nodes.push(globalCategories);
     var status = document.getElementById('status');
     if (status) {
       status.insertAdjacentElement('afterend',nav);
