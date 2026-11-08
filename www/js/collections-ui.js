@@ -22,6 +22,13 @@
     var title = el('h2', 'Collections');
     var notice = el('p', 'Tous les lieux sont surveillés, quelle que soit leur collection.', 'muted');
     var list = el('div');
+    list.className = 'collection-list';
+    var detailView = el('section', null, 'collection-detail');
+    detailView.hidden = true;
+    var backButton = el('button', '← Collections', 'collection-back');
+    backButton.type = 'button';
+    backButton.onclick = function () { selectedCollectionId = null; render(); };
+    detailView.append(backButton);
     var globals = el('section');
     var controls = el('div', null, 'collections-controls');
     var newName = el('input');
@@ -39,7 +46,8 @@
     var feedback = el('p', '', 'muted');
     feedback.setAttribute('role', 'status');
     controls.append(newName, add);
-    panel.append(title, notice, globals, list, controls, feedback, bulk);
+    panel.append(title, notice, controls, list, detailView, feedback, bulk);
+    var selectedCollectionId = null;
     anchor.insertAdjacentElement('afterend', panel);
     var state;
     // Visual state only: no change to persisted collections or the legacy catalogue.
@@ -84,6 +92,13 @@
         else expandedCollections.delete(node.dataset.collectionId);
       });
       list.replaceChildren();
+      detailView.replaceChildren();
+      detailView.append(backButton);
+      detailView.hidden = !selectedCollectionId;
+      list.hidden = !!selectedCollectionId;
+      controls.hidden = !!selectedCollectionId;
+      notice.hidden = !!selectedCollectionId;
+      title.hidden = !!selectedCollectionId;
       globals.replaceChildren();
       var places = readPlaces();
       var globalTitle = el('h3', 'Catégories globales');
@@ -94,6 +109,7 @@
       globals.append(globalTitle,globalList,globalInput,globalButton);
       state.collections.forEach(function (collection) {
         var card = el('article', null, 'collection-card');
+        if (selectedCollectionId && selectedCollectionId !== collection.id) return;
         var name = el('strong', collection.name);
         var count = state.memberships.filter(function (m) {
           return m.collectionId === collection.id && places.some(function (p) { return p && p.id === m.placeId; });
@@ -102,7 +118,7 @@
         var details = el('details');
         details.dataset.collectionId = collection.id;
         details.open = expandedCollections.has(collection.id);
-        var summary = el('summary', 'Gérer');
+        var summary = el('summary', 'Modifier la fiche');
         var edit = el('input');
         edit.value = collection.name;
         edit.setAttribute('aria-label', 'Renommer ' + collection.name);
@@ -140,7 +156,7 @@
           try { api.createCategory(state, categoryName.value, collection.id); persist(); feedback.textContent = 'Catégorie créée'; }
           catch (error) { feedback.textContent = error.message; }
         };
-        var placeList = el('ul');
+        var placeList = el('ul', null, 'collection-place-list');
         var assigned = new Set(state.memberships.filter(function(m){return m.collectionId===collection.id;}).map(function(m){return m.placeId;}));
         var assignSelect = el('select'); assignSelect.setAttribute('aria-label','Ajouter un lieu à '+collection.name);
         var placeholder = el('option','Choisir un lieu'); placeholder.value=''; assignSelect.append(placeholder);
@@ -161,7 +177,7 @@
             item.append(categorySelect,unlink);placeList.append(item);
           }
         });
-        details.append(summary, edit, description, rename, categoryTitle, categoryList, categoryName, addCategory, el('h3', 'Lieux'), placeList, assignSelect, assignButton);
+        details.append(summary, edit, description, rename, categoryTitle, categoryList, categoryName, addCategory);
         if(collection.id!=='collection-default'){
           var deleteButton=el('button','Supprimer la collection');
           deleteButton.onclick=function(){
@@ -173,8 +189,29 @@
           };
           details.append(deleteButton);
         }
-        card.append(name, counter, details);
-        list.append(card);
+        if (selectedCollectionId === collection.id) {
+          var header = el('div', null, 'collection-detail-heading');
+          header.append(name, counter);
+          var editButton = el('button', '✎', 'collection-edit');
+          editButton.setAttribute('aria-label', 'Modifier ' + collection.name);
+          editButton.title = 'Modifier le nom et la description';
+          editButton.onclick = function () { details.open = !details.open; };
+          header.append(editButton);
+          card.append(header);
+          var descriptionText = el('p', collection.description || '', 'muted');
+          if (descriptionText.textContent) card.append(descriptionText);
+          card.append(el('h3', 'Lieux'), placeList, assignSelect, assignButton, details);
+          detailView.append(card);
+        } else {
+          var openButton = el('button', null, 'collection-open');
+          openButton.type = 'button';
+          var label = el('span', collection.name);
+          var meta = el('small', count + ' lieu(x)', 'muted');
+          openButton.append(label, meta);
+          openButton.onclick = function () { selectedCollectionId = collection.id; render(); };
+          card.append(openButton);
+          list.append(card);
+        }
       });
     }
     add.onclick = function () {
