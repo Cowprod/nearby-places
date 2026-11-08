@@ -37,6 +37,8 @@ reconnaissance d'un doublon. Les anciennes données NSUserDefaults restent lues.
 
 Un import en échec est mis en pause, sans nouvelle tentative automatique.
 Le bilan permet de réessayer ou supprimer l'import après confirmation.
+La zone Imports partagés affiche uniquement les échecs encore en attente ;
+les réussites sont masquées et la zone disparaît lorsqu'elle est vide.
 L'option de sélection sur carte a été retirée de l'app et de l'extension
 à la demande de l'utilisateur après essai. Son code natif historique reste
 versionné, mais aucun bouton du parcours courant ne l'appelle.

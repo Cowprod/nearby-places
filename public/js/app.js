@@ -397,7 +397,7 @@
     return Array.isArray(stored)?stored:[];
   }
   function renderShareResults(){
-    var section=$('share-results'),list=$('share-result-list'),results=shareResults();
+    var section=$('share-results'),list=$('share-result-list'),results=shareResults().filter(function(result){return result.failed;});
     section.hidden=!results.length;
     list.replaceChildren();
     results.forEach(function(result){
@@ -470,6 +470,10 @@
     renderShareResults();
     function next(){
     resolver.readShared(function(intent){
+      var results=shareResults();
+      if(results.some(function(item){return item.id==='queue-read-error';})){
+        localStorage.setItem(SHARE_RESULTS_KEY,JSON.stringify(results.filter(function(item){return item.id!=='queue-read-error';})));
+      }
       if(!intent || !intent.shareID){nativeShareBusy=false;renderShareResults();return;}
       if(attempted.includes(intent.shareID)){
         nativeShareBusy=false;

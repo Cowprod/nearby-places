@@ -67,6 +67,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     inputValue(id){return document.getElementById(id).value;},
     formOpen(){return document.getElementById('import-dialog').hidden===false;},
     renderCards(){return document.getElementById('places').children;},
+    sharesVisible(){return document.getElementById('share-results').hidden===false;},
     removePlace(index){document.getElementById('places').children[index].children[0].children.find(item=>item.textContent==='Supprimer').onclick();},
     confirmPlaceDeletion(index){document.getElementById('places').children[index].deletionPanel.children[1].onclick();},
     cancelPlaceDeletion(index){document.getElementById('places').children[index].deletionPanel.children[2].onclick();},
@@ -402,6 +403,7 @@ assert.equal(queued[2].name,'Depuis Partager');
   assert.deepEqual(Array.from(queued[2].categories),['occasion']);
   assert.deepEqual(cold.nativeAcks,['share-1'],'acquittement seulement après persistance locale');
   assert.equal(cold.nativeQueue.length,0,'élément acquitté retiré de la FIFO');
+  assert.equal(cold.sharesVisible(),false,'aucune zone visible après un import réussi');
   cold.share({schemaVersion:1,shareID:'share-duplicate',nearbyURL:'https://maps.apple.com/?ll=35.803,139.803',nearbyName:'Doublon',nearbyCategory:'culture'});
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(JSON.parse(cold.store.get('nearby-places-v1')).length,3,'relecture de la file ne duplique pas un lieu existant');
@@ -411,6 +413,7 @@ await new Promise(resolve=>setImmediate(resolve));
 queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
   assert.equal(queued.length,3,'un partage invalide ne crée aucun lieu');
   assert.equal(cold.nativeQueue.length,1,'un échec de résolution reste durablement en attente');
+  assert.equal(cold.sharesVisible(),true,'la zone reste visible pour un import en attente');
   assert.equal(cold.nativeAcks.includes('share-bad'),false,'aucun acquittement en cas d’échec');
   assert.match(cold.status(),/en attente/,'l’échec conservé est visible');
   cold.share({schemaVersion:1,shareID:'share-after-error',nearbyURL:'https://maps.apple.com/?ll=35.805,139.805',nearbyName:'Après échec',nearbyCategory:'culture'});
@@ -436,6 +439,7 @@ queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
   cold.confirmPendingDeletion();
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(cold.nativeQueue.length,0,'suppression explicite retire le fichier en attente');
+  assert.equal(cold.sharesVisible(),false,'la zone est masquée après suppression du dernier import en attente');
   assert.equal(JSON.parse(cold.store.get('nearby-share-results-v1')).some(item=>item.id==='share-bad'),false,'le bilan du partage supprimé disparaît');
   console.log('PASS partage iOS (simulé) : formulaire natif, persistance avant acquittement, doublons évités et échec conservé');
   assert.equal(source.includes("choose.textContent='Choisir le lieu sur une carte'"),false,'option cartographique retirée');
