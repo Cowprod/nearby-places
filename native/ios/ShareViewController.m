@@ -176,7 +176,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     NSArray *fields = @[stack.arrangedSubviews[8], stack.arrangedSubviews[9], stack.arrangedSubviews[10], stack.arrangedSubviews[11]];
     for (UIView *field in fields) [stack removeArrangedSubview:field];
     NSInteger insertion = 6;
-    for (UIView *field in fields) [stack insertArrangedSubview:field atIndex:insertion++];
+    for (UIView *field in @[fields[2],fields[3],fields[0],fields[1]]) [stack insertArrangedSubview:field atIndex:insertion++];
     UIStackView *buttons = [[UIStackView alloc] init];
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.spacing = 12;
@@ -192,7 +192,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     [self.saveButton addTarget:self action:@selector(save) forControlEvents:UIControlEventTouchUpInside];
     [buttons addArrangedSubview:self.saveButton];
     [stack addArrangedSubview:buttons];
-    self.preferredContentSize = CGSizeMake(0, 570);
+    self.preferredContentSize = CGSizeMake(0, 660);
 }
 
 - (void)dismissKeyboard { [self.view endEditing:YES]; }
