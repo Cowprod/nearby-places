@@ -36,7 +36,7 @@ assert.equal(find(body,'nearby-tab-add').hidden,false,'restores Add tab');
 assert.equal(find(body,'nearby-tab-settings').hidden,true);
 window.NearbyNavigation.show('settings');
 assert.equal(find(body,'nearby-tab-settings').hidden,false);
-assert.equal(stored.get('nearby-active-tab'),'places');
+assert.equal(stored.get('nearby-active-tab'),'settings');
 window.NearbyNavigation.show('invalid');
 assert.equal(stored.get('nearby-active-tab'),'places','invalid tab does not blank UI');
 const nav=find(body,'nearby-tabs-content').parent.children.find(n=>n.tagName==='nav');
