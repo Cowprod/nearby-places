@@ -71,6 +71,18 @@
     storage.setItem(key, JSON.stringify(next));
     return next;
   }
+  function reconcile(data, places) {
+    if (!validate(data) || !Array.isArray(places)) throw new Error('Invalid reconciliation');
+    var present = new Set(data.memberships.map(function(m){return m.placeId;}));
+    var additions = 0;
+    places.forEach(function(p){
+      if (!p || typeof p.id !== 'string' || !p.id || present.has(p.id)) return;
+      var legacy = Array.isArray(p.categories) ? p.categories.find(function(id){return data.categories.some(function(c){return c.id===id && c.scope==='global';});}) : null;
+      data.memberships.push({placeId:p.id,collectionId:'collection-default',categoryId:legacy||null});
+      present.add(p.id); additions++;
+    });
+    return additions;
+  }
   function save(storage, data) {
     if (!validate(data)) throw new Error('Invalid collections model');
     storage.setItem('nearby-collections-v2', JSON.stringify(data));
@@ -102,6 +114,6 @@
     if (existing) existing.categoryId = categoryId == null ? null : categoryId;
     else data.memberships.push({ placeId: placeId, collectionId: collectionId, categoryId: categoryId == null ? null : categoryId });
   }
-  return { initial: initial, validate: validate, loadOrMigrate: loadOrMigrate, save: save,
+  return { initial: initial, validate: validate, loadOrMigrate: loadOrMigrate, reconcile: reconcile, save: save,
     createCollection: createCollection, createCategory: createCategory, attach: attach };
 });
