@@ -192,7 +192,10 @@
         if (selectedCollectionId === collection.id) {
           var header = el('div', null, 'collection-detail-heading');
           header.append(name, counter);
-          var editButton = el('button', '✎', 'collection-edit');
+          var editButton = el('button', null, 'collection-edit');
+          var icon = el('i', null, 'fa-solid fa-pen');
+          icon.setAttribute('aria-hidden','true');
+          editButton.append(icon);
           editButton.setAttribute('aria-label', 'Modifier ' + collection.name);
           editButton.title = 'Modifier le nom et la description';
           editButton.onclick = function () { details.open = !details.open; };
