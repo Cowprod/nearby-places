@@ -28,10 +28,17 @@
     newName.placeholder = 'Nouvelle collection';
     newName.setAttribute('aria-label', 'Nom de la collection');
     var add = el('button', 'Créer');
+    var bulk = el('section', null, 'collections-bulk');
+    var bulkTitle = el('h3', 'Affectation initiale des lieux');
+    var bulkSelect = el('select');
+    bulkSelect.setAttribute('aria-label', 'Collection de destination');
+    var bulkButton = el('button', 'Affecter tous les lieux sans collection');
+    var bulkInfo = el('p', '', 'muted');
+    bulk.append(bulkTitle, bulkSelect, bulkButton, bulkInfo);
     var feedback = el('p', '', 'muted');
     feedback.setAttribute('role', 'status');
     controls.append(newName, add);
-    panel.append(title, notice, globals, list, controls, feedback);
+    panel.append(title, notice, globals, list, controls, feedback, bulk);
     anchor.insertAdjacentElement('afterend', panel);
     var state;
     // Visual state only: no change to persisted collections or the legacy catalogue.
@@ -44,7 +51,32 @@
       catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
     }
     window.addEventListener('nearby-places-changed',refresh);
+    bulkButton.onclick = function () {
+      var destination = bulkSelect.value;
+      if (!destination || destination === 'collection-default') { bulkInfo.textContent = 'Choisir une collection de destination'; return; }
+      var places = readPlaces();
+      var ids = new Set(state.memberships.filter(function (m) { return m.collectionId !== 'collection-default'; }).map(function (m) { return m.placeId; }));
+      var missing = places.filter(function (p) { return p && typeof p.id === 'string' && p.id && !ids.has(p.id); });
+      if (!missing.length) { bulkInfo.textContent = 'Aucun lieu sans collection'; return; }
+      var snapshot = JSON.stringify(state);
+      try {
+        missing.forEach(function (p) { api.attach(state, p.id, destination, null); });
+        persist();
+        bulkInfo.textContent = missing.length + ' lieu(x) affecté(s), sans suppression ni duplication';
+      } catch (error) {
+        state = JSON.parse(snapshot);
+        bulkInfo.textContent = 'Affectation annulée : ' + error.message;
+      }
+    };
     function render() {
+      var selectedDestination = bulkSelect.value;
+      bulkSelect.replaceChildren();
+      var choose = el('option', 'Choisir une collection'); choose.value = ''; bulkSelect.append(choose);
+      state.collections.filter(function (c) { return c.id !== 'collection-default'; }).forEach(function (c) {
+        var option = el('option', c.name); option.value = c.id; bulkSelect.append(option);
+      });
+      bulkSelect.value = state.collections.some(function (c) { return c.id === selectedDestination; }) ? selectedDestination : '';
+
       // Rebuilding the cards must not close the collection being edited.
       Array.from(list.querySelectorAll('details[data-collection-id]')).forEach(function (node) {
         if (node.open) expandedCollections.add(node.dataset.collectionId);
