@@ -5,6 +5,7 @@
 static NSString * const NearbyAppGroup = @"group.fr.cowprod.nearbyplaces.shareextension";
 static NSString * const NearbyQueueKey = @"nearbyShareQueue";
 static NSString * const NearbyCategoriesKey = @"nearbyCategories";
+static NSString * const NearbyCollectionsKey = @"nearbyCollections";
 
 @interface NearbyResolver : CDVPlugin <NSURLSessionTaskDelegate>
 - (void)resolve:(CDVInvokedUrlCommand *)command;
@@ -12,6 +13,7 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
 - (void)readShared:(CDVInvokedUrlCommand *)command;
 - (void)ackShared:(CDVInvokedUrlCommand *)command;
 - (void)syncCategories:(CDVInvokedUrlCommand *)command;
+- (void)syncCollections:(CDVInvokedUrlCommand *)command;
 @end
 
 @implementation NearbyResolver
@@ -195,6 +197,27 @@ static NSString * const NearbyCategoriesKey = @"nearbyCategories";
     }
     CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES];
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+}
+
+- (void)syncCollections:(CDVInvokedUrlCommand *)command {
+    id raw = command.arguments.firstObject;
+    if (![raw isKindOfClass:NSArray.class] || [(NSArray *)raw count] > 200) {
+        [self sendError:@"Liste de collections invalide" command:command]; return;
+    }
+    NSMutableArray *collections = [NSMutableArray array];
+    for (id item in (NSArray *)raw) {
+        if (![item isKindOfClass:NSDictionary.class] || ![item[@"id"] isKindOfClass:NSString.class] ||
+            ![item[@"name"] isKindOfClass:NSString.class] || [item[@"id"] length] == 0 || [item[@"name"] length] == 0) {
+            [self sendError:@"Collection invalide" command:command]; return;
+        }
+        [collections addObject:@{@"id":item[@"id"],@"name":item[@"name"]}];
+    }
+    NSUserDefaults *defaults = [self sharedDefaults];
+    [defaults setObject:collections forKey:NearbyCollectionsKey];
+    if (![defaults synchronize]) {
+        [self sendError:@"Synchronisation des collections impossible" command:command]; return;
+    }
+    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES] callbackId:command.callbackId];
 }
 
 - (void)resolve:(CDVInvokedUrlCommand *)command {
