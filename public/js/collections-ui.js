@@ -233,19 +233,38 @@
             trash.append(el('i',null,'fa-solid fa-trash'));
             trash.setAttribute('aria-label','Supprimer '+place.name+' de cette collection');
             trash.onclick=function(){
-              var others=state.memberships.filter(function(x){return x.placeId===place.id && x.collectionId!==collection.id && x.collectionId!=='collection-default';});
+              var others=state.memberships.filter(function(x){return x.placeId===place.id && x.collectionId!==collection.id;});
               var permanent=others.length===0;
-              if(!window.confirm(permanent?'Supprimer définitivement « '+place.name+' » ?':'Supprimer « '+place.name+' » de cette collection uniquement ?'))return;
-              var previous=JSON.stringify(state);
-              try{
-                state.memberships=state.memberships.filter(function(x){return x!==m;});
-                if(permanent){
-                  state.memberships=state.memberships.filter(function(x){return x.placeId!==place.id;});
-                  window.NearbyPlaceActions.deletePlace(place.id);
+              var message=permanent
+                ? 'Supprimer définitivement « '+place.name+' » ?'
+                : 'Retirer « '+place.name+' » de cette collection ? Le lieu restera dans les autres collections.';
+              function performDelete(){
+                var previous=JSON.stringify(state);
+                try{
+                  state.memberships=state.memberships.filter(function(x){return !(x.placeId===m.placeId && x.collectionId===collection.id);});
+                  // Save membership changes before deleting the underlying place.
+                  api.save(localStorage,state);
+                  if(permanent){
+                    if(!window.NearbyPlaceActions || !window.NearbyPlaceActions.deletePlace)throw Error('Suppression indisponible');
+                    window.NearbyPlaceActions.deletePlace(place.id);
+                  }
+                  persist();
+                  feedback.textContent=permanent?'Lieu supprimé définitivement':'Lieu retiré de cette collection';
+                }catch(error){
+                  state=JSON.parse(previous);
+                  try{api.save(localStorage,state);}catch(_){}
+                  feedback.textContent='Suppression impossible : '+error.message;
                 }
-                persist();
-                feedback.textContent=permanent?'Lieu supprimé définitivement':'Lieu retiré de cette collection';
-              }catch(error){state=JSON.parse(previous);feedback.textContent='Suppression impossible : '+error.message;}
+              }
+              if(window.bootbox && typeof window.bootbox.confirm==='function'){
+                window.bootbox.confirm({
+                  title:'Confirmer la suppression',
+                  message:message,
+                  centerVertical:true,
+                  buttons:{cancel:{label:'Annuler',className:'btn-secondary'},confirm:{label:'Supprimer',className:'btn-danger'}},
+                  callback:function(confirmed){if(confirmed)performDelete();}
+                });
+              }else if(window.confirm(message)){performDelete();}
             };
             var directions=el('a',null,'collection-icon-button');
             directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=w';
@@ -267,11 +286,14 @@
         if(collection.id!=='collection-default'){
           var deleteButton=el('button','Supprimer la collection');
           deleteButton.onclick=function(){
-            if(!window.confirm('Supprimer cette collection et ses catégories locales ? Les lieux resteront enregistrés.'))return;
+            function performCollectionDelete(){
             state.memberships=state.memberships.filter(function(m){return m.collectionId!==collection.id;});
             state.categories=state.categories.filter(function(c){return c.collectionId!==collection.id;});
             state.collections=state.collections.filter(function(c){return c.id!==collection.id;});
             persist();
+            }
+            if(window.bootbox && typeof window.bootbox.confirm==='function')window.bootbox.confirm({title:'Supprimer la collection',message:'Supprimer « '+collection.name+' » et ses catégories spécifiques ? Les lieux resteront enregistrés.',buttons:{cancel:{label:'Annuler',className:'btn-secondary'},confirm:{label:'Supprimer',className:'btn-danger'}},callback:function(ok){if(ok)performCollectionDelete();}});
+            else if(window.confirm('Supprimer cette collection ? Les lieux seront conservés.'))performCollectionDelete();
           };
           details.append(deleteButton);
         }
