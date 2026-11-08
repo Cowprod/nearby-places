@@ -1,0 +1,111 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const model = require('../www/js/collections-model.js');
+
+// Small DOM harness: exercises the actual UI handlers without iOS or a browser dependency.
+class Element {
+  constructor(tag) {
+    this.tagName = tag.toLowerCase();
+    this.children = [];
+    this.attributes = {};
+    this.dataset = {};
+    this.value = '';
+    this.textContent = '';
+    this.open = false;
+    this.parent = null;
+  }
+  append(...items) {
+    for (const item of items) {
+      item.parent = this;
+      this.children.push(item);
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.append(...items);
+  }
+  setAttribute(key, value) { this.attributes[key] = value; }
+  insertAdjacentElement(position, element) {
+    assert.equal(position,'afterend');
+    const index = this.parent.children.indexOf(this);
+    element.parent = this.parent;
+    this.parent.children.splice(index + 1, 0, element);
+  }
+  querySelectorAll(selector) {
+    assert.equal(selector, 'details[data-collection-id]');
+    const result = [];
+    function visit(node) {
+      if (node.tagName === 'details' && node.dataset.collectionId) result.push(node);
+      node.children.forEach(visit);
+    }
+    this.children.forEach(visit);
+    return result;
+  }
+}
+const body = new Element('body');
+const h1 = new Element('h1');
+body.append(h1);
+const storageData = new Map();
+const oldPlaces = [{id:'p1',name:'Musée',categories:['culture']}];
+const legacyRaw = JSON.stringify(oldPlaces);
+storageData.set('nearby-places-v1',legacyRaw);
+let rejectSave = false;
+const storage = {
+  getItem(key) { return storageData.has(key) ? storageData.get(key) : null; },
+  setItem(key, value) {
+    if (rejectSave && key === 'nearby-collections-v2') throw Error('quota exceeded');
+    storageData.set(key,value);
+  }
+};
+const events = {};
+const window = {
+  NearbyCollections: model,
+  addEventListener(name, fn) { events[name] = fn; },
+  confirm() { return true; }
+};
+const document = {
+  readyState:'complete',
+  createElement(tag) { return new Element(tag); },
+  querySelector(value) { assert.equal(value,'h1'); return h1; }
+};
+const context = {window,document,localStorage:storage,Set,Array,Date};
+vm.runInNewContext(fs.readFileSync('www/js/collections-ui.js','utf8'),context,{filename:'collections-ui.js'});
+const panel = body.children[1];
+assert.equal(panel.id,'collections-panel');
+const list = panel.children[3];
+const feedback = panel.children[5];
+function editor() { return list.children[0].children[2]; }
+let details = editor();
+assert.equal(details.open,false);
+assert.equal(details.children[2].tagName,'textarea','collection description editor exists');
+details.open = true;
+details.children[1].value='Tokyo';
+details.children[2].value='Lieux visités pendant le voyage';
+details.children[3].onclick();
+assert.equal(feedback.textContent,'Fiche enregistrée');
+assert.equal(editor().open,true,'re-render preserves the opened editor');
+let saved = JSON.parse(storage.getItem('nearby-collections-v2'));
+assert.equal(saved.collections[0].name,'Tokyo');
+assert.equal(saved.collections[0].description,'Lieux visités pendant le voyage');
+assert.equal(saved.memberships.length,1);
+assert.equal(storage.getItem('nearby-places-v1'),legacyRaw,'legacy places are untouched');
+
+// A storage failure must not change the in-memory collection or corrupt the saved copy.
+rejectSave = true;
+details = editor();
+details.children[1].value='Modified but unsaved';
+details.children[2].value='Not saved';
+details.children[3].onclick();
+assert.match(feedback.textContent,/quota exceeded/);
+rejectSave = false;
+events['nearby-places-changed']();
+saved = JSON.parse(storage.getItem('nearby-collections-v2'));
+assert.equal(saved.collections[0].name,'Tokyo');
+assert.equal(saved.collections[0].description,'Lieux visités pendant le voyage');
+assert.equal(editor().open,true,'refresh preserves editor state');
+assert.equal(storage.getItem('nearby-places-v1'),legacyRaw);
+assert.equal(fs.readFileSync('www/js/collections-ui.js','utf8'),
+  fs.readFileSync('public/js/collections-ui.js','utf8'),'Cordova and web preview match');
+console.log('PASS collections UI: description, open editor, persistence rollback, legacy data and public parity');
