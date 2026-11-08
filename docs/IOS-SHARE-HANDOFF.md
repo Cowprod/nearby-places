@@ -26,6 +26,11 @@ les modifications éventuelles ; aucun reset forcé ni remplacement du checkout.
 copies locales de données d'appareil : ne pas les publier.
 Après modification d'un fichier natif, exécuter `cordova prepare ios` ;
 ne jamais corriger uniquement un fichier généré.
+Le hook de projet doit exporter une fonction : Cordova ignore un export objet
+sans signaler d'erreur. Les helpers sont attachés à cette fonction.
+Les targets App et ShareExt vérifient les sources avant compilation et bloquent
+si elles sont périmées. Après un pull Git, utiliser `npm run ios:prepare`,
+y compris avant une compilation directe dans Xcode.
 La copie JavaScript du plugin doit conserver son enveloppe `cordova.define`.
 
 ## Fonctionnement actuel

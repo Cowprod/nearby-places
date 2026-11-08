@@ -14,6 +14,7 @@ const resolver = read('local-plugins/cordova-plugin-nearby-resolver/src/ios/Near
 const resolverJS = read('local-plugins/cordova-plugin-nearby-resolver/www/resolver.js');
 const resolverPlugin = read('local-plugins/cordova-plugin-nearby-resolver/plugin.xml');
 const pluginHook = read('local-plugins/cordova-plugin-nearby-resolver/hooks/afterPrepare.js');
+assert.equal(typeof require('../scripts/patch-share-extension.js'), 'function', 'Cordova must invoke the project hook, not silently ignore an object export');
 const shareEntitlements = plist.parse(read('native/ios/ShareExt.entitlements'));
 
 assert.deepEqual(NATIVE_FILES.sort(),[

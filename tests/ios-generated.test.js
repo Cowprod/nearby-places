@@ -5,6 +5,8 @@ const path = require('node:path');
 const plist = require('plist');
 const xcode = require('xcode');
 const vm = require('node:vm');
+const {spawnSync} = require('node:child_process');
+const os = require('node:os');
 
 const root = path.resolve(__dirname,'..');
 const read = file => fs.readFileSync(path.join(root,file),'utf8');
@@ -47,6 +49,31 @@ function target(name){
 }
 const app = target('App'), extension = target('ShareExt');
 assert.ok(app && extension,'App and ShareExt targets exist');
+for (const entry of [app, extension]) {
+  assert.equal(entry[1].buildPhases[0].comment, 'Verify Nearby native sources', 'source guard runs before compilation');
+}
+const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'nearby-source-guard-'));
+try {
+  const guard = path.join(root, 'scripts/verify-ios-sources.sh');
+  const files = [
+    ...['ShareViewController.h','ShareViewController.m','MainInterface.storyboard'].flatMap(name => ['native/ios/'+name,'platforms/ios/ShareExtension/'+name]),
+    'native/ios/ShareExt.entitlements','platforms/ios/ShareExt.entitlements',
+    ...['NearbyResolver.m','NearbyMapsResolver.h','NearbyPlacePicker.h'].flatMap(name => ['local-plugins/cordova-plugin-nearby-resolver/src/ios/'+name,'platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/'+name]),
+    ...['NearbyMapsResolver.h','NearbyPlacePicker.h'].map(name => 'platforms/ios/ShareExtension/'+name)
+  ];
+  for (const file of files) {
+    const destination = path.join(fixture,file);
+    fs.mkdirSync(path.dirname(destination),{recursive:true});
+    fs.copyFileSync(path.join(root,file),destination);
+  }
+  assert.equal(spawnSync('/bin/sh',[guard,fixture]).status,0,'synchronized sources can build');
+  fs.appendFileSync(path.join(fixture,'native/ios/ShareViewController.m'),'\n// later Git change\n');
+  const stale = spawnSync('/bin/sh',[guard,fixture],{encoding:'utf8'});
+  assert.equal(stale.status,1,'later source change blocks a stale build');
+  assert.match(stale.stderr,/npm run ios:prepare/,'failure explains how to regenerate');
+} finally {
+  fs.rmSync(fixture,{recursive:true,force:true});
+}
 function sourceComments(entry){
   const ref=entry[1].buildPhases.find(item=>item.comment==='Sources');
   return project.hash.project.objects.PBXSourcesBuildPhase[ref.value].files.map(item=>item.comment);

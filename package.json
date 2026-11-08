@@ -7,7 +7,7 @@
     "test": "node tests/collections-model.test.js && node tests/collections-ui.test.js && node tests/navigation.test.js && node tests/catalogue.test.js && node tests/proximity.behavior.test.js && node tests/map-import.behavior.test.js && node tests/share-extension.patch.test.js",
     "ios:add": "cordova platform add ios@8.1.1",
     "ios:prepare": "node scripts/sync-ui-assets.js && cordova prepare ios",
-    "ios:build": "cordova build ios --debug",
+    "ios:build": "npm run ios:prepare && npm run ios:verify && cordova build ios --debug",
     "ios:verify": "node tests/ios-generated.test.js",
     "ios:requirements": "cordova requirements ios",
     "postinstall": "node scripts/sync-ui-assets.js"

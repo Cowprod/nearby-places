@@ -135,6 +135,22 @@ function ensureProject(root, metadata) {
   const app = targetEntry(project, 'Nearby Places') || targetEntry(project, 'App');
   if (!app) throw Error('Main iOS app target missing');
   repairSourcePhases(project, app.target, extension.target);
+  for (const entry of [app, extension]) {
+    const name = 'Verify Nearby native sources';
+    if (!entry.target.buildPhases.some(phase => phase.comment === name)) {
+      project.addBuildPhase([], 'PBXShellScriptBuildPhase', name, entry.uuid, {
+        shellPath: '/bin/sh',
+        shellScript: '/bin/sh "$PROJECT_DIR/../../scripts/verify-ios-sources.sh" "$PROJECT_DIR/../.."'
+      });
+    }
+    const index = entry.target.buildPhases.findIndex(phase => phase.comment === name);
+    const [reference] = entry.target.buildPhases.splice(index, 1);
+    entry.target.buildPhases.unshift(reference);
+    project.hash.project.objects.PBXShellScriptBuildPhase[reference.value].alwaysOutOfDate = 1;
+    for (const config of buildConfigurations(project, entry.target)) {
+      config.buildSettings.ENABLE_USER_SCRIPT_SANDBOXING = 'NO';
+    }
+  }
   const appSettings = app ? buildConfigurations(project, app.target).map(config => config.buildSettings) : [];
   for (const config of buildConfigurations(project, extension.target)) {
     const settings = config.buildSettings;
@@ -211,4 +227,12 @@ if (require.main === module) {
   syncResolver(root);
 }
 
-module.exports = {APP_GROUP, NATIVE_FILES, patch, sync, syncResolver};
+function prepareHook(context) {
+  const root = context.opts.projectRoot;
+  sync(root);
+  syncResolver(root);
+}
+
+// Cordova only invokes function exports; named helpers remain available to tests
+// and to the local plugin hook.
+module.exports = Object.assign(prepareHook, {APP_GROUP, NATIVE_FILES, patch, sync, syncResolver});
