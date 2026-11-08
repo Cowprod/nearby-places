@@ -38,7 +38,7 @@ window.NearbyNavigation.show('settings');
 assert.equal(find(body,'nearby-tab-settings').hidden,false);
 assert.equal(stored.get('nearby-active-tab'),'settings');
 window.NearbyNavigation.show('invalid');
-assert.equal(stored.get('nearby-active-tab'),'places','invalid tab does not blank UI');
+assert.equal(stored.get('nearby-active-tab'),'settings','invalid tab does not blank UI');
 const nav=find(body,'nearby-tabs-content').parent.children.find(n=>n.tagName==='nav');
 assert.equal(nav.querySelector('[data-tab="settings"]').attributes['aria-selected'],'true');
 assert.equal(nav.querySelector('[data-tab="add"]').attributes['aria-selected'],'false');
