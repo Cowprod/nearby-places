@@ -11,6 +11,15 @@
   function distanceMeters(a,b,c,d) { var r=Math.PI/180, x=(c-a)*r, y=(d-b)*r, q=Math.sin(x/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)**2;return 12742000*Math.asin(Math.min(1,Math.sqrt(q))); }
   function save(){ localStorage.setItem(KEY,JSON.stringify(places)); if(window.NearbyProximity)window.NearbyProximity.setPlaces(places); if(typeof window.dispatchEvent==='function')window.dispatchEvent(new Event('nearby-places-changed')); }
   window.NearbyPlaceActions = {
+    updatePlace: function(id, name, comment) {
+      var p=places.find(function(item){return item && item.id===id;});
+      if(!p)throw Error('Lieu introuvable');
+      name=String(name||'').trim();
+      if(!name)throw Error('Nom obligatoire');
+      var oldName=p.name, oldComment=p.comment;
+      p.name=name; p.comment=String(comment||'').trim();
+      try{save();render();}catch(error){p.name=oldName;p.comment=oldComment;throw error;}
+    },
     setVisited: function(id, visited) {
       var p = places.find(function(item){return item && item.id===id;});
       if (!p) throw Error('Lieu introuvable');
