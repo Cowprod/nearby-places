@@ -344,7 +344,7 @@
     } catch (error) { status('Collections indisponibles : ' + error.message); }
   }
   function assignImportedPlace(place, collectionId) {
-    if (!collectionId || !window.NearbyCollections) return;
+    if (!collectionId || !window.NearbyCollections) throw Error('Collection obligatoire ou indisponible');
     var model = window.NearbyCollections;
     var state = model.loadOrMigrate(localStorage, places);
     model.attach(state, place.id, collectionId, null);
@@ -386,6 +386,7 @@
       status('Ce lieu existe déjà : import non enregistré');showNextImport();return;
     }
     var collectionId = $('import-collection') ? $('import-collection').value : '';
+    if (!collectionId) { status('Choisissez une collection avant de valider le lieu.'); return; }
     var imported = addManual(name,parsed.latitude,parsed.longitude,category,comment);
     try { assignImportedPlace(imported, collectionId); }
     catch (error) { status('Lieu enregistré, mais affectation à la collection impossible : ' + error.message); return; }
@@ -507,7 +508,8 @@
         Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;}) :
         addManual(name,parsed.latitude,parsed.longitude,category,String(intent.nearbyComment||''));
       var selectedCollection = String(intent.nearbyCollection || '');
-      if (selectedCollection && imported) assignImportedPlace(imported, selectedCollection);
+      if (!selectedCollection) throw Error('Collection absente du partage : import non validé');
+      if (imported) assignImportedPlace(imported, selectedCollection);
       return ackNativeShare(resolver,intent.shareID).then(function(){
         trace('share-pending',duplicate?'doublon acquitté':'enregistré '+name);
         status(duplicate?'Ce lieu partagé existe déjà':'Lieu partagé enregistré localement');
@@ -566,7 +568,10 @@
         function(error){trace('share-error','collections : '+String(error));});
     } catch(error) { trace('share-error','collections : '+error.message); }
   }
-  if (typeof window.addEventListener === 'function') window.addEventListener('nearby-places-changed', synchronizeNativeCollections);
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('nearby-places-changed', synchronizeNativeCollections);
+    window.addEventListener('nearby-collections-changed', synchronizeNativeCollections);
+  }
   function initializeNativeShare(){
     var resolver=window.NearbyResolver;
     if(!resolver){trace('share-init','résolveur absent');return;}
