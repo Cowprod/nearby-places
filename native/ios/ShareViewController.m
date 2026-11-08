@@ -78,7 +78,7 @@ static const NSUInteger NearbyQueueLimit = 50;
 - (NSArray<NSDictionary *> *)loadCollections {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:NearbyAppGroup];
     id stored = [defaults objectForKey:NearbyCollectionsKey];
-    NSMutableArray *choices = [NSMutableArray arrayWithObject:@{@"id":@"", @"name":@"Mes lieux (aucune collection)"}];
+    NSMutableArray *choices = [NSMutableArray arrayWithObject:@{@"id":@"", @"name":@"Choisir une collection…"}];
     if (![stored isKindOfClass:NSArray.class]) return choices;
     for (id item in (NSArray *)stored) {
         if (![item isKindOfClass:NSDictionary.class]) continue;
@@ -414,7 +414,11 @@ static const NSUInteger NearbyQueueLimit = 50;
     NSInteger row = [self.categoryPicker selectedRowInComponent:0];
     NSDictionary *category = row >= 0 && row < (NSInteger)self.categories.count ? self.categories[row] : self.categories.firstObject;
     NSInteger collectionRow = [self.collectionPicker selectedRowInComponent:0];
-    NSDictionary *collection = collectionRow >= 0 && collectionRow < (NSInteger)self.collections.count ? self.collections[collectionRow] : self.collections.firstObject;
+    NSDictionary *collection = collectionRow >= 0 && collectionRow < (NSInteger)self.collections.count ? self.collections[collectionRow] : nil;
+    if (![collection[@"id"] isKindOfClass:NSString.class] || [collection[@"id"] length] == 0) {
+        [self showError:self.collections.count < 2 ? @"Aucune collection disponible. Ouvrez Nearby Places, créez une collection puis réessayez le partage." : @"Choisissez une collection avant d’enregistrer ce lieu."];
+        return;
+    }
     NSDictionary *record = @{
         @"schemaVersion": @1,
         @"shareID": NSUUID.UUID.UUIDString,
