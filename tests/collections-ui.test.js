@@ -111,4 +111,13 @@ assert.equal(fs.readFileSync('www/js/collections-ui.js','utf8'),
 const iosHTML = fs.readFileSync('www/index.html','utf8');
 assert.equal(iosHTML,fs.readFileSync('public/index.html','utf8'),'web and iOS HTML match');
 assert.match(iosHTML,/collection-card details textarea\{min-height:82px/,'description usable on iPhone');
+const bulk = panel.children[6];
+assert.equal(bulk.id,'collections-bulk');
+const destination = bulk.children[1];
+const bulkButton = bulk.children[2];
+destination.value = saved.collections[0].id;
+bulkButton.onclick();
+const afterBulk = JSON.parse(storage.getItem('nearby-collections-v2'));
+assert.equal(afterBulk.memberships.filter(m=>m.collectionId===saved.collections[0].id).length,1,'bulk assignment is idempotent');
+assert.equal(storage.getItem('nearby-places-v1'),legacyRaw,'bulk assignment preserves places');
 console.log('PASS collections UI: description, open editor, persistence rollback, legacy data and public parity');
