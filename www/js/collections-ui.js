@@ -29,6 +29,7 @@
     newName.setAttribute('aria-label', 'Nom de la collection');
     var add = el('button', 'Créer');
     var bulk = el('section', null, 'collections-bulk');
+    bulk.id = 'collections-bulk';
     var bulkTitle = el('h3', 'Affectation initiale des lieux');
     var bulkSelect = el('select');
     bulkSelect.setAttribute('aria-label', 'Collection de destination');
