@@ -26,8 +26,11 @@ assert.throws(()=>model.attach(migrated,'p2','collection-default',local),/unavai
 model.attach(migrated,'p1',second,'culture');
 assert.equal(migrated.memberships.filter(m=>m.placeId==='p1'&&m.collectionId===second).length,1);
 assert.equal(model.validate(migrated),true);
+assert.equal(model.reconcile(migrated,[...places,{id:'p3',name:'New import',categories:['musique']}]),1);
+assert.equal(model.reconcile(migrated,[...places,{id:'p3',name:'New import',categories:['musique']}]),0);
+assert.equal(migrated.memberships.find(m=>m.placeId==='p3').categoryId,'musique');
 model.save(storage,migrated);
-assert.equal(model.loadOrMigrate(storage,[]).memberships.length,3);
+assert.equal(model.loadOrMigrate(storage,[]).memberships.length,4);
 const corrupt = memory();
 corrupt.setItem('nearby-collections-v2','{invalid');
 assert.throws(()=>model.loadOrMigrate(corrupt,places),SyntaxError);
