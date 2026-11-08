@@ -33,7 +33,8 @@
       schemaVersion: 2,
       collections: [{ id: collectionId, name: 'Mes lieux', description: '', createdAt: null, updatedAt: null }],
       categories: categories,
-      memberships: memberships
+      memberships: memberships,
+      knownPlaceIds: Array.from(seen)
     };
   }
   function validate(data) {
@@ -47,6 +48,9 @@
       return c && (c.scope === 'global' ? c.collectionId === null :
         c.scope === 'collection' && collections.has(c.collectionId));
     })) return false;
+    if (data.knownPlaceIds !== undefined && (!Array.isArray(data.knownPlaceIds) ||
+      data.knownPlaceIds.some(function(id){return typeof id!=='string' || !id;}) ||
+      new Set(data.knownPlaceIds).size!==data.knownPlaceIds.length)) return false;
     var pairs = new Set();
     return data.memberships.every(function (m) {
       if (!m || typeof m.placeId !== 'string' || !m.placeId || !collections.has(m.collectionId) ||
@@ -64,6 +68,11 @@
     if (raw !== null) {
       var existing = JSON.parse(raw);
       if (!validate(existing)) throw new Error('Invalid v2 collections: original data preserved');
+      if (!Array.isArray(existing.knownPlaceIds)) {
+        existing.knownPlaceIds = Array.from(new Set(legacyPlaces.filter(function(p){return p && typeof p.id==='string' && p.id;}).map(function(p){return p.id;})
+          .concat(existing.memberships.map(function(m){return m.placeId;}))));
+        storage.setItem(key, JSON.stringify(existing));
+      }
       return existing;
     }
     var next = initial(legacyPlaces);
@@ -73,15 +82,29 @@
   }
   function reconcile(data, places) {
     if (!validate(data) || !Array.isArray(places)) throw new Error('Invalid reconciliation');
-    var present = new Set(data.memberships.map(function(m){return m.placeId;}));
+    if (!Array.isArray(data.knownPlaceIds)) data.knownPlaceIds = Array.from(new Set(data.memberships.map(function(m){return m.placeId;})));
+    var known = new Set(data.knownPlaceIds);
     var additions = 0;
     places.forEach(function(p){
-      if (!p || typeof p.id !== 'string' || !p.id || present.has(p.id)) return;
+      if (!p || typeof p.id !== 'string' || !p.id || known.has(p.id)) return;
       var legacy = Array.isArray(p.categories) ? p.categories.find(function(id){return data.categories.some(function(c){return c.id===id && c.scope==='global';});}) : null;
       data.memberships.push({placeId:p.id,collectionId:'collection-default',categoryId:legacy||null});
-      present.add(p.id); additions++;
+      known.add(p.id); data.knownPlaceIds.push(p.id); additions++;
     });
     return additions;
+  }
+  function merge(current, incoming) {
+    if (!validate(current) || !validate(incoming)) throw new Error('Invalid collections backup');
+    function mergeById(first, second){var out = new Map(); first.forEach(function(x){out.set(x.id,x);}); second.forEach(function(x){out.set(x.id,x);}); return Array.from(out.values());}
+    var memberships = new Map();
+    incoming.memberships.concat(current.memberships).forEach(function(m){
+      memberships.set(JSON.stringify([m.collectionId,m.placeId]),m);
+    });
+    var knownPlaceIds = Array.from(new Set([].concat(incoming.knownPlaceIds || incoming.memberships.map(function(m){return m.placeId;}),current.knownPlaceIds || current.memberships.map(function(m){return m.placeId;}))));
+    var result = {schemaVersion:2,collections:mergeById(incoming.collections,current.collections),
+      categories:mergeById(incoming.categories,current.categories),memberships:Array.from(memberships.values()),knownPlaceIds:knownPlaceIds};
+    if (!validate(result)) throw new Error('Incompatible collections backup');
+    return result;
   }
   function save(storage, data) {
     if (!validate(data)) throw new Error('Invalid collections model');
@@ -114,6 +137,6 @@
     if (existing) existing.categoryId = categoryId == null ? null : categoryId;
     else data.memberships.push({ placeId: placeId, collectionId: collectionId, categoryId: categoryId == null ? null : categoryId });
   }
-  return { initial: initial, validate: validate, loadOrMigrate: loadOrMigrate, reconcile: reconcile, save: save,
+  return { initial: initial, validate: validate, loadOrMigrate: loadOrMigrate, reconcile: reconcile, merge: merge, save: save,
     createCollection: createCollection, createCategory: createCategory, attach: attach };
 });
