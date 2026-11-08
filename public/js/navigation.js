@@ -11,7 +11,6 @@
     nav.setAttribute('aria-label', 'Navigation principale');
     var tabs = [
       {id:'collections',label:'Collections',nodes:[panel]},
-      {id:'places',label:'Lieux',nodes:[]},
       {id:'add',label:'Ajouter',nodes:[]},
       {id:'settings',label:'Réglages',nodes:[]}
     ];
@@ -31,15 +30,18 @@
     var backupTitle = byTitle('Sauvegarde des lieux personnels');
     var addTitle = byTitle('Ajouter un lieu');
     if (!placesTitle || !proximityTitle || !importTitle || !backupTitle || !addTitle) return;
-    collect(placesTitle,proximityTitle,tabs[1].nodes);
-    collect(importTitle,backupTitle,tabs[2].nodes);
-    collect(addTitle,document.querySelector('body > script'),tabs[2].nodes);
-    collect(proximityTitle,importTitle,tabs[3].nodes);
-    collect(backupTitle,addTitle,tabs[3].nodes);
+    collect(placesTitle,proximityTitle,tabs[2].nodes);
+    collect(importTitle,backupTitle,tabs[1].nodes);
+    collect(addTitle,document.querySelector('body > script'),tabs[1].nodes);
+    collect(proximityTitle,importTitle,tabs[2].nodes);
+    collect(backupTitle,addTitle,tabs[2].nodes);
     var bulk = document.getElementById('collections-bulk');
-    if (bulk) tabs[3].nodes.push(bulk);
+    if (bulk) tabs[2].nodes.push(bulk);
     var status = document.getElementById('status');
-    if (status) status.insertAdjacentElement('afterend',nav);
+    if (status) {
+      status.insertAdjacentElement('afterend',nav);
+      tabs[2].nodes.unshift(status);
+    }
     nav.insertAdjacentElement('afterend',main);
     tabs.forEach(function (tab) {
       var button = document.createElement('button');
