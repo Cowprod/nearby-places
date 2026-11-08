@@ -33,6 +33,11 @@ assert.match(controller,/UTTypeText\.identifier/,'shared text metadata loaded');
 assert.match(controller,/UITextField/,'native name field present');
 assert.match(controller,/UITextView/,'native comment field present');
 assert.match(controller,/UIPickerView/,'native category picker present');
+assert.match(controller,/UILabel \*collectionLabel = \[self fieldLabel:@"Collection \*"\]/,'mandatory collection is visible');
+assert.match(controller,/\[stack insertArrangedSubview:field atIndex:insertion\+\+\]/,'collection selector is explicitly inserted');
+assert.match(controller,/\@\[collectionLabel, self\.collectionPicker, categoryLabel, self\.categoryPicker\]/,'collection precedes dependent category');
+assert.doesNotMatch(controller,/stack\.arrangedSubviews\[\d+\]/,'never reorder by brittle stack indices');
+assert.match(controller,/categoriesForSelectedCollection/,'categories depend on selected collection');
 assert.match(controller,/nearbyShareQueue/,'durable queue used');
 assert.match(controller,/NearbyQueueLimit/,'queue is bounded explicitly');
 
