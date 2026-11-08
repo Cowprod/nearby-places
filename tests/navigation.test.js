@@ -23,7 +23,7 @@ body.append(script);
 const document={
   readyState:'complete',
   createElement:t=>new Node(t),
-  getElementById:id=>id==='collections-panel'?panel:id==='places'?places:find(body,id),
+  getElementById:id=>id==='collections-panel'?panel:id==='settings'?places:find(body,id),
   querySelectorAll:sel=>sel==='body > h2'?headings:[],
   querySelector:sel=>sel==='body > script'?script:null
 };
@@ -33,14 +33,14 @@ const sessionStorage={getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k
 const window={};
 vm.runInNewContext(fs.readFileSync('www/js/navigation.js','utf8'),{document,window,sessionStorage,Array});
 assert.equal(find(body,'nearby-tab-add').hidden,false,'restores Add tab');
-assert.equal(find(body,'nearby-tab-places').hidden,true);
-window.NearbyNavigation.show('places');
-assert.equal(find(body,'nearby-tab-places').hidden,false);
+assert.equal(find(body,'nearby-tab-settings').hidden,true);
+window.NearbyNavigation.show('settings');
+assert.equal(find(body,'nearby-tab-settings').hidden,false);
 assert.equal(stored.get('nearby-active-tab'),'places');
 window.NearbyNavigation.show('invalid');
 assert.equal(stored.get('nearby-active-tab'),'places','invalid tab does not blank UI');
 const nav=find(body,'nearby-tabs-content').parent.children.find(n=>n.tagName==='nav');
-assert.equal(nav.querySelector('[data-tab="places"]').attributes['aria-selected'],'true');
+assert.equal(nav.querySelector('[data-tab="settings"]').attributes['aria-selected'],'true');
 assert.equal(nav.querySelector('[data-tab="add"]').attributes['aria-selected'],'false');
 assert.equal(fs.readFileSync('www/js/navigation.js','utf8'),fs.readFileSync('public/js/navigation.js','utf8'));
 console.log('PASS navigation: persisted tab, switch, invalid target, accessibility, www/public parity');
