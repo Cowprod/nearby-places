@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('www/js/app.js', 'utf8');
+const collections = require('../www/js/collections-model.js');
 function harness(native = false, earlyURLs = [], controlledFetch = false, seedLocal = null) {
   const store = new Map(), elements = new Map(), listeners = new Map();
   const nativeResolutions=[], networkCalls=[], nativeTimers=[], nativeQueue=[], nativeAcks=[];
@@ -31,7 +32,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     resolver.ackShared=(shareID,success)=>{const index=nativeQueue.findIndex(item=>item.shareID===shareID);if(index>=0)nativeQueue.splice(index,1);nativeAcks.push(shareID);success(true);};
     resolver.syncCategories=(categories,success)=>success(true);
   }
-  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:resolver},document,localStorage,URL,URLSearchParams,AbortController,
+  const context={window:{confirm(){return confirmAllowed;},NearbyResolver:resolver,NearbyCollections:collections},document,localStorage,URL,URLSearchParams,AbortController,
     setTimeout(fn,ms){if(ms===0){fn();return 0;}nativeTimers.push({fn,ms,cleared:false});return nativeTimers.length;},
     clearTimeout(id){if(nativeTimers[id-1])nativeTimers[id-1].cleared=true;},
     fetch(url){
@@ -57,6 +58,10 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     expireNativeResolvers(){nativeTimers.forEach(timer=>{if(timer.ms===22000&&!timer.cleared){timer.cleared=true;timer.fn();}});},
     resolveFetch(index,data){networkCalls[index].resolve({ok:true,json(){return Promise.resolve(data)}});},
     refresh(){document.getElementById('refresh').onclick();},
+    async restoreJSON(data){
+      document.getElementById('import').onchange({target:{files:[{text(){return Promise.resolve(JSON.stringify(data));}}],value:''}});
+      await new Promise(resolve=>setImmediate(resolve));
+    },
     manualAdd(){document.getElementById('add').onclick();},
     setConfirm(value){confirmAllowed=value;},
     fire(event){(listeners.get(event)||[]).forEach(callback=>callback());},
@@ -79,6 +84,24 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
 }
 function checkPlace(p,lat,lon){assert.ok(p);assert.equal(p.latitude,lat);assert.equal(p.longitude,lon);}
 async function main() {
+const backupHarness=harness(false,[],true);
+const savedPlace={id:'manual-100-backup',name:'Saved museum',latitude:35,longitude:139,
+  categories:['culture'],visited:false,source:{type:'manual'}};
+const savedCollections=collections.initial([savedPlace]);
+const importedCollection=collections.createCollection(savedCollections,'Voyage Japon','');
+const importedCategory=collections.createCategory(savedCollections,'Musée',importedCollection);
+collections.attach(savedCollections,savedPlace.id,importedCollection,importedCategory);
+await backupHarness.restoreJSON({schemaVersion:1,places:[savedPlace],visited:[],collectionsV2:savedCollections});
+assert.equal(backupHarness.status().includes('collections'),true,'backup collections restored');
+const afterRestore=JSON.parse(backupHarness.store.get('nearby-collections-v2'));
+assert.equal(afterRestore.collections.some(c=>c.id===importedCollection),true);
+assert.equal(afterRestore.memberships.some(m=>m.collectionId===importedCollection&&m.categoryId===importedCategory),true);
+const beforeInvalid=backupHarness.store.get('nearby-collections-v2');
+await backupHarness.restoreJSON({schemaVersion:1,places:[savedPlace],visited:[],
+  collectionsV2:{schemaVersion:2,collections:[],categories:[],memberships:[{collectionId:'unknown',placeId:'x',categoryId:null}]}});
+assert.match(backupHarness.status(),/refusé/,'corrupt backup rejected');
+assert.equal(backupHarness.store.get('nearby-collections-v2'),beforeInvalid,'invalid restore preserves existing collections');
+console.log('PASS sauvegarde collections (simulée) : restauration et refus sans perte');
 const sorted=harness(false,[],false,JSON.stringify([
   {id:'manual-100-a',name:'Culture ancien',latitude:35,longitude:139,categories:['culture'],visited:false},
   {id:'manual-500-b',name:'Visité récent',latitude:35,longitude:139,categories:['culture'],visited:true},
