@@ -70,7 +70,7 @@ static const NSUInteger NearbyQueueLimit = 50;
         if (![item isKindOfClass:NSDictionary.class]) continue;
         NSString *identifier = [item[@"id"] isKindOfClass:NSString.class] ? item[@"id"] : nil;
         NSString *name = [item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : nil;
-        if (identifier.length && name.length) [valid addObject:@{ @"id": identifier, @"name": name }];
+        if (identifier.length && name.length) [valid addObject:@{ @"id": identifier, @"name": name, @"collectionId": [item[@"collectionId"] isKindOfClass:NSString.class] ? item[@"collectionId"] : @"" }];
     }
     return valid.count ? valid : [self canonicalCategories];
 }
@@ -417,7 +417,8 @@ static const NSUInteger NearbyQueueLimit = 50;
         return;
     }
     NSInteger row = [self.categoryPicker selectedRowInComponent:0];
-    NSDictionary *category = row >= 0 && row < (NSInteger)self.categories.count ? self.categories[row] : self.categories.firstObject;
+    NSArray *availableCategories = [self categoriesForSelectedCollection];
+    NSDictionary *category = row >= 0 && row < (NSInteger)availableCategories.count ? availableCategories[row] : availableCategories.firstObject;
     NSInteger collectionRow = [self.collectionPicker selectedRowInComponent:0];
     NSDictionary *collection = collectionRow >= 0 && collectionRow < (NSInteger)self.collections.count ? self.collections[collectionRow] : nil;
     if (![collection[@"id"] isKindOfClass:NSString.class] || [collection[@"id"] length] == 0) {
@@ -465,8 +466,24 @@ static const NSUInteger NearbyQueueLimit = 50;
     [self presentViewController:confirmation animated:YES completion:nil];
 }
 
+- (NSArray<NSDictionary *> *)categoriesForSelectedCollection {
+    NSInteger row = [self.collectionPicker selectedRowInComponent:0];
+    NSString *collectionId = row >= 0 && row < (NSInteger)self.collections.count ? self.collections[row][@"id"] : @"";
+    NSMutableArray *result = [NSMutableArray array];
+    for (NSDictionary *category in self.categories) {
+        NSString *scope = [category[@"collectionId"] isKindOfClass:NSString.class] ? category[@"collectionId"] : @"";
+        if (!scope.length || [scope isEqualToString:collectionId]) [result addObject:category];
+    }
+    return result;
+}
+- (void)pickerView:(UIPickerView *)pickerView didSelectRow:(NSInteger)row inComponent:(NSInteger)component {
+    if (pickerView == self.collectionPicker) {
+        [self.categoryPicker reloadAllComponents];
+        [self.categoryPicker selectRow:0 inComponent:0 animated:NO];
+    }
+}
 - (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView { return 1; }
-- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections.count : self.categories.count; }
-- (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections[row][@"name"] : self.categories[row][@"name"]; }
+- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections.count : [self categoriesForSelectedCollection].count; }
+- (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections[row][@"name"] : [self categoriesForSelectedCollection][row][@"name"]; }
 
 @end
