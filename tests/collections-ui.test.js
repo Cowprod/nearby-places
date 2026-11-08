@@ -75,8 +75,12 @@ vm.runInNewContext(fs.readFileSync('www/js/collections-ui.js','utf8'),context,{f
 const panel = body.children[1];
 assert.equal(panel.id,'collections-panel');
 const list = panel.children[3];
+const detailView = panel.children[4];
+list.children[0].children[0].onclick();
+assert.equal(list.hidden,true,'opening collection shows its detail');
+assert.equal(detailView.hidden,false,'collection detail is visible');
 const feedback = panel.children[5];
-function editor() { return list.children[0].children[2]; }
+function editor() { return detailView.children[1].children.find(c=>c.tagName==='details'); }
 let details = editor();
 assert.equal(details.open,false);
 assert.equal(details.children[2].tagName,'textarea','collection description editor exists');
