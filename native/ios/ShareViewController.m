@@ -31,7 +31,8 @@ static const NSUInteger NearbyQueueLimit = 50;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = [UIColor colorWithRed:0.965 green:0.973 blue:0.980 alpha:1.0];
+    self.view.tintColor = [UIColor colorWithRed:0.22 green:0.49 blue:0.45 alpha:1.0];
     self.sharedTexts = [NSMutableArray array];
     self.categories = [self loadCategories];
     self.collections = [self loadCollections];
@@ -94,7 +95,8 @@ static const NSUInteger NearbyQueueLimit = 50;
 - (UILabel *)fieldLabel:(NSString *)text {
     UILabel *label = [[UILabel alloc] init];
     label.text = text;
-    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    label.textColor = [UIColor colorWithRed:0.29 green:0.36 blue:0.41 alpha:1.0];
     return label;
 }
 
@@ -112,7 +114,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     ]];
     UIStackView *stack = [[UIStackView alloc] init];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 10;
+    stack.spacing = 12;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollView addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
@@ -125,6 +127,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     title.text = @"Ajouter à Nearby Places";
     title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
     title.adjustsFontForContentSizeCategory = YES;
+    title.textColor = [UIColor colorWithRed:0.16 green:0.20 blue:0.24 alpha:1.0];
     [stack addArrangedSubview:title];
     self.activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     [self.activityIndicator startAnimating];
@@ -143,7 +146,14 @@ static const NSUInteger NearbyQueueLimit = 50;
     [stack addArrangedSubview:[self fieldLabel:@"Nom *"]];
     self.nameField = [[UITextField alloc] init];
     self.nameField.placeholder = @"Nom du lieu";
-    self.nameField.borderStyle = UITextBorderStyleRoundedRect;
+    self.nameField.borderStyle = UITextBorderStyleNone;
+    self.nameField.backgroundColor = UIColor.whiteColor;
+    self.nameField.layer.cornerRadius = 10;
+    self.nameField.layer.borderWidth = 1;
+    self.nameField.layer.borderColor = [UIColor colorWithRed:0.88 green:0.90 blue:0.93 alpha:1].CGColor;
+    self.nameField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0,0,12,1)];
+    self.nameField.leftViewMode = UITextFieldViewModeAlways;
+    [self.nameField.heightAnchor constraintGreaterThanOrEqualToConstant:46].active = YES;
     self.nameField.clearButtonMode = UITextFieldViewModeWhileEditing;
     self.nameField.returnKeyType = UIReturnKeyDone;
     self.nameField.enabled = NO;
@@ -153,9 +163,11 @@ static const NSUInteger NearbyQueueLimit = 50;
     [stack addArrangedSubview:commentLabel];
     self.commentView = [[UITextView alloc] init];
     self.commentView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-    self.commentView.layer.borderColor = UIColor.separatorColor.CGColor;
+    self.commentView.backgroundColor = UIColor.whiteColor;
+    self.commentView.layer.borderColor = [UIColor colorWithRed:0.88 green:0.90 blue:0.93 alpha:1].CGColor;
     self.commentView.layer.borderWidth = 1;
-    self.commentView.layer.cornerRadius = 8;
+    self.commentView.layer.cornerRadius = 10;
+    self.commentView.textContainerInset = UIEdgeInsetsMake(12,8,12,8);
     self.commentView.editable = NO;
     [self.commentView.heightAnchor constraintEqualToConstant:88].active = YES;
     [stack addArrangedSubview:self.commentView];
@@ -165,6 +177,8 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.categoryPicker.dataSource = self;
     self.categoryPicker.delegate = self;
     self.categoryPicker.userInteractionEnabled = NO;
+    self.categoryPicker.backgroundColor = UIColor.whiteColor;
+    self.categoryPicker.layer.cornerRadius = 10;
     [self.categoryPicker.heightAnchor constraintEqualToConstant:92].active = YES;
     [stack addArrangedSubview:self.categoryPicker];
     UILabel *collectionLabel = [self fieldLabel:@"Collection *"];
@@ -173,6 +187,8 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.collectionPicker.dataSource = self;
     self.collectionPicker.delegate = self;
     self.collectionPicker.userInteractionEnabled = NO;
+    self.collectionPicker.backgroundColor = UIColor.whiteColor;
+    self.collectionPicker.layer.cornerRadius = 10;
     [self.collectionPicker.heightAnchor constraintEqualToConstant:92].active = YES;
     [stack addArrangedSubview:self.collectionPicker];
     // Explicit references: never use arrangedSubviews indices to reorder the form.
@@ -190,10 +206,18 @@ static const NSUInteger NearbyQueueLimit = 50;
     UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
     [cancel setTitle:@"Annuler" forState:UIControlStateNormal];
     [cancel addTarget:self action:@selector(cancel) forControlEvents:UIControlEventTouchUpInside];
+    cancel.backgroundColor = UIColor.whiteColor;
+    cancel.layer.cornerRadius = 10;
+    cancel.layer.borderWidth = 1;
+    cancel.layer.borderColor = [UIColor colorWithRed:0.86 green:0.89 blue:0.91 alpha:1].CGColor;
+    [cancel.heightAnchor constraintGreaterThanOrEqualToConstant:48].active = YES;
     [buttons addArrangedSubview:cancel];
     self.saveButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.saveButton setTitle:@"Enregistrer" forState:UIControlStateNormal];
     self.saveButton.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    self.saveButton.backgroundColor = [UIColor colorWithRed:0.22 green:0.49 blue:0.45 alpha:1];
+    [self.saveButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.saveButton.layer.cornerRadius = 10;
     self.saveButton.enabled = NO;
     [self.saveButton addTarget:self action:@selector(save) forControlEvents:UIControlEventTouchUpInside];
     [buttons addArrangedSubview:self.saveButton];
@@ -319,7 +343,6 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.categoryPicker.userInteractionEnabled = YES;
     self.collectionPicker.userInteractionEnabled = YES;
     self.saveButton.enabled = YES;
-    if (!self.nameField.text.length) [self.nameField becomeFirstResponder];
 }
 
 - (void)resolveSharedName {
@@ -464,7 +487,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.saveButton.enabled = NO;
     [self.view endEditing:YES];
     UIAlertController *confirmation = [UIAlertController alertControllerWithTitle:@"Lieu vérifié et sauvegardé"
-        message:[NSString stringWithFormat:@"Les coordonnées sont vérifiées. Le lieu sera ajouté à « %@ » à la prochaine ouverture de Nearby Places.", collection[@"name"] ?: @"la collection sélectionnée"]
+        message:[NSString stringWithFormat:@"Les coordonnées sont vérifiées. Le lieu sera ajouté à « %@ » à la prochaine ouverture de Nearby Places.", collection[@"name"] ?: @"la collection sélectionnée"]]
         preferredStyle:UIAlertControllerStyleAlert];
     [confirmation addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         [self.extensionContext completeRequestReturningItems:@[] completionHandler:nil];
