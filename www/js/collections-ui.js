@@ -54,7 +54,7 @@
     var expandedCollections = new Set();
     try { state = api.loadOrMigrate(localStorage, readPlaces()); }
     catch (error) { feedback.textContent = error.message; controls.hidden = true; return; }
-    function persist() { api.save(localStorage, state); render(); }
+    function persist() { api.save(localStorage, state); render(); if(typeof window.dispatchEvent==='function' && typeof Event==='function')window.dispatchEvent(new Event('nearby-collections-changed')); }
     function refresh() {
       try { state=api.loadOrMigrate(localStorage,readPlaces()); if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); }
       catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
