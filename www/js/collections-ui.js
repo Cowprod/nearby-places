@@ -192,6 +192,7 @@
           var place = places.find(function (p) { return p && p.id === m.placeId; });
           if (place) {
             var item=el('li',null,'collection-place-item'); item.append(el('span',place.name||m.placeId));
+            if(place.comment){item.append(el('small',place.comment,'muted collection-place-comment'));}
             if(place.visited){
               var originalCategory=state.categories.find(function(c){return c.id===m.categoryId;});
               item.append(el('small',originalCategory?originalCategory.name:'Sans catégorie','muted collection-original-category'));
@@ -269,8 +270,8 @@
             var directions=el('a',null,'collection-icon-button');
             directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=w';
             directions.target='_blank';directions.rel='noopener noreferrer';
-            directions.setAttribute('aria-label','Itinéraire à pied vers '+place.name);
-            directions.title='Itinéraire à pied';
+            directions.setAttribute('aria-label','Plans : itinéraire à pied vers '+place.name);
+            directions.title='Plans';
             directions.append(el('i',null,'fa-solid fa-person-walking'));
             var editPlace=el('button',null,'collection-icon-button');
             editPlace.setAttribute('aria-label','Modifier '+place.name);
