@@ -469,3 +469,14 @@ queued=JSON.parse(cold.store.get('nearby-places-v1')||'[]');
 console.log('PASS imports simulés : Apple q/ll/redirection native/HTML validée, Google POI, ChatGPT, texte partagé, anti-doublon, erreur native/HTTP/NULL, reset confirmé');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
+
+const nativeShareSource = fs.readFileSync('native/ios/ShareViewController.m','utf8');
+const nativeResolverSource = fs.readFileSync('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyResolver.m','utf8');
+const bridgeSource = fs.readFileSync('local-plugins/cordova-plugin-nearby-resolver/www/resolver.js','utf8');
+assert.match(nativeShareSource, /nearbyCollection/,'native share persists collection choice');
+assert.match(nativeShareSource, /collectionPicker/,'native share exposes collection picker');
+assert.match(nativeResolverSource, /syncCollections:/,'native bridge synchronizes collection list');
+assert.match(bridgeSource, /syncCollections:function/,'Cordova bridge exposes collection sync');
+assert.match(source, /assignImportedPlace\(imported, selectedCollection\)/,'native import attaches collection before ack');
+assert.match(source, /populateImportCollections\(\)/,'web confirmation populates collections');
+console.log('PASS collection selection: native share, bridge, and web import wiring');
