@@ -10,6 +10,28 @@
   function validPosition(lat, lon) { return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; }
   function distanceMeters(a,b,c,d) { var r=Math.PI/180, x=(c-a)*r, y=(d-b)*r, q=Math.sin(x/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)**2;return 12742000*Math.asin(Math.min(1,Math.sqrt(q))); }
   function save(){ localStorage.setItem(KEY,JSON.stringify(places)); if(window.NearbyProximity)window.NearbyProximity.setPlaces(places); if(typeof window.dispatchEvent==='function')window.dispatchEvent(new Event('nearby-places-changed')); }
+  window.NearbyPlaceActions = {
+    setVisited: function(id, visited) {
+      var p = places.find(function(item){return item && item.id===id;});
+      if (!p) throw Error('Lieu introuvable');
+      var before=p.visited;
+      p.visited=!!visited;
+      try { save(); render(); } catch(error){p.visited=before;throw error;}
+    },
+    deletePlace: function(id) {
+      var p=places.find(function(item){return item && item.id===id;});
+      if (!p) throw Error('Lieu introuvable');
+      var before=places.slice();
+      var deleted=readJSON('nearby-deleted-place-ids-v1',[]);
+      var isCatalogue=!(p.source && p.source.type==='manual');
+      if (isCatalogue && !Array.isArray(deleted)) throw Error('Historique des suppressions invalide');
+      try {
+        if(isCatalogue)localStorage.setItem('nearby-deleted-place-ids-v1',JSON.stringify(Array.from(new Set(deleted.concat([id])))));
+        places=places.filter(function(item){return item && item.id!==id;});
+        save();render();
+      } catch(error){places=before;throw error;}
+    }
+  };
   function trace(kind,detail){if(window.NearbyProximity&&window.NearbyProximity.logEvent)window.NearbyProximity.logEvent(kind,detail);}
   function status(s){ $('status').textContent=s; }
   function confirmDeletion(parent,message,action){
