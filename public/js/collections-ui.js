@@ -163,19 +163,61 @@
         places.filter(function(p){return p && typeof p.id==='string' && p.id && !assigned.has(p.id);}).forEach(function(p){var option=el('option',p.name||p.id);option.value=p.id;assignSelect.append(option);});
         var assignButton=el('button','Affecter le lieu');
         assignButton.onclick=function(){if(!assignSelect.value)return;try{api.attach(state,assignSelect.value,collection.id,null);persist();feedback.textContent='Lieu affecté';}catch(error){feedback.textContent=error.message;}};
-        state.memberships.filter(function (m) { return m.collectionId === collection.id; }).forEach(function (m) {
+        var categoryGroups = new Map();
+        state.memberships.filter(function(m){return m.collectionId===collection.id;}).forEach(function(m){
+          var place=places.find(function(p){return p && p.id===m.placeId;});
+          if(!place)return;
+          var category=state.categories.find(function(c){return c.id===m.categoryId;});
+          var group=category?category.name:'Sans catégorie';
+          if(!categoryGroups.has(group))categoryGroups.set(group,[]);
+          categoryGroups.get(group).push({membership:m,place:place});
+        });
+        Array.from(categoryGroups.keys()).sort(function(a,b){
+          if(a==='Sans catégorie')return -1;
+          if(b==='Sans catégorie')return 1;
+          return a.localeCompare(b,'fr');
+        }).forEach(function(group){
+          placeList.append(el('li',group,'collection-category-heading'));
+          categoryGroups.get(group).sort(function(a,b){
+            var visited=Number(!!a.place.visited)-Number(!!b.place.visited);
+            return visited || String(a.place.name||'').localeCompare(String(b.place.name||''),'fr');
+          }).forEach(function(entry){
+          var m=entry.membership;
           var place = places.find(function (p) { return p && p.id === m.placeId; });
           if (place) {
-            var item=el('li'); item.append(el('span',place.name||m.placeId));
+            var item=el('li',null,'collection-place-item'); item.append(el('span',place.name||m.placeId));
             var categorySelect=el('select');categorySelect.setAttribute('aria-label','Catégorie de '+(place.name||m.placeId));
             var none=el('option','Sans catégorie');none.value='';categorySelect.append(none);
             state.categories.filter(function(c){return c.scope==='global'||c.collectionId===collection.id;}).forEach(function(c){var option=el('option',c.name);option.value=c.id;categorySelect.append(option);});
             categorySelect.value=m.categoryId||'';
             categorySelect.onchange=function(){try{api.attach(state,m.placeId,collection.id,categorySelect.value||null);persist();}catch(error){feedback.textContent=error.message;}};
-            var unlink=el('button','Retirer de la collection');
-            unlink.onclick=function(){state.memberships=state.memberships.filter(function(x){return x!==m;});persist();};
-            item.append(categorySelect,unlink);placeList.append(item);
+            var actions=el('div',null,'collection-place-actions');
+            var visited=el('button',null,'collection-icon-button');
+            visited.append(el('i',null,place.visited?'fa-solid fa-bell':'fa-solid fa-bell-slash'));
+            visited.setAttribute('aria-label',place.visited?'Réactiver les alertes de '+place.name:'Marquer '+place.name+' comme visité');
+            visited.onclick=function(){try{window.NearbyPlaceActions.setVisited(place.id,!place.visited);feedback.textContent='Statut du lieu actualisé';}catch(error){feedback.textContent=error.message;}};
+            var trash=el('button',null,'collection-icon-button collection-danger');
+            trash.append(el('i',null,'fa-solid fa-trash'));
+            trash.setAttribute('aria-label','Supprimer '+place.name+' de cette collection');
+            trash.onclick=function(){
+              var others=state.memberships.filter(function(x){return x.placeId===place.id && x.collectionId!==collection.id && x.collectionId!=='collection-default';});
+              var permanent=others.length===0;
+              if(!window.confirm(permanent?'Supprimer définitivement « '+place.name+' » ?':'Supprimer « '+place.name+' » de cette collection uniquement ?'))return;
+              var previous=JSON.stringify(state);
+              try{
+                state.memberships=state.memberships.filter(function(x){return x!==m;});
+                if(permanent){
+                  state.memberships=state.memberships.filter(function(x){return x.placeId!==place.id;});
+                  window.NearbyPlaceActions.deletePlace(place.id);
+                }
+                persist();
+                feedback.textContent=permanent?'Lieu supprimé définitivement':'Lieu retiré de cette collection';
+              }catch(error){state=JSON.parse(previous);feedback.textContent='Suppression impossible : '+error.message;}
+            };
+            actions.append(visited,trash);
+            item.append(categorySelect,actions);placeList.append(item);
           }
+          });
         });
         details.append(summary, edit, description, rename, categoryTitle, categoryList, categoryName, addCategory);
         if(collection.id!=='collection-default'){
@@ -200,10 +242,10 @@
           editButton.title = 'Modifier le nom et la description';
           editButton.onclick = function () { details.open = !details.open; };
           header.append(editButton);
-          card.append(header);
+          card.append(header,details);
           var descriptionText = el('p', collection.description || '', 'muted');
           if (descriptionText.textContent) card.append(descriptionText);
-          card.append(el('h3', 'Lieux'), placeList, assignSelect, assignButton, details);
+          card.append(el('h3', 'Lieux'), placeList, assignSelect, assignButton);
           detailView.append(card);
         } else {
           var openButton = el('button', null, 'collection-open');
