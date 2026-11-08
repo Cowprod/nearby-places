@@ -108,4 +108,7 @@ assert.equal(editor().open,true,'refresh preserves editor state');
 assert.equal(storage.getItem('nearby-places-v1'),legacyRaw);
 assert.equal(fs.readFileSync('www/js/collections-ui.js','utf8'),
   fs.readFileSync('public/js/collections-ui.js','utf8'),'Cordova and web preview match');
+const iosHTML = fs.readFileSync('www/index.html','utf8');
+assert.equal(iosHTML,fs.readFileSync('public/index.html','utf8'),'web and iOS HTML match');
+assert.match(iosHTML,/collection-card details textarea\{min-height:82px/,'description usable on iPhone');
 console.log('PASS collections UI: description, open editor, persistence rollback, legacy data and public parity');
