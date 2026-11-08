@@ -34,6 +34,8 @@
     panel.append(title, notice, globals, list, controls, feedback);
     anchor.insertAdjacentElement('afterend', panel);
     var state;
+    // Visual state only: no change to persisted collections or the legacy catalogue.
+    var expandedCollections = new Set();
     try { state = api.loadOrMigrate(localStorage, readPlaces()); }
     catch (error) { feedback.textContent = error.message; controls.hidden = true; return; }
     function persist() { api.save(localStorage, state); render(); }
@@ -43,6 +45,11 @@
     }
     window.addEventListener('nearby-places-changed',refresh);
     function render() {
+      // Rebuilding the cards must not close the collection being edited.
+      Array.from(list.querySelectorAll('details[data-collection-id]')).forEach(function (node) {
+        if (node.open) expandedCollections.add(node.dataset.collectionId);
+        else expandedCollections.delete(node.dataset.collectionId);
+      });
       list.replaceChildren();
       globals.replaceChildren();
       var places = readPlaces();
@@ -60,16 +67,32 @@
         }).length;
         var counter = el('span', count + ' lieu(x)', 'muted');
         var details = el('details');
+        details.dataset.collectionId = collection.id;
+        details.open = expandedCollections.has(collection.id);
         var summary = el('summary', 'Gérer');
         var edit = el('input');
         edit.value = collection.name;
         edit.setAttribute('aria-label', 'Renommer ' + collection.name);
-        var rename = el('button', 'Renommer');
+        var description = el('textarea');
+        description.value = collection.description || '';
+        description.rows = 3;
+        description.maxLength = 1000;
+        description.setAttribute('aria-label', 'Description de ' + collection.name);
+        description.placeholder = 'Description de la collection (facultatif)';
+        var rename = el('button', 'Enregistrer la fiche');
         rename.onclick = function () {
           if (!edit.value.trim()) { feedback.textContent = 'Nom obligatoire'; return; }
+          var before = {name:collection.name, description:collection.description, updatedAt:collection.updatedAt};
           collection.name = edit.value.trim();
+          collection.description = description.value.trim();
           collection.updatedAt = Date.now();
-          persist();
+          try { persist(); feedback.textContent = 'Fiche enregistrée'; }
+          catch (error) {
+            collection.name = before.name;
+            collection.description = before.description;
+            collection.updatedAt = before.updatedAt;
+            feedback.textContent = 'Enregistrement impossible : ' + error.message;
+          }
         };
         var categoryTitle = el('h3', 'Catégories spécifiques');
         var categoryList = el('ul');
@@ -105,7 +128,7 @@
             item.append(categorySelect,unlink);placeList.append(item);
           }
         });
-        details.append(summary, edit, rename, categoryTitle, categoryList, categoryName, addCategory, el('h3', 'Lieux'), placeList, assignSelect, assignButton);
+        details.append(summary, edit, description, rename, categoryTitle, categoryList, categoryName, addCategory, el('h3', 'Lieux'), placeList, assignSelect, assignButton);
         if(collection.id!=='collection-default'){
           var deleteButton=el('button','Supprimer la collection');
           deleteButton.onclick=function(){
