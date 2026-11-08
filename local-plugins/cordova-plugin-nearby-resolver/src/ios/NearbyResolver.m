@@ -176,7 +176,7 @@ static NSString * const NearbyCollectionsKey = @"nearbyCollections";
 
 - (void)syncCategories:(CDVInvokedUrlCommand *)command {
     id raw = command.arguments.firstObject;
-    if (![raw isKindOfClass:NSArray.class] || [(NSArray *)raw count] == 0 || [(NSArray *)raw count] > 50) {
+    if (![raw isKindOfClass:NSArray.class] || [(NSArray *)raw count] == 0 || [(NSArray *)raw count] > 250) {
         [self sendError:@"Liste de catégories invalide" command:command];
         return;
     }
@@ -187,7 +187,7 @@ static NSString * const NearbyCollectionsKey = @"nearbyCollections";
             [self sendError:@"Catégorie invalide" command:command];
             return;
         }
-        [categories addObject:@{ @"id": item[@"id"], @"name": item[@"name"] }];
+        [categories addObject:@{ @"id": item[@"id"], @"name": item[@"name"], @"collectionId": [item[@"collectionId"] isKindOfClass:NSString.class] ? item[@"collectionId"] : @"" }];
     }
     NSUserDefaults *defaults = [self sharedDefaults];
     [defaults setObject:categories forKey:NearbyCategoriesKey];
