@@ -2,8 +2,10 @@
 
 ## Branche de travail
 
-Les corrections récentes sont sur `fix/ios-share-extension-architecture`.
-Ne pas reprendre depuis `main` seul : cette branche n'y est pas fusionnée.
+Les corrections de `fix/ios-share-extension-architecture` sont intégrées dans
+`main`. Pour les prochaines modifications, partir de `origin/main` à jour et
+créer une nouvelle branche de travail. L'ancienne branche conserve l'historique
+de cette série de corrections.
 Le dépôt est `Cowprod/nearby-places` et le projet devMCP est `nearby-places`
 (workspace Linux `/srv/devmcp/workspaces/nearby-places`, machine `touchdeck`).
 Inspecter l'état Git du workspace avant de récupérer la branche. Préserver
