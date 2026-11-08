@@ -10,7 +10,7 @@ class Node {
   querySelector(selector) { const id=selector.split('"')[1]; return this.children.find(n=>n.dataset.tab===id); }
 }
 const body=new Node('body');
-const status=new Node('p');
+const status=new Node('p'); status.id='status';
 body.append(status);
 const panel=new Node('section');
 const places=new Node('div');
