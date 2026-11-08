@@ -523,13 +523,22 @@
     }).catch(function(error){trace('import-error',String(error));status('Import du lieu : '+error.message);});
   };
   $('export').onclick=function(){
-    var payload={schemaVersion:1,exportedAt:new Date().toISOString(),places:places.filter(function(p){return p && p.source&&p.source.type==='manual';}),
-      visited:places.filter(function(p){return p && p.visited && typeof p.id==='string';}).map(function(p){return p.id;})};
-    var blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-    var url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;
-    link.download='nearby-places-sauvegarde.json';document.body.append(link);link.click();link.remove();
-    setTimeout(function(){URL.revokeObjectURL(url);},30000);
-    status('Sauvegarde JSON préparée · '+payload.places.length+' lieux personnels');
+    try {
+      var payload={schemaVersion:1,exportedAt:new Date().toISOString(),places:places.filter(function(p){return p && p.source&&p.source.type==='manual';}),
+        visited:places.filter(function(p){return p && p.visited && typeof p.id==='string';}).map(function(p){return p.id;})};
+      var api=window.NearbyCollections;
+      if(api){
+        var raw=localStorage.getItem('nearby-collections-v2');
+        var collections=raw===null ? api.initial(places) : JSON.parse(raw);
+        if(!api.validate(collections))throw Error('collections locales invalides');
+        payload.collectionsV2=collections;
+      }
+      var blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+      var url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;
+      link.download='nearby-places-sauvegarde.json';document.body.append(link);link.click();link.remove();
+      setTimeout(function(){URL.revokeObjectURL(url);},30000);
+      status('Sauvegarde JSON préparée · '+payload.places.length+' lieux personnels, collections incluses');
+    } catch(error) {status('Sauvegarde impossible : '+error.message);}
   };
   $('import').onchange=function(event){
     var file=event.target.files&&event.target.files[0];if(!file)return;
@@ -547,8 +556,28 @@
       var merged=new Map(places.filter(function(p){return p && typeof p.id==='string' && p.id;}).map(function(p){return [p.id,p];}));
       data.places.forEach(function(p){merged.set(p.id,p);});
       var visited=new Set(data.visited.filter(function(id){return typeof id==='string';}));
-      places=Array.from(merged.values()).map(function(p){return Object.assign({},p,{visited:!!p.visited||visited.has(p.id)});}).concat(unkeyed);
-      save();render();status('Sauvegarde restaurée · '+data.places.length+' lieux personnels');
+      var restored=Array.from(merged.values()).map(function(p){return Object.assign({},p,{visited:!!p.visited||visited.has(p.id)});}).concat(unkeyed);
+      var previousCollections=null,nextCollections=null;
+      if(Object.prototype.hasOwnProperty.call(data,'collectionsV2')){
+        var api=window.NearbyCollections;
+        if(!api || !api.validate(data.collectionsV2))throw Error('Collections v2 invalides : restauration interrompue');
+        previousCollections=localStorage.getItem('nearby-collections-v2');
+        var current=previousCollections===null ? api.initial(places) : JSON.parse(previousCollections);
+        nextCollections=api.merge(current,data.collectionsV2);
+      }
+      var before=places,originalRaw=localStorage.getItem(KEY);
+      try{
+        if(nextCollections)localStorage.setItem('nearby-collections-v2',JSON.stringify(nextCollections));
+        places=restored;save();render();
+      }catch(error){
+        places=before;
+        try{
+          if(originalRaw===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,originalRaw);
+          if(nextCollections){if(previousCollections===null)localStorage.removeItem('nearby-collections-v2');else localStorage.setItem('nearby-collections-v2',previousCollections);}
+        }catch(rollbackError){trace('storage-error','Rollback impossible : '+rollbackError.message);}
+        throw error;
+      }
+      status('Sauvegarde restaurée · '+data.places.length+' lieux personnels'+(nextCollections?' et collections':''));
     }).catch(function(error){status('Import refusé : '+error.message);}).finally(function(){event.target.value='';});
   };
   $('locate').onclick=function(){if(!navigator.geolocation){status('GPS indisponible');return;}status('Recherche GPS…');navigator.geolocation.getCurrentPosition(function(p){var c=p.coords;status('Position reçue ; précision '+Math.round(c.accuracy)+' m');render({latitude:c.latitude,longitude:c.longitude});},function(e){status('GPS : '+e.message);},{enableHighAccuracy:true,timeout:20000,maximumAge:0});};
