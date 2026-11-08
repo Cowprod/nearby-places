@@ -327,7 +327,7 @@
     var state = model.loadOrMigrate(localStorage, places);
     model.attach(state, place.id, collectionId, null);
     model.save(localStorage, state);
-    window.dispatchEvent(new Event('nearby-places-changed'));
+    if (typeof window.dispatchEvent === 'function' && typeof Event === 'function') window.dispatchEvent(new Event('nearby-places-changed'));
   }
   function showNextImport(){
     if(pendingImport || !importQueue.length)return;
