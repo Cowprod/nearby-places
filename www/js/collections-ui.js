@@ -273,12 +273,18 @@
             directions.setAttribute('aria-label','Plans : itinéraire à pied vers '+place.name);
             directions.title='Plans';
             directions.append(el('i',null,'fa-solid fa-person-walking'));
+            var transit=el('a',null,'collection-icon-button');
+            transit.href='https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=r&q='+encodeURIComponent(place.name||'Lieu');
+            transit.target='_blank';transit.rel='noopener noreferrer';
+            transit.setAttribute('aria-label','Plans : itinéraire en transports en commun vers '+place.name);
+            transit.title='Transports en commun';
+            transit.append(el('i',null,'fa-solid fa-train-subway'));
             var editPlace=el('button',null,'collection-icon-button');
             editPlace.setAttribute('aria-label','Modifier '+place.name);
             editPlace.title='Modifier le lieu';
             editPlace.append(el('i',null,'fa-solid fa-pen'));
             editPlace.onclick=function(){editor.hidden=!editor.hidden;};
-            actions.append(directions,editPlace,visited,trash);
+            actions.append(directions,transit,editPlace,visited,trash);
             item.append(actions,editor);placeList.append(item);
           }
           });
