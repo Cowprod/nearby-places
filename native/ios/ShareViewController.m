@@ -149,7 +149,8 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.nameField.enabled = NO;
     [self.nameField addTarget:self action:@selector(dismissKeyboard) forControlEvents:UIControlEventEditingDidEndOnExit];
     [stack addArrangedSubview:self.nameField];
-    [stack addArrangedSubview:[self fieldLabel:@"Commentaire"]];
+    UILabel *commentLabel = [self fieldLabel:@"Commentaire"];
+    [stack addArrangedSubview:commentLabel];
     self.commentView = [[UITextView alloc] init];
     self.commentView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     self.commentView.layer.borderColor = UIColor.separatorColor.CGColor;
@@ -158,25 +159,30 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.commentView.editable = NO;
     [self.commentView.heightAnchor constraintEqualToConstant:88].active = YES;
     [stack addArrangedSubview:self.commentView];
-    [stack addArrangedSubview:[self fieldLabel:@"Catégorie"]];
+    UILabel *categoryLabel = [self fieldLabel:@"Catégorie"];
+    [stack addArrangedSubview:categoryLabel];
     self.categoryPicker = [[UIPickerView alloc] init];
     self.categoryPicker.dataSource = self;
     self.categoryPicker.delegate = self;
     self.categoryPicker.userInteractionEnabled = NO;
     [self.categoryPicker.heightAnchor constraintEqualToConstant:92].active = YES;
     [stack addArrangedSubview:self.categoryPicker];
-    [stack addArrangedSubview:[self fieldLabel:@"Collection"]];
+    UILabel *collectionLabel = [self fieldLabel:@"Collection *"];
+    [stack addArrangedSubview:collectionLabel];
     self.collectionPicker = [[UIPickerView alloc] init];
     self.collectionPicker.dataSource = self;
     self.collectionPicker.delegate = self;
     self.collectionPicker.userInteractionEnabled = NO;
     [self.collectionPicker.heightAnchor constraintEqualToConstant:92].active = YES;
     [stack addArrangedSubview:self.collectionPicker];
-    // Keep mandatory selectors immediately after the name, above the optional comment.
-    NSArray *fields = @[stack.arrangedSubviews[8], stack.arrangedSubviews[9], stack.arrangedSubviews[10], stack.arrangedSubviews[11]];
-    for (UIView *field in fields) [stack removeArrangedSubview:field];
-    NSInteger insertion = 6;
-    for (UIView *field in @[fields[2],fields[3],fields[0],fields[1]]) [stack insertArrangedSubview:field atIndex:insertion++];
+    // Explicit references: never use arrangedSubviews indices to reorder the form.
+    for (UIView *field in @[collectionLabel, self.collectionPicker, categoryLabel, self.categoryPicker]) {
+        [stack removeArrangedSubview:field];
+    }
+    NSInteger insertion = 6; // Immediately after the name field.
+    for (UIView *field in @[collectionLabel, self.collectionPicker, categoryLabel, self.categoryPicker]) {
+        [stack insertArrangedSubview:field atIndex:insertion++];
+    }
     UIStackView *buttons = [[UIStackView alloc] init];
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.spacing = 12;
