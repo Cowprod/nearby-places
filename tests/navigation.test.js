@@ -23,7 +23,7 @@ body.append(script);
 const document={
   readyState:'complete',
   createElement:t=>new Node(t),
-  getElementById:id=>id==='collections-panel'?panel:id==='settings'?places:find(body,id),
+  getElementById:id=>id==='collections-panel'?panel:id==='places'?places:find(body,id),
   querySelectorAll:sel=>sel==='body > h2'?headings:[],
   querySelector:sel=>sel==='body > script'?script:null
 };
