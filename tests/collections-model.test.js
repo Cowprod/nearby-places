@@ -29,8 +29,23 @@ assert.equal(model.validate(migrated),true);
 assert.equal(model.reconcile(migrated,[...places,{id:'p3',name:'New import',categories:['musique']}]),1);
 assert.equal(model.reconcile(migrated,[...places,{id:'p3',name:'New import',categories:['musique']}]),0);
 assert.equal(migrated.memberships.find(m=>m.placeId==='p3').categoryId,'musique');
+// An intentional removal must survive subsequent catalogue refreshes.
+migrated.memberships=migrated.memberships.filter(m=>!(m.placeId==='p2' && m.collectionId==='collection-default'));
+assert.equal(model.reconcile(migrated,places),0,'unassigned place must not return');
+assert.equal(migrated.memberships.some(m=>m.placeId==='p2'),false);
+// Importing a backup adds collections without deleting current work.
+const incoming=model.initial([{id:'backup-place',categories:['culture']}]);
+const backupCollection=model.createCollection(incoming,'Saved trip','');
+const backupCategory=model.createCategory(incoming,'Local museum',backupCollection);
+model.attach(incoming,'backup-place',backupCollection,backupCategory);
+const combined=model.merge(migrated,incoming);
+assert.equal(combined.collections.some(c=>c.id===second),true);
+assert.equal(combined.collections.some(c=>c.id===backupCollection),true);
+assert.equal(combined.memberships.some(m=>m.placeId==='backup-place'&&m.collectionId===backupCollection),true);
+assert.equal(combined.memberships.some(m=>m.placeId==='p2'),false,'backup merge cannot resurrect deliberately unassigned place');
+assert.equal(model.validate(combined),true);
 model.save(storage,migrated);
-assert.equal(model.loadOrMigrate(storage,[]).memberships.length,4);
+assert.equal(model.loadOrMigrate(storage,[]).memberships.length,3);
 const corrupt = memory();
 corrupt.setItem('nearby-collections-v2','{invalid');
 assert.throws(()=>model.loadOrMigrate(corrupt,places),SyntaxError);
