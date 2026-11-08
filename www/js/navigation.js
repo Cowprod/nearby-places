@@ -11,6 +11,7 @@
     nav.setAttribute('aria-label', 'Navigation principale');
     var tabs = [
       {id:'collections',label:'Collections',nodes:[panel]},
+      {id:'map',label:'Carte',nodes:[]},
       {id:'add',label:'Ajouter',nodes:[]},
       {id:'settings',label:'Réglages',nodes:[]}
     ];
@@ -42,6 +43,9 @@
     collect(addTitle,document.querySelector('body > script'),tabs[1].nodes);
     collect(proximityTitle,importTitle,tabs[2].nodes);
     collect(backupTitle,addTitle,tabs[2].nodes);
+    var mapSection=document.createElement('div');
+    mapSection.innerHTML='<h2>Carte des lieux proches</h2><div class="nearby-map-controls"><label for="map-radius">Rayon affiché (m)</label><input id="map-radius" type="number" min="100" max="50000" step="100" value="1000"><button id="map-recenter" type="button">Me localiser</button></div><p id="map-status" class="muted" role="status">Ouvrez la carte pour vous localiser.</p><div id="nearby-map" aria-label="Carte des lieux enregistrés"></div><div id="map-results" aria-live="polite"></div>';
+    tabs[1].nodes.push(mapSection);
     var diagnostics=document.getElementById('proximity-diagnostics');
     if(diagnostics){
       var diagDetails=document.createElement('details');
@@ -86,6 +90,7 @@
         button.setAttribute('aria-current',active?'page':'false');
         button.setAttribute('aria-selected',active?'true':'false');
       });
+      if(id==='map' && window.NearbyMap)window.NearbyMap.activate();
       try { sessionStorage.setItem('nearby-active-tab',id); } catch (_) {}
     }
     var remembered;
