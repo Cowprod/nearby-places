@@ -11,7 +11,7 @@
     nav.setAttribute('aria-label', 'Navigation principale');
     var tabs = [
       {id:'collections',label:'Collections',nodes:[panel]},
-      {id:'map',label:'Mes lieux',nodes:[]},
+      {id:'places',label:'Lieux',nodes:[]},
       {id:'add',label:'Ajouter',nodes:[]},
       {id:'settings',label:'Réglages',nodes:[]}
     ];
