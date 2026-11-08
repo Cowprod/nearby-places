@@ -38,7 +38,7 @@
     catch (error) { feedback.textContent = error.message; controls.hidden = true; return; }
     function persist() { api.save(localStorage, state); render(); }
     function refresh() {
-      try { if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); }
+      try { state=api.loadOrMigrate(localStorage,readPlaces()); if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); }
       catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
     }
     window.addEventListener('nearby-places-changed',refresh);
