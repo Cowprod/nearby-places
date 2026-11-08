@@ -7,7 +7,7 @@ class Node {
   append(node) { node.parent=this; this.children.push(node); }
   insertAdjacentElement(where,node) { assert.equal(where,'afterend'); const i=this.parent.children.indexOf(this); this.parent.children.splice(i+1,0,node); node.parent=this.parent; }
   setAttribute(k,v) { this.attributes[k]=v; }
-  querySelector(selector) { const match=selector.match(/^\\[data-tab="([^"]+)"\\]$/); return this.children.find(n=>n.dataset.tab===match[1]); }
+  querySelector(selector) { const id=selector.split('"')[1]; return this.children.find(n=>n.dataset.tab===id); }
 }
 const body=new Node('body');
 const status=new Node('p');
