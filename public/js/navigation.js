@@ -45,6 +45,7 @@
       button.textContent = tab.label;
       button.dataset.tab = tab.id;
       button.setAttribute('aria-controls','nearby-tab-'+tab.id);
+      button.setAttribute('aria-selected','false');
       var section = document.createElement('section');
       section.id = 'nearby-tab-'+tab.id;
       section.className = 'nearby-tab-page';
@@ -55,11 +56,13 @@
       button.onclick = function () { activate(tab.id); };
     });
     function activate(id) {
+      if (!tabs.some(function (tab) { return tab.id === id; })) return;
       tabs.forEach(function (tab) {
         var active = tab.id === id;
         document.getElementById('nearby-tab-'+tab.id).hidden = !active;
         var button = nav.querySelector('[data-tab="'+tab.id+'"]');
         button.setAttribute('aria-current',active?'page':'false');
+        button.setAttribute('aria-selected',active?'true':'false');
       });
       try { sessionStorage.setItem('nearby-active-tab',id); } catch (_) {}
     }
