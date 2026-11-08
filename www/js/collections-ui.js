@@ -87,7 +87,7 @@
       bulkSelect.value = state.collections.some(function (c) { return c.id === selectedDestination; }) ? selectedDestination : '';
 
       // Rebuilding the cards must not close the collection being edited.
-      Array.from(list.querySelectorAll('details[data-collection-id]')).forEach(function (node) {
+      Array.from(list.querySelectorAll('details[data-collection-id]')).concat(Array.from(detailView.querySelectorAll('details[data-collection-id]'))).forEach(function (node) {
         if (node.open) expandedCollections.add(node.dataset.collectionId);
         else expandedCollections.delete(node.dataset.collectionId);
       });
