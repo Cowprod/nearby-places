@@ -118,6 +118,7 @@
       globalButton.onclick = function(){try{api.createCategory(state,globalInput.value,null);persist();feedback.textContent='Catégorie globale créée';}catch(error){feedback.textContent=error.message;}};
       globals.append(globalTitle,globalList,globalInput,globalButton);
       state.collections.forEach(function (collection) {
+        if(collection.id==='collection-default' && selectedCollectionId!==collection.id)return;
         var card = el('article', null, 'collection-card');
         if (selectedCollectionId && selectedCollectionId !== collection.id) return;
         var name = el('strong', collection.name);
