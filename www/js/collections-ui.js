@@ -167,24 +167,20 @@
           catch (error) { feedback.textContent = error.message; }
         };
         var placeList = el('ul', null, 'collection-place-list');
-        var assigned = new Set(state.memberships.filter(function(m){return m.collectionId===collection.id;}).map(function(m){return m.placeId;}));
-        var assignSelect = el('select'); assignSelect.setAttribute('aria-label','Ajouter un lieu à '+collection.name);
-        var placeholder = el('option','Choisir un lieu'); placeholder.value=''; assignSelect.append(placeholder);
-        places.filter(function(p){return p && typeof p.id==='string' && p.id && !assigned.has(p.id);}).forEach(function(p){var option=el('option',p.name||p.id);option.value=p.id;assignSelect.append(option);});
-        var assignButton=el('button','Affecter le lieu');
-        assignButton.onclick=function(){if(!assignSelect.value)return;try{api.attach(state,assignSelect.value,collection.id,null);persist();feedback.textContent='Lieu affecté';}catch(error){feedback.textContent=error.message;}};
         var categoryGroups = new Map();
         state.memberships.filter(function(m){return m.collectionId===collection.id;}).forEach(function(m){
           var place=places.find(function(p){return p && p.id===m.placeId;});
           if(!place)return;
           var category=state.categories.find(function(c){return c.id===m.categoryId;});
-          var group=category?category.name:'Sans catégorie';
+          var group=place.visited?'Lieux désactivés':(category?category.name:'Sans catégorie');
           if(!categoryGroups.has(group))categoryGroups.set(group,[]);
           categoryGroups.get(group).push({membership:m,place:place});
         });
         Array.from(categoryGroups.keys()).sort(function(a,b){
           if(a==='Sans catégorie')return -1;
           if(b==='Sans catégorie')return 1;
+          if(a==='Lieux désactivés')return 1;
+          if(b==='Lieux désactivés')return -1;
           return a.localeCompare(b,'fr');
         }).forEach(function(group){
           placeList.append(el('li',group,'collection-category-heading'));
@@ -196,6 +192,10 @@
           var place = places.find(function (p) { return p && p.id === m.placeId; });
           if (place) {
             var item=el('li',null,'collection-place-item'); item.append(el('span',place.name||m.placeId));
+            if(place.visited){
+              var originalCategory=state.categories.find(function(c){return c.id===m.categoryId;});
+              item.append(el('small',originalCategory?originalCategory.name:'Sans catégorie','muted collection-original-category'));
+            }
             var categorySelect=el('select');categorySelect.setAttribute('aria-label','Catégorie de '+(place.name||m.placeId));
             var none=el('option','Sans catégorie');none.value='';categorySelect.append(none);
             state.categories.filter(function(c){return c.scope==='global'||c.collectionId===collection.id;}).forEach(function(c){var option=el('option',c.name);option.value=c.id;categorySelect.append(option);});
@@ -255,7 +255,7 @@
           card.append(header,details);
           var descriptionText = el('p', collection.description || '', 'muted');
           if (descriptionText.textContent) card.append(descriptionText);
-          card.append(el('h3', 'Lieux'), placeList, assignSelect, assignButton);
+          card.append(el('h3', 'Lieux'), placeList);
           detailView.append(card);
         } else {
           var openButton = el('button', null, 'collection-open');
