@@ -5,6 +5,11 @@ const root=path.resolve(__dirname,'..');
 const assets=[
  ['bootswatch/dist/litera/bootstrap.min.css','css/bootswatch-litera.min.css'],
  ['bootstrap/dist/js/bootstrap.bundle.min.js','js/bootstrap.bundle.min.js'],
+ ['leaflet/dist/leaflet.css','css/leaflet.css'],
+ ['leaflet/dist/leaflet.js','js/leaflet.js'],
+ ['leaflet/dist/images/marker-icon.png','css/images/marker-icon.png'],
+ ['leaflet/dist/images/marker-icon-2x.png','css/images/marker-icon-2x.png'],
+ ['leaflet/dist/images/marker-shadow.png','css/images/marker-shadow.png'],
  ['jquery/dist/jquery.min.js','js/jquery.min.js'],
  ['bootbox/dist/bootbox.min.js','js/bootbox.min.js'],
  ['@fortawesome/fontawesome-free/css/all.min.css','css/fontawesome.min.css'],
