@@ -20,7 +20,7 @@ function harness(raw){
   addToAlbum:(id,title,ids,ok)=>{calls.push({id,ids:Array.from(ids)});ok({collectionId:id});}
  }};
  function el(){
-  return {children:[],textContent:'',style:{},append(...items){this.children.push(...items);},
+  return {children:[],textContent:'',style:{},dataset:{},append(...items){this.children.push(...items);},
    replaceChildren(...items){this.children=items;},setAttribute(){},remove(){},
    click(){if(this.onclick)this.onclick();}};
  }
@@ -32,7 +32,7 @@ function harness(raw){
  vm.runInNewContext(source,{window,document,localStorage,Promise,Set,Map,Array,Error});
  const place={id:'place-a',name:'Test',latitude:35,longitude:139};
  window.NearbyPlacePhotos.open(place,false);
- const overlay=document.body.children[0],box=overlay.children[0],actions=box.children[2];
+ const overlay=document.body.children[0],box=overlay.children[0],actions=box.children[4];
  assert.equal(actions.children.filter(item=>item.textContent==='Prendre une photo').length,0,'albums do not expose camera controls');
  assert.ok(actions.children.some(item=>item.textContent==='Choisir dans Photos'),'album retains manual imports');
  assert.ok(actions.children.some(item=>item.textContent==='Photos à proximité'),'album retains geolocated suggestions');
