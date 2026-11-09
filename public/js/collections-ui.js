@@ -58,6 +58,7 @@
     try { state = api.loadOrMigrate(localStorage, readPlaces()); }
     catch (error) { feedback.textContent = error.message; controls.hidden = true; return; }
     function persist() { api.save(localStorage, state); render(); if(typeof window.dispatchEvent==='function' && typeof Event==='function')window.dispatchEvent(new Event('nearby-collections-changed')); }
+    function syncPhotoAlbums(){if(window.NearbyPhotos&&window.NearbyPlacePhotos){window.NearbyPlacePhotos.syncMemberships(state).catch(function(error){feedback.textContent='Collections enregistrées, mais albums Photos non synchronisés : '+error.message;});}}
     function refresh() {
       try { state=api.loadOrMigrate(localStorage,readPlaces()); if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); }
       catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
@@ -97,6 +98,7 @@
         missing.forEach(function (p) { api.attach(state, p.id, destination, null); });
         persist();
         bulkInfo.textContent = missing.length + ' lieu(x) affecté(s), sans suppression ni duplication';
+        syncPhotoAlbums();
       } catch (error) {
         state = JSON.parse(snapshot);
         bulkInfo.textContent = 'Affectation annulée : ' + error.message;
@@ -169,7 +171,7 @@
           collection.name = edit.value.trim();
           collection.description = description.value.trim();
           collection.updatedAt = Date.now();
-          try { persist(); feedback.textContent = ''; if(window.NearbyPlacePhotos&&before.name!==collection.name){window.NearbyPlacePhotos.renameCollection(before.name,collection.name).catch(function(error){feedback.textContent='Collection enregistrée ; renommage de l’album Photos impossible : '+error.message;});} }
+          try { persist(); feedback.textContent = 'Fiche enregistrée'; if(window.NearbyPhotos&&window.NearbyPlacePhotos&&before.name!==collection.name){window.NearbyPlacePhotos.renameCollection(collection.id,collection.name).catch(function(error){feedback.textContent='Collection enregistrée ; renommage de l’album Photos impossible : '+error.message;});} }
           catch (error) {
             collection.name = before.name;
             collection.description = before.description;
@@ -241,6 +243,7 @@
                 api.attach(state,m.placeId,collection.id,categoryId);
                 api.save(localStorage,state);
                 window.NearbyPlaceActions.updatePlace(place.id,name,commentInput.value);
+                syncPhotoAlbums();
                 editor.hidden=true;
                 feedback.textContent='';
               }catch(error){
