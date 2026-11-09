@@ -28,23 +28,23 @@
  else if(status==PHAuthorizationStatusAuthorized)save();else [self replyTo:self.pending value:nil error:@"Accès Photos refusé"];
 }
 - (void)nearby:(CDVInvokedUrlCommand*)cmd {
- self.pending=cmd.callbackId;
+ NSString *callback=cmd.callbackId;
  double lat=[cmd.arguments[0] doubleValue],lon=[cmd.arguments[1] doubleValue],radius=MAX(10,MIN(5000,[cmd.arguments[2] doubleValue]));
- if(!isfinite(lat)||!isfinite(lon)||fabs(lat)>90||fabs(lon)>180){[self replyTo:self.pending value:nil error:@"Coordonnées invalides"];return;}
- NSString *callback=cmd.callbackId;void (^query)(void)=^{
+ if(!isfinite(lat)||!isfinite(lon)||fabs(lat)>90||fabs(lon)>180){[self replyTo:callback value:nil error:@"Coordonnées invalides"];return;}
+ void (^query)(void)=^{
  PHFetchOptions *options=[PHFetchOptions new];options.sortDescriptors=@[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithMediaType:PHAssetMediaTypeImage options:options];CLLocation *center=[[CLLocation alloc] initWithLatitude:lat longitude:lon];NSMutableArray *items=[NSMutableArray array];
  [assets enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger idx,BOOL *stop){if(items.count>=150){*stop=YES;return;}if(!asset.location)return;CLLocationDistance d=[asset.location distanceFromLocation:center];if(d<=radius)[items addObject:@{@"id":asset.localIdentifier,@"distance":@(round(d)),@"createdAt":@([asset.creationDate timeIntervalSince1970]*1000)}];}];
  [self replyTo:callback value:@{@"items":items} error:nil];
  };
  PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
- if(status==PHAuthorizationStatusNotDetermined){[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)query();else [self replyTo:self.pending value:nil error:@"Accès à la photothèque refusé"]; }];}
- else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)query();else [self replyTo:self.pending value:nil error:@"Accès à la photothèque refusé"];
+ if(status==PHAuthorizationStatusNotDetermined){[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)query();else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"]; }];}
+ else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)query();else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"];
 }
 - (void)thumbnail:(CDVInvokedUrlCommand*)cmd {
- self.pending=cmd.callbackId;NSString *identifier=cmd.arguments.firstObject;PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:@[identifier] options:nil];PHAsset *asset=assets.firstObject;
- if(!asset){[self replyTo:self.pending value:nil error:@"Photo introuvable ou accès limité"];return;}
- NSString *callback=cmd.callbackId;PHImageRequestOptions *options=[PHImageRequestOptions new];options.networkAccessAllowed=NO;options.deliveryMode=PHImageRequestOptionsDeliveryModeHighQualityFormat;
- [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(320,320) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){if(!image)return;NSData *data=UIImageJPEGRepresentation(image,0.72);[self replyTo:callback value:@{@"dataUrl":[NSString stringWithFormat:@"data:image/jpeg;base64,%@",[data base64EncodedStringWithOptions:0]]} error:nil];}];
+ NSString *callback=cmd.callbackId;NSString *identifier=cmd.arguments.firstObject;if(![identifier isKindOfClass:[NSString class]]||!identifier.length){[self replyTo:callback value:nil error:@"Identifiant photo invalide"];return;}PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:@[identifier] options:nil];PHAsset *asset=assets.firstObject;
+ if(!asset){[self replyTo:callback value:nil error:@"Photo introuvable ou accès limité"];return;}
+ PHImageRequestOptions *options=[PHImageRequestOptions new];options.networkAccessAllowed=NO;options.deliveryMode=PHImageRequestOptionsDeliveryModeHighQualityFormat;
+ [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(320,320) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){if(!image){[self replyTo:callback value:nil error:@"Miniature inaccessible ou non téléchargée"];return;}NSData *data=UIImageJPEGRepresentation(image,0.72);[self replyTo:callback value:@{@"dataUrl":[NSString stringWithFormat:@"data:image/jpeg;base64,%@",[data base64EncodedStringWithOptions:0]]} error:nil];}];
 }
 - (void)pick:(CDVInvokedUrlCommand*)cmd {
  self.pending=cmd.callbackId;PHPickerConfiguration *config=[[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];config.filter=[PHPickerFilter imagesFilter];config.selectionLimit=0;PHPickerViewController *picker=[[PHPickerViewController alloc] initWithConfiguration:config];picker.delegate=self;[self.viewController presentViewController:picker animated:YES completion:nil];
@@ -121,7 +121,7 @@
    [change addAssets:assets];
   } completionHandler:^(BOOL success,NSError *error){
    if(success&&newAlbumId)[self storeAlbum:newAlbumId forCollection:collectionId];
-   [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:existing.localIdentifier,@"count":@(assets.count)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
+   [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:(existing.localIdentifier?:@""),@"count":@(assets.count)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
   }];
  } callback:callback];
 }
