@@ -169,7 +169,7 @@
           collection.name = edit.value.trim();
           collection.description = description.value.trim();
           collection.updatedAt = Date.now();
-          try { persist(); feedback.textContent = 'Fiche enregistrée'; }
+          try { persist(); feedback.textContent = ''; if(window.NearbyPlacePhotos&&before.name!==collection.name){window.NearbyPlacePhotos.renameCollection(before.name,collection.name).catch(function(error){feedback.textContent='Collection enregistrée ; renommage de l’album Photos impossible : '+error.message;});} }
           catch (error) {
             collection.name = before.name;
             collection.description = before.description;
