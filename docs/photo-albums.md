@@ -34,6 +34,9 @@
 - `www/js/collections-ui.js` : renommage, attribution groupée et édition de lieu.
 - `www/js/app.js` : import dans une collection et re-synchronisation de photos déjà associées.
 - `tests/photo-albums.test.js` : tests Node du pont, de la création paresseuse, des identifiants stables, des collections multiples, de la concurrence et des erreurs d'autorisation.
+- `scripts/patch-share-extension.js` : à chaque `cordova prepare ios`, recopie `NearbyPhotos.m` et le pont JavaScript de la source versionnée vers les fichiers générés si le plugin est déjà installé, pour éviter d'utiliser une ancienne version native de PhotoKit.
+- `scripts/verify-ios-sources.sh` et `tests/ios-generated.test.js` : contrôlent aussi la concordance du `NearbyPhotos.m` généré ; un fichier natif périmé doit bloquer le build Xcode plutôt que produire silencieusement une version ancienne.
+- `tests/photo-albums.test.js` : vérifie également le contrat de tolérance aux photos supprimées et la présence des gardes de synchronisation iOS (contrôles statiques, pas une exécution PhotoKit).
 - `.github/workflows/node-tests.yml` : nouvelle CI Node 22 sur `main` et PR, avec `npm ci --ignore-scripts` avant `npm test` (exécution GitHub Actions à constater).
 
 ## Campagne physique iOS encore requise
