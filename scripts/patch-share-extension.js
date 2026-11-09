@@ -3,8 +3,6 @@
 // Rebuild the complete ShareExt target from versioned sources after every prepare.
 const fs = require('fs');
 const path = require('path');
-const plist = require('plist');
-const xcode = require('xcode');
 
 const APP_GROUP = 'group.fr.cowprod.nearbyplaces.shareextension';
 const EXTENSION_BUNDLE_SUFFIX = '.shareextension';
@@ -126,6 +124,7 @@ function addTarget(project, metadata) {
 }
 
 function ensureAppEntitlements(root) {
+  const plist = require('plist');
   for (const configuration of ['Debug','Release']) {
     const file = path.join(root, 'platforms/ios/App', 'Entitlements-'+configuration+'.plist');
     const data = fs.existsSync(file) ? plist.parse(fs.readFileSync(file, 'utf8')) : {};
@@ -138,6 +137,7 @@ function ensureAppEntitlements(root) {
 }
 
 function ensureProject(root, metadata) {
+  const xcode = require('xcode');
   const projectFile = path.join(root, 'platforms/ios/App.xcodeproj/project.pbxproj');
   if (!fs.existsSync(projectFile)) throw Error('Generated iOS Xcode project missing');
   const project = xcode.project(projectFile);
