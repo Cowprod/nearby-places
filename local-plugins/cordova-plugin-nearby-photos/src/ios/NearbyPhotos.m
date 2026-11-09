@@ -107,9 +107,33 @@
    [self replyTo:callback value:nil error:@"Certaines photos sont inaccessibles : aucun album modifié"];return;
   }
   PHAssetCollection *existing=[self albumForCollection:collectionId];
-  if(existing&&![existing canPerformEditOperation:PHCollectionEditOperationAddContent]){
-   [self replyTo:callback value:nil error:@"Cet album ne peut pas être modifié"];return;
+  // Reconciliation must be idempotent: repeated imports, resumes or retries must
+  // not append an asset that already belongs to the album.
+  NSArray<PHAsset *> *toAdd=assets;
+  BOOL needsRename=existing&&![(existing.localizedTitle?:@"") isEqualToString:title];
+  if(existing){
+   PHFetchResult<PHAsset *> *members=[PHAsset fetchAssetsInAssetCollection:existing options:nil];
+   NSMutableSet<NSString *> *present=[NSMutableSet setWithCapacity:members.count];
+   [members enumerateObjectsUsingBlock:^(PHAsset *member,NSUInteger index,BOOL *stop){
+    if(member.localIdentifier)[present addObject:member.localIdentifier];
+   }];
+   NSMutableArray<PHAsset *> *missing=[NSMutableArray array];
+   [assets enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger index,BOOL *stop){
+    if(![present containsObject:asset.localIdentifier])[missing addObject:asset];
+   }];
+   toAdd=missing;
+   if(toAdd.count&&![existing canPerformEditOperation:PHCollectionEditOperationAddContent]){
+    [self replyTo:callback value:nil error:@"Cet album ne permet pas l'ajout de photos"];return;
+   }
+   if(needsRename&&![existing canPerformEditOperation:PHCollectionEditOperationRename]){
+    [self replyTo:callback value:nil error:@"Cet album ne peut pas être renommé"];return;
+   }
+   if(!toAdd.count&&!needsRename){
+    [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":existing.localIdentifier,@"count":@0} error:nil];
+    return;
+   }
   }
+  NSArray<PHAsset *> *assetsToAdd=toAdd;
   __block NSString *newAlbumId=nil;
   [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
    PHAssetCollectionChangeRequest *change=nil;
@@ -118,10 +142,11 @@
     change=[PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:title];
     newAlbumId=change.placeholderForCreatedAssetCollection.localIdentifier;
    }
-   [change addAssets:assets];
+   if(needsRename)change.title=title; // Also repairs renames that failed while offline.
+   if(assetsToAdd.count)[change addAssets:assetsToAdd];
   } completionHandler:^(BOOL success,NSError *error){
    if(success&&newAlbumId)[self storeAlbum:newAlbumId forCollection:collectionId];
-   [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:(existing.localIdentifier?:@""),@"count":@(assets.count)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
+   [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:(existing.localIdentifier?:@""),@"count":@(assetsToAdd.count)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
   }];
  } callback:callback];
 }
