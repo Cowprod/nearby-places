@@ -9,7 +9,7 @@
 
 @end
 @implementation NearbyPhotos
-- (void)replyTo:(NSString*)callback value:(id)value error:(NSString*)error { CDVPluginResult *r=error?[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error]:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:value];[self.commandDelegate sendPluginResult:r callbackId:callback]; }
+- (void)replyTo:(NSString*)callback value:(id)value error:(NSString*)error { if(!callback.length)return;CDVPluginResult *r=error?[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error]:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:value];[self.commandDelegate sendPluginResult:r callbackId:callback];if([callback isEqualToString:self.pending])self.pending=nil; }
 - (void)capture:(CDVInvokedUrlCommand*)cmd {
  // Camera action is independent of the photo-library picker. The permission
  // prompt must happen on first use before presenting the camera UI.
@@ -80,6 +80,7 @@
  [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(320,320) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){if(!image){[self replyTo:callback value:nil error:@"Miniature inaccessible ou non téléchargée"];return;}NSData *data=UIImageJPEGRepresentation(image,0.72);[self replyTo:callback value:@{@"dataUrl":[NSString stringWithFormat:@"data:image/jpeg;base64,%@",[data base64EncodedStringWithOptions:0]]} error:nil];}];
 }
 - (void)pick:(CDVInvokedUrlCommand*)cmd {
+ if(self.pending.length){[self replyTo:cmd.callbackId value:nil error:@"Une opération photo est déjà en cours"];return;}
  self.pending=cmd.callbackId;PHPickerConfiguration *config=[[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];config.filter=[PHPickerFilter imagesFilter];config.selectionLimit=0;PHPickerViewController *picker=[[PHPickerViewController alloc] initWithConfiguration:config];picker.delegate=self;[self.viewController presentViewController:picker animated:YES completion:nil];
 }
 - (void)picker:(PHPickerViewController*)picker didFinishPicking:(NSArray<PHPickerResult*>*)results {
