@@ -89,6 +89,19 @@ const state={
  window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>fail('Accès complet à Photos requis');
  await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),/Accès complet/);
  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),beforeLinks,'PhotoKit permission errors do not mutate links');
+ // One broken album must not starve other collections; retry can recover it.
+ const attempts=[];
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>{
+  attempts.push(id);
+  if(id==='c-1')fail('Album non modifiable');
+  else ok({collectionId:id});
+ };
+ await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),/1\/2 album\(s\) iOS non synchronisé\(s\).*c-1/);
+ assert.deepEqual(attempts,['c-1','c-2'],'a failed collection does not block a healthy one');
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),beforeLinks,'partial failure retains local photo links');
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{attempts.push(id);ok({collectionId:id});};
+ await window.NearbyPlacePhotos.syncMemberships(state);
+ assert.deepEqual(attempts,['c-1','c-2','c-1','c-2'],'a later reconciliation retries failed albums');
  assert.equal(fs.readFileSync('www/js/place-photos.js','utf8'),fs.readFileSync('public/js/place-photos.js','utf8'),'www and public parity');
  console.log('PASS photo albums: lazy creation, stable collection IDs, bridge, duplicate names, multi-album links, deletion safety');
 })().catch(error=>{console.error(error);process.exitCode=1;});
