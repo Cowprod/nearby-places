@@ -13,6 +13,7 @@ for file in ShareViewController.h ShareViewController.m MainInterface.storyboard
   compare "native/ios/$file" "platforms/ios/ShareExtension/$file"
 done
 compare native/ios/ShareExt.entitlements platforms/ios/ShareExt.entitlements
+compare local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m
 plugin=local-plugins/cordova-plugin-nearby-resolver/src/ios
 compare "$plugin/NearbyResolver.m" platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyResolver.m
 for file in NearbyMapsResolver.h NearbyPlacePicker.h; do
