@@ -220,6 +220,7 @@
             if(place.visited){
               var originalCategory=state.categories.find(function(c){return c.id===m.categoryId;});
               item.append(el('small',originalCategory?originalCategory.name:'Sans catégorie','muted collection-original-category'));
+              if(Number.isFinite(Number(place.visitedAt))&&Number(place.visitedAt)>0){item.append(el('small','Désactivé le '+new Date(Number(place.visitedAt)).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}),'muted collection-visited-date'));}
             }
             var editor=el('div',null,'collection-place-editor');
             editor.hidden=true;
