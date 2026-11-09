@@ -58,6 +58,14 @@ const state={
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
  assert.doesNotMatch(native,/deleteAssetCollections/,'never delete photo albums automatically');
+ // Parallel UI events must not start concurrent PhotoKit mutations for one collection.
+ let active=0,peak=0;
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{
+  active++;peak=Math.max(active,peak);
+  setTimeout(()=>{active--;ok({collectionId:id});},1);
+ };
+ await Promise.all([window.NearbyPlacePhotos.syncMemberships(state),window.NearbyPlacePhotos.syncMemberships(state)]);
+ assert.equal(peak,1,'PhotoKit changes are serialized across concurrent sync requests');
  // Album permission errors must never erase associations kept in localStorage.
  const beforeLinks=localStorage.getItem('nearby-place-photo-links-v1');
  window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>fail('Accès complet à Photos requis');
