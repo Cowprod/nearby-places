@@ -14,14 +14,22 @@
  // Camera action is independent of the photo-library picker. The permission
  // prompt must happen on first use before presenting the camera UI.
  if(self.pending.length){[self replyTo:cmd.callbackId value:nil error:@"Une opération photo est déjà en cours"];return;}
- self.pending=cmd.callbackId;
+ NSString *callback=[cmd.callbackId copy];
+ self.pending=callback;
  if(![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]){
-  [self replyTo:self.pending value:nil error:@"Appareil photo indisponible sur cet appareil"];self.pending=nil;return;
+  [self replyTo:callback value:nil error:@"Appareil photo indisponible sur cet appareil"];return;
  }
  void (^showCamera)(void)=^{
   dispatch_async(dispatch_get_main_queue(),^{
+   if(![self.pending isEqualToString:callback])return;
+   // Camera access may be granted after the app has been backgrounded.
+   // Never attempt to present UIKit over an inactive application: finish the
+   // original request and let the user retry on the next foreground visit.
+   if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive){
+    [self replyTo:callback value:nil error:@"Application en arrière-plan : revenez dans Nearby Places et réessayez"];return;
+   }
    if(self.viewController.presentedViewController){
-    [self replyTo:self.pending value:nil error:@"Fermez la fenêtre actuelle avant de prendre une photo"];self.pending=nil;return;
+    [self replyTo:callback value:nil error:@"Fermez la fenêtre actuelle avant de prendre une photo"];return;
    }
    UIImagePickerController *picker=[UIImagePickerController new];
    picker.sourceType=UIImagePickerControllerSourceTypeCamera;
@@ -35,12 +43,11 @@
  if(permission==AVAuthorizationStatusNotDetermined){
   [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo completionHandler:^(BOOL granted){
    if(granted)showCamera();
-   else dispatch_async(dispatch_get_main_queue(),^{[self replyTo:self.pending value:nil error:@"Accès à l’appareil photo refusé dans les réglages iOS"];self.pending=nil;});
+   else dispatch_async(dispatch_get_main_queue(),^{[self replyTo:callback value:nil error:@"Accès à l’appareil photo refusé dans les réglages iOS"];});
   }];
   return;
  }
- [self replyTo:self.pending value:nil error:@"Autorisez l’appareil photo dans les réglages iOS"];
- self.pending=nil;
+ [self replyTo:callback value:nil error:@"Autorisez l’appareil photo dans les réglages iOS"];
 }
 - (void)imagePickerControllerDidCancel:(UIImagePickerController*)picker {
  NSString *callback=[self.pending copy];
@@ -96,7 +103,24 @@
  NSString *callback=cmd.callbackId;NSString *identifier=cmd.arguments.firstObject;if(![identifier isKindOfClass:[NSString class]]||!identifier.length){[self replyTo:callback value:nil error:@"Identifiant photo invalide"];return;}PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:@[identifier] options:nil];PHAsset *asset=assets.firstObject;
  if(!asset){[self replyTo:callback value:nil error:@"Photo introuvable ou accès limité"];return;}
  PHImageRequestOptions *options=[PHImageRequestOptions new];options.networkAccessAllowed=NO;options.deliveryMode=PHImageRequestOptionsDeliveryModeHighQualityFormat;
- [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(320,320) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){if(!image){[self replyTo:callback value:nil error:@"Miniature inaccessible ou non téléchargée"];return;}NSData *data=UIImageJPEGRepresentation(image,0.72);[self replyTo:callback value:@{@"dataUrl":[NSString stringWithFormat:@"data:image/jpeg;base64,%@",[data base64EncodedStringWithOptions:0]]} error:nil];}];
+ // PhotoKit can send intermediate/degraded images, then a terminal result.
+ // A Cordova callback is single-use: do not resolve it twice or treat a
+ // degraded image as the definitive thumbnail. All terminal replies are
+ // serialized on the main queue so concurrent PhotoKit callbacks cannot race.
+ __block BOOL finished=NO;
+ [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(320,320) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){
+  dispatch_async(dispatch_get_main_queue(),^{
+   if(finished||[info[PHImageResultIsDegradedKey] boolValue])return;
+   finished=YES;
+   if([info[PHImageCancelledKey] boolValue]){[self replyTo:callback value:nil error:@"Demande de miniature annulée"];return;}
+   NSError *photoError=info[PHImageErrorKey];
+   if(photoError){[self replyTo:callback value:nil error:photoError.localizedDescription];return;}
+   if(!image){[self replyTo:callback value:nil error:@"Miniature inaccessible ou non téléchargée"];return;}
+   NSData *data=UIImageJPEGRepresentation(image,0.72);
+   if(!data){[self replyTo:callback value:nil error:@"Encodage de miniature impossible"];return;}
+   [self replyTo:callback value:@{@"dataUrl":[NSString stringWithFormat:@"data:image/jpeg;base64,%@",[data base64EncodedStringWithOptions:0]]} error:nil];
+  });
+ }];
 }
 - (void)pick:(CDVInvokedUrlCommand*)cmd {
  if(self.pending.length){[self replyTo:cmd.callbackId value:nil error:@"Une opération photo est déjà en cours"];return;}
@@ -104,6 +128,10 @@
  // PhotoKit selection can be invoked while another native sheet is visible.
  // Never leave the callback pending if UIKit cannot present the picker.
  dispatch_async(dispatch_get_main_queue(),^{
+  if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive){
+   [self replyTo:cmd.callbackId value:nil error:@"Application en arrière-plan : revenez dans Nearby Places et réessayez"];
+   return;
+  }
   if(self.viewController.presentedViewController){
    [self replyTo:cmd.callbackId value:nil error:@"Fermez la fenêtre actuelle avant de choisir des photos"];
    return;
