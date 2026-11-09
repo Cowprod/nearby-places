@@ -49,6 +49,37 @@ function harness(raw){
  assert.ok(good.calls.length>=1,'first photo triggers album sync');
  assert.equal(good.calls[0].id,'tokyo');
  assert.equal(good.alerts.length,0,'successful captures do not show errors');
+ // Recovery after a user manually deletes an album in iOS Photos must
+ // re-add every still-linked original in the same collection, not only
+ // the new capture or picker result. Other collections stay untouched.
+ const recovery=harness(JSON.stringify({
+   'place-a':['photo-A','photo-A'], 'place-b':['older-original'],
+   'place-c':['unrelated-original']
+ }));
+ recovery.values.set('nearby-collections-v2',JSON.stringify({
+   collections:[
+     {id:'collection-default',name:'Mes lieux'},
+     {id:'tokyo',name:'Tokyo'}, {id:'osaka',name:'Osaka'}
+   ],
+   memberships:[
+     {placeId:'place-a',collectionId:'tokyo'},
+     {placeId:'place-b',collectionId:'tokyo'},
+     {placeId:'place-c',collectionId:'osaka'}
+   ]
+ }));
+ const recovered=await recovery.capture();
+ assert.equal(recovered.saved,true);
+ assert.equal(recovered.albumSynced,true);
+ assert.deepEqual(recovery.calls,[{
+   id:'tokyo',ids:['photo-A','photo-B','older-original']
+ }], 'a recreated album recovers prior assets of all member places without duplicates');
+ assert.deepEqual(JSON.parse(recovery.values.get('nearby-place-photo-links-v1'))['place-c'],
+   ['unrelated-original'],'recovery never changes unrelated photo-place links');
+ const restoredPick=harness(JSON.stringify({'place-a':['older-A']}));
+ restoredPick.window.NearbyPhotos.pick=ok=>ok({ids:['new-A'],selectedCount:1,unavailableCount:0});
+ assert.equal(await restoredPick.pick(),'');
+ assert.deepEqual(restoredPick.calls,[{id:'tokyo',ids:['older-A','new-A']}],
+   'picker import also repairs a recreated PhotoKit album from all stored links');
  const cases=[
   ['{bad',/illisibles/],
   ['[]',/Format/],
