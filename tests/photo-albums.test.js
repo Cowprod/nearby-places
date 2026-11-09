@@ -62,6 +62,12 @@ const state={
  assert.match(native,/if\(needsRename\)change\.title=title/,'reconciliation repairs a missed rename');
  assert.match(native,/PHCollectionEditOperationRename/,'rename support checked before mutation');
 
+ assert.match(native,/NSUInteger unavailableCount=identifiers\.count-assets\.count;/,'deleted photos are counted independently');
+ assert.match(native,/if\(!assets\.count\)/,'all-inaccessible photos do not create an empty album');
+ assert.match(native,/if\(!\[present containsObject:asset\.localIdentifier\]\)\[assetsToAdd addObject:asset\]/,'valid photos are still added when other links are stale');
+ assert.match(native,/"unavailableCount":@\(unavailableCount\)/,'native result reports stale photo links');
+ assert.doesNotMatch(native,/assets\.count!=identifiers\.count/,'a single missing asset must never reject all valid photos');
+
  assert.doesNotMatch(native,/deleteAssetCollections/,'never delete photo albums automatically');
  // Parallel UI events must not start concurrent PhotoKit mutations for one collection.
  let active=0,peak=0;
