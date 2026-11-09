@@ -103,6 +103,28 @@ const state={
  window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{attempts.push(id);ok({collectionId:id});};
  await window.NearbyPlacePhotos.syncMemberships(state);
  assert.deepEqual(attempts,['c-1','c-2','c-1','c-2'],'a later reconciliation retries failed albums');
+ // A damaged association store must not masquerade as a successful empty
+ // synchronization. No PhotoKit mutation, cleanup or overwrite is permitted.
+ const validLinks=localStorage.getItem('nearby-place-photo-links-v1');
+ const priorCalls=attempts.length;
+ for(const raw of ['{truncated',JSON.stringify({place1:{asset:'A'}}),JSON.stringify({place1:['asset-A'],place2:[null]})]){
+  localStorage.setItem('nearby-place-photo-links-v1',raw);
+  await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),/illisibles|invalides|invalide/);
+  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),raw,'broken source stays byte-for-byte intact');
+  assert.equal(attempts.length,priorCalls,'corrupt source never initiates album writes');
+ }
+ localStorage.setItem('nearby-place-photo-links-v1',validLinks);
+ const invalidStates=[
+  null,
+  {collections:[],memberships:[{placeId:'place1',collectionId:'missing'}]},
+  {collections:[{id:'collection-default',name:'Mes lieux'},{id:'collection-default',name:'Dupliquée'}],memberships:[]},
+  {collections:[{id:'collection-default',name:'Mes lieux'}],memberships:[null]}
+ ];
+ for(const broken of invalidStates){
+  await assert.rejects(window.NearbyPlacePhotos.syncMemberships(broken),/Collection|collection/);
+  assert.equal(attempts.length,priorCalls,'invalid collection state prevents native mutations');
+ }
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),validLinks,'validation is entirely read-only');
  assert.equal(fs.readFileSync('www/js/place-photos.js','utf8'),fs.readFileSync('public/js/place-photos.js','utf8'),'www and public parity');
  console.log('PASS photo albums: lazy creation, stable collection IDs, bridge, duplicate names, multi-album links, deletion safety');
 })().catch(error=>{console.error(error);process.exitCode=1;});
