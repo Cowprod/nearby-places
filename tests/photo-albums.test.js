@@ -81,6 +81,19 @@ const state={
  assert.ok(native.includes('Fermez la fenêtre actuelle avant de choisir des photos'),'picker modal collision reports a user-visible error');
  assert.ok(pickerImpl.includes('[picker dismissViewControllerAnimated:YES completion:^{'),'picker results wait for native dismissal');
  assert.ok(pickerImpl.includes('[self replyTo:self.pending value:payload error:nil]'),'pending selection callback resolves only after dismissal');
+ // Camera completion can race dismissal, PhotoKit permission prompts and
+ // the next user action. The original callback must remain attached to its
+ // capture until UIKit has dismissed the sheet AND Photos has finished saving.
+ const cameraImpl=native.split('- (void)imagePickerController:(UIImagePickerController*)picker didFinishPickingMediaWithInfo:')[1].split('- (void)nearby:')[0];
+ assert.ok(cameraImpl,'camera completion delegate is implemented');
+ assert.match(cameraImpl,/NSString \*callback=\[self\.pending copy\];/,'capture pins its Cordova callback before asynchronous work');
+ assert.match(cameraImpl,/\[picker dismissViewControllerAnimated:YES completion:\^\{/,'save and error paths wait for camera sheet dismissal');
+ assert.ok(cameraImpl.indexOf('performChanges:')>cameraImpl.indexOf('[picker dismissViewControllerAnimated:YES completion:^{'),
+  'PhotoKit save starts after UIKit completes the camera dismissal');
+ assert.match(cameraImpl,/replyTo:callback value:@\{@"id":identifier\}/,'saved asset is returned to its original callback');
+ assert.match(cameraImpl,/dispatch_async\(dispatch_get_main_queue\(\),\^\{\[self replyTo:callback value:nil error:@"Accès Photos refusé"\];\}\)/,
+  'a denied asynchronous Photos permission completes the same callback on the main queue');
+ assert.doesNotMatch(cameraImpl,/replyTo:self\.pending/,'late PhotoKit callbacks never target another camera or picker operation');
 
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
