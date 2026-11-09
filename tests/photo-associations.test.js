@@ -103,7 +103,7 @@ function harness(raw){
  const rejected=harness('{}');
  rejected.window.NearbyPhotos.pick=ok=>ok({ids:['photo-D'],selectedCount:2,unavailableCount:1});
  rejected.window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>fail('Accès Photos refusé');
- assert.match(await rejected.pick(),/Album Photos non synchronisé.*sans identifiant PhotoKit/,
+ assert.match(await rejected.pick(),/album iOS non synchronisé.*sans identifiant PhotoKit/,
    'both an album error and unaddressable selection remain visible');
  assert.deepEqual(JSON.parse(rejected.values.get('nearby-place-photo-links-v1'))['place-a'],['photo-D'],
    'an album failure must never undo valid picker associations');
