@@ -56,6 +56,10 @@ assert.equal(calls[0][3],'readShared');
 for (const name of ['ShareViewController.h','ShareViewController.m','MainInterface.storyboard']) {
   assert.equal(read('platforms/ios/ShareExtension/'+name),read('native/ios/'+name),name+' generated from Git source');
 }
+const appInfo=plist.parse(read('platforms/ios/App/App-Info.plist'));
+for(const key of ['NSCameraUsageDescription','NSPhotoLibraryUsageDescription','NSPhotoLibraryAddUsageDescription']){
+ assert.ok(typeof appInfo[key]==='string'&&appInfo[key].trim().length,key+' is essential for first use without iOS termination');
+}
 const generatedPlist = plist.parse(read('platforms/ios/ShareExtension/ShareExtension-Info.plist'));
 const version=read('config.xml').match(/<widget[^>]*version="([^"]+)"/)[1];
 assert.equal(generatedPlist.CFBundleShortVersionString,version);
