@@ -162,6 +162,12 @@
    [self storeAlbum:nil forCollection:collectionId];
    [self replyTo:callback value:@{@"renamed":@NO} error:nil];return;
   }
+  if([(album.localizedTitle?:@"") isEqualToString:newTitle]){
+   [self replyTo:callback value:@{@"renamed":@NO,@"albumId":album.localIdentifier} error:nil];return;
+  }
+  if(![album canPerformEditOperation:PHCollectionEditOperationRename]){
+   [self replyTo:callback value:nil error:@"Cet album ne peut pas être renommé"];return;
+  }
   [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
    [PHAssetCollectionChangeRequest changeRequestForAssetCollection:album].title=newTitle;
   } completionHandler:^(BOOL success,NSError *error){
