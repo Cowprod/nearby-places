@@ -18,6 +18,7 @@
 - Les mutations d'albums sont sérialisées dans l'interface Cordova pour éviter deux créations simultanées.
 - Une collection liée à plusieurs lieux regroupe toutes leurs photos, sans répéter le même identifiant d'asset.
 - Les synchronisations répétées sont **idempotentes** : pour un album existant, PhotoKit lit ses membres et ajoute seulement les `PHAsset` manquants ; sans changement, aucune écriture n'est exécutée.
+- **Photos supprimées de la photothèque** : si un lien local vise un `PHAsset` devenu inaccessible, ce lien est conservé mais ignoré lors de l'ajout ; les autres photos disponibles sont ajoutées normalement. La réponse native expose `unavailableCount` pour le diagnostic. Si tous les identifiants sont périmés, **aucun album vide n'est créé**.
 - Un titre d'album différent du nom de la collection est rétabli lors d'une synchronisation, y compris après un échec de renommage précédent.
 - Les événements Cordova `deviceready` et `resume` redéclenchent la réconciliation, notamment après un retour des Réglages Photos ; aucun lien local n'est effacé lors d'un refus d'accès.
 
@@ -49,6 +50,7 @@
 - La suite `npm test` complète reste **bloquée dans le workspace devMcp** au test `share-extension.patch.test.js` : dépendance Node `plist` absente (installation npm non proposée par les actions autorisées devMcp).
 - Contrôle du 9 novembre 2026 : `project.test` devMcp passe `collections-model`, `collections-ui`, `photo-albums`, navigation, catalogue, proximité et imports simulés ; l'exécution complète retourne **exit 1** sur `Cannot find module 'plist'` au test Share Extension. Aucun test natif PhotoKit n'est disponible sur cet hôte Linux.
 - Une CI GitHub Actions a été ajoutée pour disposer d'un contrôle complet avec les dépendances installées, mais **son résultat n'est pas encore confirmé**.
+- **Anomalie découverte dans `package-lock.json`** : le verrou ne contient pas encore le plugin photos local, ni plusieurs paquets d'interface pourtant déclarés dans `package.json`. Un `npm ci` GitHub Actions est donc voué à échouer avant les tests. Le workflow utilise temporairement `npm install --package-lock=false --ignore-scripts` pour installer les dépendances déclarées et exécuter la suite ; la prochaine mise à jour du lockfile sur un poste avec accès au registre npm devra rétablir `npm ci`. Ce contournement CI ne constitue pas une preuve de reproductibilité des dépendances.
 - **Aucune compilation native Xcode ni validation sur iPhone** n'a été faite depuis ces modifications.
 
 Règle de suivi : rapporter les commits, le résultat réel des tests et les blocages. Ne jamais confondre succès des tests JS et validation native iOS.
