@@ -64,5 +64,16 @@ camera.onclick=function(){run(call('capture',[]).then(function(v){if(v.id){updat
 pick.onclick=function(){run(call('pick',[]).then(function(v){update(place,ids(place).concat(v.ids||[]));return album(v.ids||[]);}));};
 search.onclick=function(){candidates.replaceChildren();run(call('nearby',[Number(place.latitude),Number(place.longitude),Number(radius.value)||100]).then(function(v){var existing=new Set(ids(place));(v.items||[]).filter(function(x){return !existing.has(x.id);}).forEach(function(x){thumbnail(x.id,candidates,false);});if(!candidates.children.length)status.textContent='Aucune photo géolocalisée trouvée dans ce rayon.';}));};
 render();if(immediateCamera)camera.click();}
-window.NearbyPlacePhotos={open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:function(state){return addToAlbums(albumJobs(state));}};
+function capture(place){
+ // Camera action is intentionally separate from the album management dialog.
+ // Native iOS handles first-use camera permission; do not show photo-library choices.
+ return call('capture',[]).then(function(result){
+  if(!result||!result.id)return;
+  update(place,ids(place).concat(result.id));
+  return addToAlbums(albumJobs(currentCollections(),place.id,[result.id]));
+ }).catch(function(error){
+  window.alert('Photo non enregistrée : '+(error&&error.message||String(error)));
+ });
+}
+window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:function(state){return addToAlbums(albumJobs(state));}};
 })();
