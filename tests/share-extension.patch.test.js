@@ -50,7 +50,7 @@ assert.match(resolver,/queue\.firstObject/,'consumer peeks without deleting');
 assert.match(resolver,/shareID/,'records are acknowledged by stable id');
 assert.match(resolverJS,/ackShared/);
 assert.match(resolverJS,/syncCategories/);
-assert.match(shareEntitlementsXML,new RegExp(APP_GROUP.replace(/\\./g,'\\\\.')),'extension App Group matches hook constant');
+assert.ok(shareEntitlementsXML.includes('<string>'+APP_GROUP+'</string>'),'extension App Group matches hook constant');
 assert.match(resolver,new RegExp(APP_GROUP.replace(/\./g,'\\.')),'app bridge uses the same App Group');
 
 const generatedPlist = patch(read('native/ios/ShareExtension-Info.plist'),{version:'9.8.7'});
