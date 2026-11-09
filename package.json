@@ -28,7 +28,7 @@
     "jquery": "3.7.1",
     "bootstrap": "5.3.8",
     "leaflet": "1.9.4",
-    "uk.co.workingedge.phonegap.plugin.launchnavigator": "^5.0.6"
+    "uk.co.workingedge.phonegap.plugin.launchnavigator": "5.0.7"
   },
   "cordova": {
     "platforms": [
