@@ -18,7 +18,7 @@ function harness(raw){
   addToAlbum:(id,title,ids,ok)=>{calls.push({id,ids:Array.from(ids)});ok({collectionId:id});}
  }};
  function el(){
-  return {children:[],textContent:'',append(...items){this.children.push(...items);},
+  return {children:[],textContent:'',style:{},append(...items){this.children.push(...items);},
    replaceChildren(...items){this.children=items;},setAttribute(){},remove(){},
    click(){if(this.onclick)this.onclick();}};
  }
