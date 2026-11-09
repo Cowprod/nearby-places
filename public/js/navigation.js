@@ -7,7 +7,8 @@
     var main = document.createElement('main');
     main.id = 'nearby-tabs-content';
     var nav = document.createElement('nav');
-    nav.className = 'nearby-tabs';
+    nav.className = 'nearby-tabs nav nav-tabs nav-fill';
+    nav.setAttribute('role','tablist');
     nav.setAttribute('aria-label', 'Navigation principale');
     var tabs = [
       {id:'collections',label:'Collections',nodes:[panel]},
@@ -87,13 +88,18 @@
     tabs.forEach(function (tab) {
       var button = document.createElement('button');
       button.type = 'button';
+      button.className = 'nav-link';
+      button.setAttribute('role','tab');
+      button.id='nearby-tab-button-'+tab.id;
       button.textContent = tab.label;
       button.dataset.tab = tab.id;
       button.setAttribute('aria-controls','nearby-tab-'+tab.id);
       button.setAttribute('aria-selected','false');
       var section = document.createElement('section');
       section.id = 'nearby-tab-'+tab.id;
-      section.className = 'nearby-tab-page';
+      section.className = 'nearby-tab-page tab-pane';
+      section.setAttribute('role','tabpanel');
+      section.setAttribute('aria-labelledby',button.id);
       section.setAttribute('aria-label',tab.label);
       tab.nodes.forEach(function (node) { section.append(node); });
       main.append(section);
@@ -106,6 +112,7 @@
         var active = tab.id === id;
         document.getElementById('nearby-tab-'+tab.id).hidden = !active;
         var button = nav.querySelector('[data-tab="'+tab.id+'"]');
+        button.classList.toggle('active',active);
         button.setAttribute('aria-current',active?'page':'false');
         button.setAttribute('aria-selected',active?'true':'false');
       });
