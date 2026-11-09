@@ -36,7 +36,9 @@ function harness(raw){
  assert.equal(actions.children.filter(item=>item.textContent==='Prendre une photo').length,0,'albums do not expose camera controls');
  assert.ok(actions.children.some(item=>item.textContent==='Choisir dans Photos'),'album retains manual imports');
  assert.ok(actions.children.some(item=>item.textContent==='Photos à proximité'),'album retains geolocated suggestions');
- return {capture:()=>window.NearbyPlacePhotos.capture(place),alerts,values,calls,window};
+ return {capture:()=>window.NearbyPlacePhotos.capture(place),alerts,values,calls,window,
+  pick:()=>{actions.children.find(item=>item.textContent==='Choisir dans Photos').onclick();
+    return new Promise(resolve=>setImmediate(()=>resolve(box.children[5].textContent)));}};
 }
 (async()=>{
  const good=harness(JSON.stringify({'place-a':['photo-A'],'place-b':['keep']}));
@@ -82,6 +84,34 @@ function harness(raw){
   assert.equal(h.calls.length,0,'invalid collections never create an album');
   assert.match(h.alerts[0],/Album Photos non synchronisé/);
  }
+ // A PHPicker selection may carry images without a PHAsset.localIdentifier.
+ // They must be reported, never silently presented as saved associations.
+ const skipped=harness('{}');
+ skipped.window.NearbyPhotos.pick=ok=>ok({ids:[],selectedCount:2,unavailableCount:2});
+ assert.match(await skipped.pick(),/2 photo\\(s\\).*sans identifiant PhotoKit/);
+ assert.equal(skipped.values.get('nearby-place-photo-links-v1'),'{}',
+   'unaddressable images must never create local photo links');
+ assert.equal(skipped.calls.length,0,'unaddressable images do not create a PhotoKit album');
+
+ const mixed=harness('{}');
+ mixed.window.NearbyPhotos.pick=ok=>ok({ids:['photo-C','photo-C'],selectedCount:3,unavailableCount:1});
+ assert.match(await mixed.pick(),/1 photo\\(s\\).*non associée\\(s\\)/);
+ assert.deepEqual(JSON.parse(mixed.values.get('nearby-place-photo-links-v1'))['place-a'],['photo-C'],
+   'valid PhotoKit ID is saved once even with duplicate picker entries');
+ assert.equal(mixed.calls.length,1,'valid images still trigger album reconciliation');
+
+ const rejected=harness('{}');
+ rejected.window.NearbyPhotos.pick=ok=>ok({ids:['photo-D'],selectedCount:2,unavailableCount:1});
+ rejected.window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>fail('Accès Photos refusé');
+ assert.match(await rejected.pick(),/Album Photos non synchronisé.*sans identifiant PhotoKit/,
+   'both an album error and unaddressable selection remain visible');
+ assert.deepEqual(JSON.parse(rejected.values.get('nearby-place-photo-links-v1'))['place-a'],['photo-D'],
+   'an album failure must never undo valid picker associations');
+ const empty=harness('{}');
+ empty.window.NearbyPhotos.pick=ok=>ok({ids:[],selectedCount:0,unavailableCount:0});
+ assert.match(await empty.pick(),/Aucune photo sélectionnée/);
+ assert.equal(empty.calls.length,0,'picker cancellation never creates an album');
+
  const cancelled=harness('{}');
  cancelled.window.NearbyPhotos.capture=ok=>ok({cancelled:true});
  await cancelled.capture();
