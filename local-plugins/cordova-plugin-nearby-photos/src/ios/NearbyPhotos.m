@@ -50,15 +50,33 @@
 }
 - (void)imagePickerController:(UIImagePickerController*)picker didFinishPickingMediaWithInfo:(NSDictionary*)info {
  UIImage *image=info[UIImagePickerControllerOriginalImage];
- [picker dismissViewControllerAnimated:YES completion:nil];
- if(!image){[self replyTo:self.pending value:nil error:@"Image absente"];return;}
- void (^save)(void)=^{
- __block NSString *identifier=nil;
- [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{PHAssetChangeRequest *request=[PHAssetChangeRequest creationRequestForAssetFromImage:image];identifier=request.placeholderForCreatedAsset.localIdentifier;} completionHandler:^(BOOL success,NSError *error){dispatch_async(dispatch_get_main_queue(),^{if(success&&identifier)[self replyTo:self.pending value:@{@"id":identifier} error:nil];else [self replyTo:self.pending value:nil error:error.localizedDescription?:@"Enregistrement impossible"];});}];
- };
- PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
- if(status==PHAuthorizationStatusNotDetermined){[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly handler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized)save();else [self replyTo:self.pending value:nil error:@"Accès Photos refusé"]; }];}
- else if(status==PHAuthorizationStatusAuthorized)save();else [self replyTo:self.pending value:nil error:@"Accès Photos refusé"];
+ NSString *callback=[self.pending copy];
+ // Keep the Cordova operation pending until UIKit has fully dismissed the
+ // camera. A fast PhotoKit save or permission refusal must not release it
+ // while the native camera sheet is still on screen.
+ [picker dismissViewControllerAnimated:YES completion:^{
+  if(!image){[self replyTo:callback value:nil error:@"Image absente"];return;}
+  void (^save)(void)=^{
+   __block NSString *identifier=nil;
+   [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+    PHAssetChangeRequest *request=[PHAssetChangeRequest creationRequestForAssetFromImage:image];
+    identifier=request.placeholderForCreatedAsset.localIdentifier;
+   } completionHandler:^(BOOL success,NSError *error){
+    dispatch_async(dispatch_get_main_queue(),^{
+     if(success&&identifier)[self replyTo:callback value:@{@"id":identifier} error:nil];
+     else [self replyTo:callback value:nil error:error.localizedDescription?:@"Enregistrement impossible"];
+    });
+   }];
+  };
+  PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
+  if(status==PHAuthorizationStatusNotDetermined){
+   [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly handler:^(PHAuthorizationStatus result){
+    if(result==PHAuthorizationStatusAuthorized)save();
+    else dispatch_async(dispatch_get_main_queue(),^{[self replyTo:callback value:nil error:@"Accès Photos refusé"];});
+   }];
+  }else if(status==PHAuthorizationStatusAuthorized)save();
+  else [self replyTo:callback value:nil error:@"Accès Photos refusé"];
+ }];
 }
 - (void)nearby:(CDVInvokedUrlCommand*)cmd {
  NSString *callback=cmd.callbackId;
