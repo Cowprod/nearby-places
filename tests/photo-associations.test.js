@@ -88,14 +88,14 @@ function harness(raw){
  // They must be reported, never silently presented as saved associations.
  const skipped=harness('{}');
  skipped.window.NearbyPhotos.pick=ok=>ok({ids:[],selectedCount:2,unavailableCount:2});
- assert.match(await skipped.pick(),/2 photo\\(s\\).*sans identifiant PhotoKit/);
+ assert.match(await skipped.pick(),/2 photo.*sans identifiant PhotoKit/);
  assert.equal(skipped.values.get('nearby-place-photo-links-v1'),'{}',
    'unaddressable images must never create local photo links');
  assert.equal(skipped.calls.length,0,'unaddressable images do not create a PhotoKit album');
 
  const mixed=harness('{}');
  mixed.window.NearbyPhotos.pick=ok=>ok({ids:['photo-C','photo-C'],selectedCount:3,unavailableCount:1});
- assert.match(await mixed.pick(),/1 photo\\(s\\).*non associée\\(s\\)/);
+ assert.match(await mixed.pick(),/1 photo.*non associée/);
  assert.deepEqual(JSON.parse(mixed.values.get('nearby-place-photo-links-v1'))['place-a'],['photo-C'],
    'valid PhotoKit ID is saved once even with duplicate picker entries');
  assert.equal(mixed.calls.length,1,'valid images still trigger album reconciliation');
