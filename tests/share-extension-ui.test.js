@@ -11,5 +11,5 @@ assert.match(native,/canonicalCategories/);
 assert.match(native,/@\"Choisir une collection…\"/);
 // Modern Apple Maps shares a /place?address= URL even when it has no name.
 assert.match(native,/\[item\.name isEqualToString:@\"address\"\]/);
-assert.match(native,/@\[\"maps.apple\", @\"maps.apple.com\", @\"www.maps.apple.com\"\]/);
+assert.match(native,/@\[@\"maps.apple\", @\"maps.apple.com\", @\"www.maps.apple.com\"\]/);
 console.log('PASS ShareExt UI: visible picker labels and Apple Maps address fallback (source checks only)');
