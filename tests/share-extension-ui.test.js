@@ -6,9 +6,11 @@ const native = fs.readFileSync('native/ios/ShareViewController.m','utf8');
 assert.match(native,/UIControlEventTouchUpInside/);
 assert.match(native,/chooseCollection/);
 assert.match(native,/chooseCategory/);
-assert.match(native,/UIAlertControllerStyleAlert/);
+assert.match(native,/UIAlertControllerStyleActionSheet/);
 assert.match(native,/refreshSelectionButtons/);
 assert.doesNotMatch(native,/UIPickerView/);
+assert.match(native,/nameFromApplePage/,'Apple Maps can recover place name from public HTML metadata');
+assert.match(native,/showsMenuAsPrimaryAction = NO/,'tap opens explicit selection list');
 assert.match(native,/@\"Choisir une collection…\"/);
 // Modern Apple Maps shares a /place?address= URL even when it has no name.
 assert.match(native,/\[item\.name isEqualToString:@\"address\"\]/);
