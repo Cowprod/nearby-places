@@ -522,47 +522,45 @@ static const NSUInteger NearbyQueueLimit = 50;
     NSString *categoryName = self.selectedCategory[@"name"];
     [self.collectionButton setTitle:collectionName.length ? collectionName : @"Choisir une collection…" forState:UIControlStateNormal];
     [self.categoryButton setTitle:categoryName.length ? categoryName : @"Choisir une catégorie…" forState:UIControlStateNormal];
-    self.categoryButton.enabled = self.selectedCollection != nil && [self categoriesForSelectedCollection].count > 0;
-}
-
-- (void)chooseCollection {
-    [self.view endEditing:YES];
-    // Reload App Group data when opening: the main app may have updated it.
     self.collections = [self loadCollections];
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Collection"
-        message:self.collections.count < 2 ? @"Aucune collection synchronisée. Ouvrez Nearby Places et réessayez." : @"Choisissez une collection"
-        preferredStyle:UIAlertControllerStyleAlert];
+    NSMutableArray<UIMenuElement *> *collectionActions = [NSMutableArray array];
     for (NSDictionary *choice in self.collections) {
         NSString *identifier = choice[@"id"];
         if (![identifier isKindOfClass:NSString.class] || !identifier.length) continue;
-        [sheet addAction:[UIAlertAction actionWithTitle:choice[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        UIAction *action = [UIAction actionWithTitle:choice[@"name"] image:nil identifier:nil handler:^(__kindof UIAction *selected) {
             self.selectedCollection = choice;
-            self.categories = [self loadCategories];
             self.selectedCategory = nil;
+            self.categories = [self loadCategories];
             NSArray *available = [self categoriesForSelectedCollection];
             if (available.count == 1) self.selectedCategory = available.firstObject;
             [self refreshSelectionButtons];
-        }]];
+        }];
+        if ([identifier isEqualToString:self.selectedCollection[@"id"]]) action.state = UIMenuElementStateOn;
+        [collectionActions addObject:action];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:sheet animated:YES completion:nil];
+    self.collectionButton.menu = [UIMenu menuWithTitle:@"Collection" children:collectionActions];
+    self.collectionButton.showsMenuAsPrimaryAction = YES;
+    self.collectionButton.enabled = collectionActions.count > 0;
+    NSMutableArray<UIMenuElement *> *categoryActions = [NSMutableArray array];
+    for (NSDictionary *choice in [self categoriesForSelectedCollection]) {
+        UIAction *action = [UIAction actionWithTitle:choice[@"name"] image:nil identifier:nil handler:^(__kindof UIAction *selected) {
+            self.selectedCategory = choice;
+            [self refreshSelectionButtons];
+        }];
+        if ([choice[@"id"] isEqualToString:self.selectedCategory[@"id"]]) action.state = UIMenuElementStateOn;
+        [categoryActions addObject:action];
+    }
+    self.categoryButton.menu = [UIMenu menuWithTitle:@"Catégorie" children:categoryActions];
+    self.categoryButton.showsMenuAsPrimaryAction = YES;
+    self.categoryButton.enabled = self.selectedCollection != nil && categoryActions.count > 0;
+}
+
+- (void)chooseCollection {
+    [self refreshSelectionButtons];
 }
 
 - (void)chooseCategory {
-    [self.view endEditing:YES];
-    if (!self.selectedCollection) { [self chooseCollection]; return; }
-    NSArray<NSDictionary *> *choices = [self categoriesForSelectedCollection];
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Catégorie"
-        message:choices.count ? @"Choisissez une catégorie" : @"Aucune catégorie disponible pour cette collection."
-        preferredStyle:UIAlertControllerStyleAlert];
-    for (NSDictionary *choice in choices) {
-        [sheet addAction:[UIAlertAction actionWithTitle:choice[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            self.selectedCategory = choice;
-            [self refreshSelectionButtons];
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:sheet animated:YES completion:nil];
+    [self refreshSelectionButtons];
 }
 
 @end
