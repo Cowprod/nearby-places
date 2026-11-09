@@ -14,5 +14,5 @@ camera.onclick=function(){run(call('capture',[]).then(function(v){if(v.id){updat
 pick.onclick=function(){run(call('pick',[]).then(function(v){update(place,ids(place).concat(v.ids||[]));return album(v.ids||[]);}));};
 search.onclick=function(){candidates.replaceChildren();run(call('nearby',[Number(place.latitude),Number(place.longitude),Number(radius.value)||100]).then(function(v){var existing=new Set(ids(place));(v.items||[]).filter(function(x){return !existing.has(x.id);}).forEach(function(x){thumbnail(x.id,candidates,false);});if(!candidates.children.length)status.textContent='Aucune photo géolocalisée trouvée dans ce rayon.';}));};
 render();if(immediateCamera)camera.click();}
-window.NearbyPlacePhotos={open:open};
+window.NearbyPlacePhotos={open:open,renameCollection:function(oldName,newName){if(oldName===newName)return Promise.resolve();return call('renameAlbum',['Nearby Places — '+oldName,'Nearby Places — '+newName]);}};
 })();
