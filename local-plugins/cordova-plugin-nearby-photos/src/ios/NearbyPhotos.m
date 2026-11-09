@@ -107,33 +107,32 @@
    [self replyTo:callback value:nil error:@"Certaines photos sont inaccessibles : aucun album modifié"];return;
   }
   PHAssetCollection *existing=[self albumForCollection:collectionId];
-  // Reconciliation must be idempotent: repeated imports, resumes or retries must
-  // not append an asset that already belongs to the album.
-  NSArray<PHAsset *> *toAdd=assets;
+  // Reconciliation is idempotent: repeated imports, resumes and retries never
+  // append a reference already present in the album.
   BOOL needsRename=existing&&![(existing.localizedTitle?:@"") isEqualToString:title];
+  NSMutableSet<NSString *> *present=[NSMutableSet set];
   if(existing){
    PHFetchResult<PHAsset *> *members=[PHAsset fetchAssetsInAssetCollection:existing options:nil];
-   NSMutableSet<NSString *> *present=[NSMutableSet setWithCapacity:members.count];
    [members enumerateObjectsUsingBlock:^(PHAsset *member,NSUInteger index,BOOL *stop){
     if(member.localIdentifier)[present addObject:member.localIdentifier];
    }];
-   NSMutableArray<PHAsset *> *missing=[NSMutableArray array];
-   [assets enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger index,BOOL *stop){
-    if(![present containsObject:asset.localIdentifier])[missing addObject:asset];
-   }];
-   toAdd=missing;
-   if(toAdd.count&&![existing canPerformEditOperation:PHCollectionEditOperationAddContent]){
+  }
+  NSMutableArray<PHAsset *> *assetsToAdd=[NSMutableArray arrayWithCapacity:assets.count];
+  [assets enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger index,BOOL *stop){
+   if(![present containsObject:asset.localIdentifier])[assetsToAdd addObject:asset];
+  }];
+  if(existing){
+   if(assetsToAdd.count&&![existing canPerformEditOperation:PHCollectionEditOperationAddContent]){
     [self replyTo:callback value:nil error:@"Cet album ne permet pas l'ajout de photos"];return;
    }
    if(needsRename&&![existing canPerformEditOperation:PHCollectionEditOperationRename]){
     [self replyTo:callback value:nil error:@"Cet album ne peut pas être renommé"];return;
    }
-   if(!toAdd.count&&!needsRename){
+   if(!assetsToAdd.count&&!needsRename){
     [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":existing.localIdentifier,@"count":@0} error:nil];
     return;
    }
   }
-  NSArray<PHAsset *> *assetsToAdd=toAdd;
   __block NSString *newAlbumId=nil;
   [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
    PHAssetCollectionChangeRequest *change=nil;
