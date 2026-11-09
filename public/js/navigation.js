@@ -60,6 +60,24 @@
     if (bulk) tabs[3].nodes.push(bulk);
     var globalCategories = document.getElementById('collections-global-categories');
     if (globalCategories) tabs[3].nodes.push(globalCategories);
+    // Appearance is a UI preference only; never modify stored places.
+    var appearance=document.createElement('section');
+    appearance.className='nearby-appearance-settings';
+    appearance.innerHTML='<h2>Apparence</h2><label for="nearby-appearance-mode">Thème</label><select id="nearby-appearance-mode" aria-label="Thème de l’application"><option value="auto">Automatique (iOS)</option><option value="light">Jour</option><option value="dark">Nuit</option></select>';
+    tabs[3].nodes.unshift(appearance);
+    var themeSelect=appearance.querySelector('select');
+    var themeMedia=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+    function applyAppearance(){
+      var mode=themeSelect.value;
+      document.documentElement.dataset.theme=mode==='auto'?(themeMedia&&themeMedia.matches?'dark':'light'):mode;
+      document.documentElement.style.colorScheme=document.documentElement.dataset.theme;
+      var meta=document.querySelector('meta[name="color-scheme"]');
+      if(meta)meta.content=document.documentElement.dataset.theme;
+    }
+    try{var savedTheme=localStorage.getItem('nearby-appearance-mode');if(['auto','light','dark'].includes(savedTheme))themeSelect.value=savedTheme;}catch(_){}
+    themeSelect.onchange=function(){try{localStorage.setItem('nearby-appearance-mode',themeSelect.value);}catch(_){}applyAppearance();};
+    if(themeMedia){if(themeMedia.addEventListener)themeMedia.addEventListener('change',applyAppearance);else if(themeMedia.addListener)themeMedia.addListener(applyAppearance);}
+    applyAppearance();
     var status = document.getElementById('status');
     if (status) {
       status.insertAdjacentElement('afterend',nav);
