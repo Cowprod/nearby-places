@@ -36,7 +36,7 @@ function harness(raw){
  assert.equal(actions.children.filter(item=>item.textContent==='Prendre une photo').length,0,'albums do not expose camera controls');
  assert.ok(actions.children.some(item=>item.textContent==='Choisir dans Photos'),'album retains manual imports');
  assert.ok(actions.children.some(item=>item.textContent==='Photos à proximité'),'album retains geolocated suggestions');
- return {capture:()=>window.NearbyPlacePhotos.capture(place),alerts,values,calls};
+ return {capture:()=>window.NearbyPlacePhotos.capture(place),alerts,values,calls,window};
 }
 (async()=>{
  const good=harness(JSON.stringify({'place-a':['photo-A'],'place-b':['keep']}));
@@ -59,10 +59,17 @@ function harness(raw){
   assert.equal(h.calls.length,0,'album write not started when local association failed');
  }
  const pending=harness('{}');
- pending.calls.length=0;
- // Simulate a native album permission error after the original has been saved.
- const rawBefore=pending.values.get('nearby-place-photo-links-v1');
- await pending.capture();
- assert.notEqual(pending.values.get('nearby-place-photo-links-v1'),rawBefore,'native original is linked to the place');
+ pending.window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>fail('Accès complet à Photos requis');
+ const result=await pending.capture();
+ assert.equal(result.saved,true,'captured original remains saved when album access is refused');
+ assert.equal(result.albumSynced,false,'album synchronization failure remains visible');
+ assert.deepEqual(JSON.parse(pending.values.get('nearby-place-photo-links-v1'))['place-a'],['photo-B'],
+  'native permission failure never removes the associated photo');
+ assert.match(pending.alerts[0],/Photo enregistrée et associée au lieu/,'never claim the photo was lost');
+ const cancelled=harness('{}');
+ cancelled.window.NearbyPhotos.capture=ok=>ok({cancelled:true});
+ await cancelled.capture();
+ assert.deepEqual(JSON.parse(cancelled.values.get('nearby-place-photo-links-v1')),{},'cancellation creates no link');
+ assert.equal(cancelled.alerts.length,0,'camera cancellation is silent');
  console.log('PASS photo-place associations: direct camera, lazy albums, no duplicate links, safe errors');
 })().catch(err=>{console.error(err);process.exitCode=1;});
