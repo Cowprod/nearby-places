@@ -2,8 +2,26 @@
 'use strict';
 var KEY='nearby-place-photo-links-v1';
 function read(){try{var v=JSON.parse(localStorage.getItem(KEY)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{};}catch(_){return {};}}
-function ids(place){var v=read()[place.id];return Array.isArray(v)?v.filter(function(id){return typeof id==='string';}):[];}
-function update(place,list){var v=read();v[place.id]=Array.from(new Set(list));localStorage.setItem(KEY,JSON.stringify(v));}
+// Never replace an unreadable or structurally invalid association store with an
+// empty object: that would silently discard existing photo-place relationships.
+function readForWrite(){
+ var raw=localStorage.getItem(KEY);
+ if(raw===null)return {};
+ var v;
+ try{v=JSON.parse(raw);}catch(_){throw Error('Associations photo-lieu illisibles : données locales conservées, aucune modification effectuée.');}
+ if(!v||typeof v!=='object'||Array.isArray(v))throw Error('Format des associations photo-lieu invalide : données locales conservées.');
+ return v;
+}
+function ids(place){var v=read()[place.id];return Array.isArray(v)?v.filter(function(id){return typeof id==='string'&&id.length>0;}):[];}
+function update(place,list){
+ if(!place||typeof place.id!=='string'||!place.id||!Array.isArray(list))throw Error('Association photo-lieu invalide');
+ var v=readForWrite();
+ if(Object.prototype.hasOwnProperty.call(v,place.id)&&(!Array.isArray(v[place.id])||v[place.id].some(function(id){return typeof id!=='string'||!id;}))){
+  throw Error('Associations photo-lieu existantes invalides : données locales conservées.');
+ }
+ v[place.id]=Array.from(new Set(list.filter(function(id){return typeof id==='string'&&id.length>0;})));
+ localStorage.setItem(KEY,JSON.stringify(v));
+}
 function call(method,args){return new Promise(function(resolve,reject){if(!window.NearbyPhotos||!window.NearbyPhotos[method]){reject(Error('Module photo iOS indisponible : reconstruire l’application.'));return;}window.NearbyPhotos[method].apply(null,args.concat([resolve,function(err){reject(Error(String(err)));}]));});}
 var albumQueue=Promise.resolve();
 function queuedAlbumCall(method,args){var op=albumQueue.then(function(){return call(method,args);});albumQueue=op.catch(function(){});return op;}
