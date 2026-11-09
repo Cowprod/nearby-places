@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 class Node {
-  constructor(tag, text='') { this.tagName=tag; this.textContent=text; this.children=[]; this.attributes={}; this.dataset={}; this.hidden=false; this.parent=null; }
+  constructor(tag, text='') { this.tagName=tag; this.textContent=text; this.children=[]; this.attributes={}; this.dataset={}; this.hidden=false; this.parent=null; this.style={}; this.value=''; this.classList={toggle(){}}; }
   append(node) { node.parent=this; this.children.push(node); }
   insertAdjacentElement(where,node) { assert.equal(where,'afterend'); const i=this.parent.children.indexOf(this); this.parent.children.splice(i+1,0,node); node.parent=this.parent; }
   setAttribute(k,v) { this.attributes[k]=v; }
-  querySelector(selector) { const id=selector.split('"')[1]; return this.children.find(n=>n.dataset.tab===id); }
+  querySelector(selector) { if(selector==='select')return this.children.find(n=>n.tagName==='select')||new Node('select'); const id=selector.split('"')[1]; return this.children.find(n=>n.dataset.tab===id); }
 }
 const body=new Node('body');
 const status=new Node('p'); status.id='status';
@@ -22,6 +22,7 @@ body.append(places);
 body.append(script);
 const document={
   readyState:'complete',
+  documentElement:{dataset:{},style:{}},
   createElement:t=>new Node(t),
   getElementById:id=>id==='collections-panel'?panel:id==='places'?places:find(body,id),
   querySelectorAll:sel=>sel==='body > h2'?headings:[],
