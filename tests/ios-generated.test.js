@@ -20,7 +20,7 @@ const photoBridgeGenerated=read('platforms/ios/www/plugins/cordova-plugin-nearby
 // Cordova caches local-plugin JS separately from Objective-C. Catch a stale
 // generated bridge before building an app whose PhotoKit signatures mismatch.
 assert.equal(photoBridgeGenerated,
-  'cordova.define("cordova-plugin-nearby-photos.NearbyPhotos", function(require, exports, module) {\\n'+photoBridgeSource+'\\n});\\n',
+  'cordova.define("cordova-plugin-nearby-photos.NearbyPhotos", function(require, exports, module) {\n'+photoBridgeSource+'\n});\n',
   'generated PhotoKit JS bridge matches the source plugin');
 let installedPhotoBridge;
 const photoCalls=[];
