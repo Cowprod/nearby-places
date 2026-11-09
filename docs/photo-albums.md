@@ -65,3 +65,10 @@ Règle de suivi : rapporter les commits, le résultat réel des tests et les blo
 - `project.test` sur devMcp : **PASS** des tests collections, albums, navigation, catalogue, proximité et imports simulés ; **exit 1 global** encore dû à `Cannot find module 'plist'` dans le test Share Extension.
 - Vérification supplémentaire du pont JS installé en iOS ajoutée dans `tests/ios-generated.test.js` ; exécution iOS/Xcode non vérifiée (requiert macOS et un projet Cordova préparé).
 - La synchronisation du workspace devMcp doit être reconfirmée après les derniers commits et aucune validation physique iPhone ne peut être déduite des tests JS.
+
+## Avancement du 9 novembre 2026 — conservation des associations photo-lieu
+- **Défaut corrigé** : une association photo-lieu invalide ou un JSON local tronqué pouvait être interprété comme un objet vide par la lecture tolérante, puis **écrasé** à la prochaine photo. Les écritures passent maintenant par `readForWrite()`, qui refuse les données illisibles et préserve la valeur brute de `nearby-place-photo-links-v1`.
+- La mise à jour est limitée à un lieu et déduplique les `PHAsset.localIdentifier` sans altérer les associations des autres lieux. La suppression automatique d'originaux ou d'albums n'est toujours pas implémentée.
+- Nouvelle vérification `tests/photo-associations.test.js` ajoutée à `npm test` ; couvre les duplications, les liens des autres lieux et les données locales corrompues. Les miroirs `www/js/place-photos.js` et `public/js/place-photos.js` ont été alignés.
+- **Test comportemental JS ciblé exécuté hors devMcp dans un contexte V8 simulé** : 4 scénarios passés (donnée normale, JSON tronqué, tableau inattendu, entrée de lieu malformée) ; dans les cas invalides, la valeur brute reste inchangée et aucun appel natif d'album n'est initié.
+- **Limites** : test Node du dépôt et tests natifs PhotoKit non encore rejoués ; tentative `workspace.sync` devMcp sur le nouveau commit en erreur `UNAVAILABLE`. La dernière révision devMcp vérifiée précédemment était `562af722`. Compilation iOS/macOS et installation iPhone toujours **non validées**.
