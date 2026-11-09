@@ -74,8 +74,9 @@ try {
   const stale = spawnSync('/bin/sh',[guard,fixture],{encoding:'utf8'});
   assert.equal(stale.status,1,'later source change blocks a stale build');
   assert.match(stale.stderr,/npm run ios:prepare/,'failure explains how to regenerate');
-  fs.copyFileSync(path.join(root,'local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m'),path.join(fixture,'local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m'));
-  fs.appendFileSync(path.join(fixture,'platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m'),'\\n// stale plugin source\\n');
+  // Restore the previously modified fixture so this check isolates PhotoKit.
+  fs.copyFileSync(path.join(root,'native/ios/ShareViewController.m'),path.join(fixture,'native/ios/ShareViewController.m'));
+  fs.appendFileSync(path.join(fixture,'platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m'),'\n// stale plugin source\n');
   const stalePhotoKit=spawnSync('/bin/sh',[guard,fixture],{encoding:'utf8'});
   assert.equal(stalePhotoKit.status,1,'outdated generated PhotoKit plugin blocks Xcode build');
 } finally {
