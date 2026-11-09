@@ -100,7 +100,7 @@ function album(photoIds){
  }).catch(function(err){throw Error('Photo associée au lieu, mais album iOS non synchronisé : '+err.message);});
 }
 
-function run(task){status.textContent='Chargement…';task.then(function(){status.textContent='';render();}).catch(function(err){status.textContent=err.message;render();});}
+function run(task){status.textContent='Chargement…';task.then(function(message){status.textContent=typeof message==='string'?message:'';render();}).catch(function(err){status.textContent=err.message;render();});}
 
 pick.onclick=function(){run(call('pick',[]).then(function(v){
  var selected=v&&Array.isArray(v.ids)?v.ids.filter(function(id){return typeof id==='string'&&!!id;}):[];
