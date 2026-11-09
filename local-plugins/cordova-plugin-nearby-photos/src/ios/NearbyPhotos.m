@@ -5,6 +5,28 @@
 #import <UIKit/UIKit.h>
 @interface NearbyPhotos : CDVPlugin <UIImagePickerControllerDelegate,UINavigationControllerDelegate,PHPickerViewControllerDelegate>
 @property(nonatomic,copy) NSString *pending;
+- (void)addToAlbum:(CDVInvokedUrlCommand*)cmd {
+ NSString *callback=cmd.callbackId;
+ NSString *title=cmd.arguments.count>0&&[cmd.arguments[0] isKindOfClass:NSString.class]?cmd.arguments[0]:@"";
+ NSArray *identifiers=cmd.arguments.count>1&&[cmd.arguments[1] isKindOfClass:NSArray.class]?cmd.arguments[1]:@[];
+ if(title.length==0||identifiers.count==0){[self replyTo:callback value:nil error:@"Album ou photos manquants"];return;}
+ void (^apply)(void)=^{
+ PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:identifiers options:nil];
+ if(assets.count==0){[self replyTo:callback value:nil error:@"Photos non accessibles"];return;}
+ PHFetchOptions *opts=[PHFetchOptions new];opts.predicate=[NSPredicate predicateWithFormat:@"title == %@",title];
+ PHAssetCollection *existing=[PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum subtype:PHAssetCollectionSubtypeAlbumRegular options:opts].firstObject;
+ [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+ PHAssetCollectionChangeRequest *request=nil;
+ if(existing)request=[PHAssetCollectionChangeRequest changeRequestForAssetCollection:existing];
+ else request=[PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:title];
+ [request addAssets:assets];
+ } completionHandler:^(BOOL success,NSError *error){[self replyTo:callback value:success?@{@"album":title,@"count":@(assets.count)}:nil error:success?nil:(error.localizedDescription?:@"Impossible de créer l’album")];}];
+ };
+ PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+ if(status==PHAuthorizationStatusNotDetermined)[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)apply();else [self replyTo:callback value:nil error:@"Autorisation Photos refusée"];}];
+ else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)apply();
+ else [self replyTo:callback value:nil error:@"Autorisation Photos refusée"];
+}
 @end
 @implementation NearbyPhotos
 - (void)replyTo:(NSString*)callback value:(id)value error:(NSString*)error { CDVPluginResult *r=error?[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error]:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:value];[self.commandDelegate sendPluginResult:r callbackId:callback]; }
