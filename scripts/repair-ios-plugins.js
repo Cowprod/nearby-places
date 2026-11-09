@@ -7,9 +7,18 @@ const {spawnSync}=require('node:child_process');
 const root=path.resolve(__dirname,'..');
 const project=path.join(root,'platforms/ios/App.xcodeproj/project.pbxproj');
 if(!fs.existsSync(project)){console.log('iOS platform not generated; Cordova will install plugins during prepare.');process.exit(0);}
-const source=fs.readFileSync(project,'utf8');
+const xcode=require('xcode');
+const parsed=xcode.project(project);parsed.parseSync();
+const targets=parsed.pbxNativeTargetSection();
+const app=Object.entries(targets).find(([id,t])=>!id.endsWith('_comment')&&['App','Nearby Places'].includes(String(t.name||'').replace(/^"|"$/g,'')));
+if(!app)throw Error('Main iOS app target missing');
+const phaseRef=(app[1].buildPhases||[]).find(p=>p.comment==='Sources');
+const phase=phaseRef&&parsed.hash.project.objects.PBXSourcesBuildPhase[phaseRef.value];
+const builds=parsed.hash.project.objects.PBXBuildFile;
+const refs=parsed.hash.project.objects.PBXFileReference;
+const registered=!!phase&&(phase.files||[]).some(item=>{const build=builds[item.value];const ref=build&&refs[build.fileRef];return ref&&/NearbyPhotos\\.m$/.test(String(ref.path||ref.name||'').replace(/^"|"$/g,''));});
 const installed=path.join(root,'platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m');
-if(source.includes('NearbyPhotos.m')&&fs.existsSync(installed)){process.exit(0);}
+if(registered&&fs.existsSync(installed)){process.exit(0);}
 console.log('Repairing missing NearbyPhotos iOS plugin registration...');
 function cordova(args){
  const bin=path.join(root,'node_modules/.bin/cordova');
