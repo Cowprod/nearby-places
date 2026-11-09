@@ -23,9 +23,10 @@
     setVisited: function(id, visited) {
       var p = places.find(function(item){return item && item.id===id;});
       if (!p) throw Error('Lieu introuvable');
-      var before=p.visited;
+      var before=p.visited, beforeAt=p.visitedAt;
       p.visited=!!visited;
-      try { save(); render(); } catch(error){p.visited=before;throw error;}
+      p.visitedAt=p.visited?(before&&Number.isFinite(Number(beforeAt))?beforeAt:Date.now()):null;
+      try { save(); render(); } catch(error){p.visited=before;p.visitedAt=beforeAt;throw error;}
     },
     deletePlace: function(id) {
       var p=places.find(function(item){return item && item.id===id;});
@@ -81,7 +82,7 @@
       var title=document.createElement('strong');
       title.textContent=typeof p.name==='string' && p.name.trim()?p.name:'Lieu local sans nom';
       var button=document.createElement('button');button.textContent=p.visited?'Réactiver':'Visité';
-      button.onclick=function(){p.visited=!p.visited;save();render(position);};
+      button.onclick=function(){window.NearbyPlaceActions.setVisited(p.id,!p.visited);};
       head.append(title,button);card.append(head);
       var remove=document.createElement('button');remove.textContent='Supprimer';
       remove.onclick=function(){
@@ -155,7 +156,7 @@
     var deletedIds=new Set(readJSON('nearby-deleted-place-ids-v1',[]));
     var incoming=data.places.filter(function(p){return !deletedIds.has(p.id);}).map(function(p){
       var old=byId.get(p.id);
-      return Object.assign({},p,{visited:old ? !!old.visited : !!p.visited});
+      return Object.assign({},p,{visited:old ? !!old.visited : !!p.visited,visitedAt:old ? old.visitedAt : p.visitedAt});
     });
     // A Map deduplicates restored identifiers and would silently delete manual
     // places with colliding IDs. Preserve each orphaned local record in order.
