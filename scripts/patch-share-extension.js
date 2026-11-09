@@ -154,6 +154,13 @@ function ensureProject(root, metadata) {
   const app = targetEntry(project, 'Nearby Places') || targetEntry(project, 'App');
   if (!app) throw Error('Main iOS app target missing');
   repairSourcePhases(project, app.target, extension.target);
+  // Existing Cordova installations may cache the local plugin.xml and omit
+  // AVFoundation even after a Git update. Keep the camera permission API
+  // linked in the generated App target without requiring platform removal.
+  const frameworksRef = (app.target.buildPhases || []).find(phase => phase.comment === 'Frameworks');
+  const frameworks = frameworksRef && project.hash.project.objects.PBXFrameworksBuildPhase[frameworksRef.value];
+  const avLinked = frameworks && (frameworks.files || []).some(item => String(item.comment || '').includes('AVFoundation.framework'));
+  if (!avLinked) project.addFramework('AVFoundation.framework', {target:app.uuid, link:true});
   for (const entry of [app, extension]) {
     const name = 'Verify Nearby native sources';
     if (!entry.target.buildPhases.some(phase => phase.comment === name)) {
