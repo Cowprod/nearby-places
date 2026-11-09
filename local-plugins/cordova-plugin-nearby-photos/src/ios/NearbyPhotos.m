@@ -75,4 +75,14 @@
  else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)apply();
  else [self replyTo:callback value:nil error:@"Autorisation Photos refusée"];
 }
+- (void)renameAlbum:(CDVInvokedUrlCommand*)cmd {
+ NSString *callback=cmd.callbackId;
+ NSString *oldName=cmd.arguments.count>0?cmd.arguments[0]:@"";
+ NSString *newName=cmd.arguments.count>1?cmd.arguments[1]:@"";
+ if(!oldName.length||!newName.length){[self replyTo:callback value:nil error:@"Nom d’album manquant"];return;}
+ PHFetchOptions *opts=[PHFetchOptions new];opts.predicate=[NSPredicate predicateWithFormat:@"title == %@",oldName];
+ PHAssetCollection *album=[PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum subtype:PHAssetCollectionSubtypeAlbumRegular options:opts].firstObject;
+ if(!album){[self replyTo:callback value:@{@"renamed":@NO} error:nil];return;}
+ [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{[PHAssetCollectionChangeRequest changeRequestForAssetCollection:album].title=newName;} completionHandler:^(BOOL ok,NSError *error){[self replyTo:callback value:ok?@{@"renamed":@YES}:nil error:ok?nil:error.localizedDescription];}];
+}
 @end
