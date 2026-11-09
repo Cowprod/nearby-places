@@ -85,11 +85,16 @@ function repairSourcePhases(project, appTarget, extensionTarget) {
   extensionSources.files = (extensionSources.files || []).filter(item => buildFiles[item.value]);
 
   const resolver = buildFileForPath(project, 'cordova-plugin-nearby-resolver/NearbyResolver.m');
+  const photos = buildFileForPath(project, 'cordova-plugin-nearby-photos/NearbyPhotos.m');
+  if (!photos) throw Error('NearbyPhotos.m is not registered in the iOS Xcode project. Reinstall the local cordova-plugin-nearby-photos before building.');
   const controller = buildFileForPath(project, 'ShareViewController.m');
   if (!resolver || !controller) throw Error('Required native source reference missing from Xcode project');
   appSources.files = appSources.files.filter(item => item.value !== resolver.value && item.value !== controller.value);
   extensionSources.files = extensionSources.files.filter(item => item.value !== resolver.value && item.value !== controller.value);
   appSources.files.push(resolver);
+  // Never leave PhotoKit registered in config.xml but absent from the App binary.
+  appSources.files = appSources.files.filter(item => item.value !== photos.value);
+  appSources.files.push(photos);
   // Cordova can accidentally attach every application plugin .m to ShareExt.
   // ShareExt has no Cordova framework: compile only its own controller.
   const references = project.hash.project.objects.PBXFileReference;
