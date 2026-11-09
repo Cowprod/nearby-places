@@ -131,6 +131,21 @@ const state={
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
+
+ const albumAuth=native.split('- (void)withAlbumAuthorization:')[1].split('- (void)addToAlbum:')[0];
+ assert.match(albumAuth,/void \(\^runIfStillAuthorized\)\(void\)=\^\{/,
+   'native album permission decisions are rechecked before work');
+ assert.match(albumAuth,/PHAuthorizationStatus current=\[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite\]/,
+   'recheck uses current PhotoKit read-write permission, not an old prompt result');
+ assert.match(albumAuth,/if\(current==PHAuthorizationStatusAuthorized\)\{work\(\);return;\}/,
+   'album writes only run under currently authorized read-write access');
+ assert.match(albumAuth,/if\(result==PHAuthorizationStatusAuthorized\)runIfStillAuthorized\(\);/,
+   'async permission prompt completion rechecks authorization before album mutation');
+ assert.doesNotMatch(albumAuth,/if\(result==PHAuthorizationStatusAuthorized\)work\(\);/,
+   'stale permission completion cannot immediately mutate an album');
+ assert.match(albumAuth,/Les associations aux lieux sont conservées/,
+   'permission transition reports that links are retained');
+
  assert.match(native,/fetchAssetsInAssetCollection:existing/,'native sync inspects existing album membership before adding');
  assert.match(native,/if\(!assetsToAdd\.count&&!needsRename\)/,'repeated reconciliation is a no-op');
  assert.match(native,/if\(needsRename\)change\.title=title/,'reconciliation repairs a missed rename');
