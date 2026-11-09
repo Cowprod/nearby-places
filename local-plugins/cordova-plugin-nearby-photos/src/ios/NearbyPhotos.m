@@ -84,8 +84,18 @@
  self.pending=cmd.callbackId;PHPickerConfiguration *config=[[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];config.filter=[PHPickerFilter imagesFilter];config.selectionLimit=0;PHPickerViewController *picker=[[PHPickerViewController alloc] initWithConfiguration:config];picker.delegate=self;[self.viewController presentViewController:picker animated:YES completion:nil];
 }
 - (void)picker:(PHPickerViewController*)picker didFinishPicking:(NSArray<PHPickerResult*>*)results {
- [picker dismissViewControllerAnimated:YES completion:nil];NSMutableArray *ids=[NSMutableArray array];for(PHPickerResult *result in results){if(result.assetIdentifier)[ids addObject:result.assetIdentifier];}
- [self replyTo:self.pending value:@{@"ids":ids} error:nil];
+ [picker dismissViewControllerAnimated:YES completion:nil];
+ // PHPicker may return a usable image without a PHAsset identifier (for
+ // example, a provider-backed item). Such images cannot be linked to a place
+ // or album by localIdentifier. Report them instead of silently dropping them.
+ // Deduplicate selected identifiers; never create a second PHAsset.
+ NSMutableOrderedSet<NSString *> *ids=[NSMutableOrderedSet orderedSet];
+ NSUInteger unavailableCount=0;
+ for(PHPickerResult *result in results){
+  if(result.assetIdentifier.length)[ids addObject:result.assetIdentifier];
+  else unavailableCount++;
+ }
+ [self replyTo:self.pending value:@{@"ids":ids.array,@"selectedCount":@(results.count),@"unavailableCount":@(unavailableCount)} error:nil];
 }
 // Stable mapping: an application collection owns its PhotoKit album by localIdentifier,
 // never by display title (two collections may have identical names).
