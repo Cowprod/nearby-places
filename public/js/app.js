@@ -386,6 +386,11 @@
     var parsed=pendingImport;
     var collectionId = $('import-collection') ? $('import-collection').value : '';
     if (!collectionId) { status('Choisissez une collection avant de valider le lieu.'); return; }
+    // Re-check at confirmation: a manual entry may have been added while the dialog was open.
+    if(places.some(function(p){return p && validPosition(p.latitude,p.longitude) && distanceMeters(p.latitude,p.longitude,parsed.latitude,parsed.longitude)<5;})){
+      pendingImport=null;$('import-dialog').hidden=true;
+      status('Ce lieu existe déjà');showNextImport();return;
+    }
     var imported = addManual(name,parsed.latitude,parsed.longitude,category,comment);
     try { assignImportedPlace(imported, collectionId); }
     catch (error) { status('Lieu enregistré, mais affectation à la collection impossible : ' + error.message); return; }
