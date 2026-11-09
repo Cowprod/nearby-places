@@ -71,7 +71,9 @@ const window = {
   addEventListener(name, fn) { events[name] = fn; },
   confirm() { return true; }
 };
+const lifecycleEvents = {};
 const document = {
+  addEventListener(name,fn) { lifecycleEvents[name]=fn; },
   readyState:'complete',
   createElement(tag) { return new Element(tag); },
   querySelector(value) { assert.equal(value,'h1'); return h1; }
@@ -130,4 +132,13 @@ bulkButton.onclick();
 const afterBulk = JSON.parse(storage.getItem('nearby-collections-v2'));
 assert.equal(afterBulk.memberships.filter(m=>m.collectionId===collectionId).length,1,'bulk assignment is idempotent');
 assert.equal(storage.getItem('nearby-places-v1'),legacyRaw,'bulk assignment preserves places');
+// A returned user can grant full Photos access later; retry on device-ready / resume.
+let albumResyncs=0;
+window.NearbyPhotos={};
+window.NearbyPlacePhotos={syncMemberships:()=>{albumResyncs++;return Promise.resolve();}};
+assert.equal(typeof lifecycleEvents.deviceready,'function','Cordova startup resync handler registered');
+assert.equal(typeof lifecycleEvents.resume,'function','Cordova resume handler registered');
+lifecycleEvents.deviceready();
+lifecycleEvents.resume();
+assert.equal(albumResyncs,2,'startup and resume each retry pending PhotoKit album changes');
 console.log('PASS collections UI: description, open editor, persistence rollback, legacy data and public parity');
