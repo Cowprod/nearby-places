@@ -298,12 +298,12 @@ static const NSUInteger NearbyQueueLimit = 50;
     for (NSString *text in self.sharedTexts) {
         for (NSString *line in [text componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
             NSString *trimmed = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (trimmed.length && ![trimmed containsString:@"://"] && trimmed.length <= 160) return trimmed;
+            if (trimmed.length && ![trimmed containsString:@"://"] && trimmed.length <= 160 && ![trimmed.lowercaseString hasPrefix:@"http"] && ![trimmed.lowercaseString hasPrefix:@"maps.apple"] && ![trimmed.lowercaseString hasPrefix:@"google.com"]) return trimmed;
         }
     }
     NSURLComponents *components = [NSURLComponents componentsWithString:self.sharedURL];
     for (NSURLQueryItem *item in components.queryItems ?: @[]) {
-        if (([item.name isEqualToString:@"name"] || [item.name isEqualToString:@"q"] || [item.name isEqualToString:@"query"]) && item.value.length) {
+        if (([@[@"name",@"q",@"query",@"title",@"place"] containsObject:item.name.lowercaseString]) && item.value.length) {
             NSRegularExpression *coordinates = [NSRegularExpression regularExpressionWithPattern:@"^-?[0-9.]+\\s*,\\s*-?[0-9.]+$" options:0 error:nil];
             if ([coordinates numberOfMatchesInString:item.value options:0 range:NSMakeRange(0, item.value.length)] == 0) return item.value;
         }
