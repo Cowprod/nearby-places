@@ -359,6 +359,7 @@
     var state = model.loadOrMigrate(localStorage, places);
     model.attach(state, place.id, collectionId, categoryId || null);
     model.save(localStorage, state);
+    if(window.NearbyPhotos&&window.NearbyPlacePhotos){window.NearbyPlacePhotos.syncMemberships(state).catch(function(error){status('Lieu enregistré ; synchronisation des albums Photos impossible : '+error.message);});}
     if (typeof window.dispatchEvent === 'function' && typeof Event === 'function') window.dispatchEvent(new Event('nearby-places-changed'));
   }
   function showNextImport(){
