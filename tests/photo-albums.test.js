@@ -76,6 +76,12 @@ const state={
  assert.match(native,/NSMutableOrderedSet<NSString/,'PHPicker deduplicates selected local identifiers');
  assert.match(native,/@"selectedCount"/,'PHPicker reports total selected items');
  assert.match(native,/@"unavailableCount"/,'PHPicker reports selections without PHAsset identifiers');
+ const pickerImpl=native.split('- (void)picker:(PHPickerViewController*)picker didFinishPicking:')[1].split('// Stable mapping:')[0];
+ assert.ok(native.includes('if(self.viewController.presentedViewController){'),'PHPicker refuses to open over an existing native modal');
+ assert.ok(native.includes('Fermez la fenêtre actuelle avant de choisir des photos'),'picker modal collision reports a user-visible error');
+ assert.ok(pickerImpl.includes('[picker dismissViewControllerAnimated:YES completion:^{'),'picker results wait for native dismissal');
+ assert.ok(pickerImpl.includes('[self replyTo:self.pending value:payload error:nil]'),'pending selection callback resolves only after dismissal');
+
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
