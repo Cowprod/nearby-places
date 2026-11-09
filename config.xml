@@ -7,6 +7,7 @@
   <author>Cowprod</author>
   <content src="index.html"/>
   <access origin="https://raw.githubusercontent.com" />
+  <access origin="https://tile.openstreetmap.org" />
   <allow-intent href="https://*/*"/>
   <preference name="Orientation" value="default"/>
   <preference name="scheme" value="app"/>
