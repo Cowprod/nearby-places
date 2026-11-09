@@ -35,7 +35,7 @@ assert.match(controller,/UITextField/,'native name field present');
 assert.match(controller,/UITextView/,'native comment field present');
 assert.match(controller,/chooseCollection/,'native collection dialog present');
 assert.match(controller,/chooseCategory/,'native category dialog present');
-assert.match(controller,/UIAlertControllerStyleAlert/,'tap opens an explicit selection dialog');
+assert.match(controller,/UIAlertControllerStyleActionSheet/,'tap opens an explicit selection dialog');
 assert.doesNotMatch(controller,/UIPickerView/,'wheel pickers replaced');
 assert.match(controller,/UILabel \*collectionLabel = \[self fieldLabel:@"Collection \*"\]/,'mandatory collection is visible');
 assert.match(controller,/\[stack addArrangedSubview:self\.collectionButton\]/,'collection precedes category');
