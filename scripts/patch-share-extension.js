@@ -141,6 +141,28 @@ function ensureAppEntitlements(root) {
   }
 }
 
+function ensureAppPhotoPrivacy(root) {
+  // A cached local-plugin install can lose config-file entries during Cordova
+  // prepare. iOS terminates the app on the first camera request if the usage
+  // string is missing; repair the generated Info.plist deterministically.
+  const plist = require('plist');
+  const file = path.join(root,'platforms/ios/App/App-Info.plist');
+  if (!fs.existsSync(file)) throw Error('Generated iOS App-Info.plist missing');
+  const current = plist.parse(fs.readFileSync(file,'utf8'));
+  const descriptions = {
+    NSCameraUsageDescription:'Prendre des photos des lieux enregistrés.',
+    NSPhotoLibraryUsageDescription:'Associer des photos aux lieux et organiser un album par collection Nearby Places.',
+    NSPhotoLibraryAddUsageDescription:'Enregistrer les photos prises dans la photothèque.'
+  };
+  let dirty=false;
+  for(const [key,value] of Object.entries(descriptions)){
+    if(typeof current[key]!=='string' || !current[key].trim()){
+      current[key]=value;dirty=true;
+    }
+  }
+  if(dirty)fs.writeFileSync(file,plist.build(current));
+}
+
 function ensureProject(root, metadata) {
   const xcode = require('xcode');
   const projectFile = path.join(root, 'platforms/ios/App.xcodeproj/project.pbxproj');
@@ -227,6 +249,7 @@ function sync(root) {
     path.join(root, 'platforms/ios/ShareExt.entitlements')
   ) || changed;
   ensureAppEntitlements(root);
+  ensureAppPhotoPrivacy(root);
   ensureProject(root, metadata);
   syncNearbyPhotos(root);
   console.log('Nearby Places: ShareExt and PhotoKit plugin synced from versioned native sources');
