@@ -202,8 +202,26 @@ function sync(root) {
   ) || changed;
   ensureAppEntitlements(root);
   ensureProject(root, metadata);
-  console.log('Nearby Places: ShareExt rebuilt from versioned native sources');
+  syncNearbyPhotos(root);
+  console.log('Nearby Places: ShareExt and PhotoKit plugin synced from versioned native sources');
   return changed;
+}
+
+// Cordova may retain a previously installed copy of a local plugin after a
+// source-only Git update. Keep the generated PhotoKit implementation in sync.
+function syncNearbyPhotos(root) {
+  const source=path.join(root,'local-plugins/cordova-plugin-nearby-photos');
+  const targets=[
+    ['src/ios/NearbyPhotos.m','platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m'],
+    ['www/NearbyPhotos.js','platforms/ios/www/plugins/cordova-plugin-nearby-photos/www/NearbyPhotos.js']
+  ];
+  for(const [from,to] of targets) {
+    const target=path.join(root,to);
+    const transform=from.endsWith('.js')
+      ? value => 'cordova.define("cordova-plugin-nearby-photos.NearbyPhotos", function(require, exports, module) {\\n'+value+'\\n});\\n'
+      : null;
+    if(fs.existsSync(target))copyIfChanged(path.join(source,from),target,transform);
+  }
 }
 
 function syncResolver(root) {
@@ -235,4 +253,4 @@ function prepareHook(context) {
 
 // Cordova only invokes function exports; named helpers remain available to tests
 // and to the local plugin hook.
-module.exports = Object.assign(prepareHook, {APP_GROUP, NATIVE_FILES, patch, sync, syncResolver});
+module.exports = Object.assign(prepareHook, {APP_GROUP, NATIVE_FILES, patch, sync, syncResolver, syncNearbyPhotos});
