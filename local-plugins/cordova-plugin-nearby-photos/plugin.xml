@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0" id="cordova-plugin-nearby-photos" version="0.1.0">
+<name>NearbyPhotos</name>
+<js-module src="www/NearbyPhotos.js" name="NearbyPhotos"><clobbers target="NearbyPhotos"/></js-module>
+<platform name="ios"><framework src="Photos.framework"/><framework src="PhotosUI.framework"/><config-file target="config.xml" parent="/*"><feature name="NearbyPhotos"><param name="ios-package" value="NearbyPhotos"/></feature></config-file><source-file src="src/ios/NearbyPhotos.m"/></platform>
+</plugin>
