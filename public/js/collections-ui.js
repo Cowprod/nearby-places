@@ -217,8 +217,10 @@
           var m=entry.membership;
           var place = places.find(function (p) { return p && p.id === m.placeId; });
           if (place) {
-            var item=el('li',null,'collection-place-item'); item.dataset.placeId=place.id; if(highlightedPlaceId===place.id)item.classList.add('collection-place-notification-highlight');item.addEventListener('click',function(){if(item.classList.contains('collection-place-notification-highlight')){item.classList.remove('collection-place-notification-highlight');highlightedPlaceId=null;}}); item.append(el('span',place.name||m.placeId));
-            if(place.comment){item.append(el('small',place.comment,'muted collection-place-comment'));}
+            var item=el('li',null,'collection-place-item'); item.dataset.placeId=place.id; if(highlightedPlaceId===place.id)item.classList.add('collection-place-notification-highlight');item.addEventListener('click',function(){if(item.classList.contains('collection-place-notification-highlight')){item.classList.remove('collection-place-notification-highlight');highlightedPlaceId=null;}}); var heading=el('div',null,'collection-place-heading');
+            heading.append(el('span',place.name||m.placeId));
+            if(place.comment){heading.append(el('div',place.comment,'muted collection-place-comment'));}
+            item.append(heading);
             if(place.visited){
               var originalCategory=state.categories.find(function(c){return c.id===m.categoryId;});
               item.append(el('small',originalCategory?originalCategory.name:'Sans catégorie','muted collection-original-category'));
