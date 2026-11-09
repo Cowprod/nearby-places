@@ -57,7 +57,7 @@
  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{PHAssetChangeRequest *request=[PHAssetChangeRequest creationRequestForAssetFromImage:image];identifier=request.placeholderForCreatedAsset.localIdentifier;} completionHandler:^(BOOL success,NSError *error){dispatch_async(dispatch_get_main_queue(),^{if(success&&identifier)[self replyTo:self.pending value:@{@"id":identifier} error:nil];else [self replyTo:self.pending value:nil error:error.localizedDescription?:@"Enregistrement impossible"];});}];
  };
  PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
- if(status==PHAuthorizationStatusNotDetermined){[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized)save();else [self replyTo:self.pending value:nil error:@"Accès Photos refusé"]; }];}
+ if(status==PHAuthorizationStatusNotDetermined){[[PHPhotoLibrary sharedPhotoLibrary] requestAuthorizationForAccessLevel:PHAccessLevelAddOnly completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized)save();else [self replyTo:self.pending value:nil error:@"Accès Photos refusé"]; }];}
  else if(status==PHAuthorizationStatusAuthorized)save();else [self replyTo:self.pending value:nil error:@"Accès Photos refusé"];
 }
 - (void)nearby:(CDVInvokedUrlCommand*)cmd {
@@ -70,7 +70,7 @@
  [self replyTo:callback value:@{@"items":items} error:nil];
  };
  PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
- if(status==PHAuthorizationStatusNotDetermined){[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)query();else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"]; }];}
+ if(status==PHAuthorizationStatusNotDetermined){[[PHPhotoLibrary sharedPhotoLibrary] requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)query();else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"]; }];}
  else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)query();else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"];
 }
 - (void)thumbnail:(CDVInvokedUrlCommand*)cmd {
@@ -113,7 +113,7 @@
   return;
  }
  if(status==PHAuthorizationStatusNotDetermined){
-  [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){
+  [[PHPhotoLibrary sharedPhotoLibrary] requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){
    if(result==PHAuthorizationStatusAuthorized)work();
    else [self replyTo:callback value:nil error:result==PHAuthorizationStatusLimited?@"Accès limité : les albums nécessitent l’accès complet à Photos.":@"Autorisation Photos refusée"];
   }];
