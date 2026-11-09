@@ -32,7 +32,7 @@ function album(photoIds){
  return addToAlbums(jobs).catch(function(err){throw Error('Photo associée au lieu, mais album iOS non synchronisé : '+err.message);});
 }
 
-function run(task){status.textContent='Chargement…';task.then(function(){status.textContent='';render();}).catch(function(err){status.textContent=err.message;});}
+function run(task){status.textContent='Chargement…';task.then(function(){status.textContent='';render();}).catch(function(err){status.textContent=err.message;render();});}
 camera.onclick=function(){run(call('capture',[]).then(function(v){if(v.id){update(place,ids(place).concat(v.id));return album([v.id]);}}));};
 pick.onclick=function(){run(call('pick',[]).then(function(v){update(place,ids(place).concat(v.ids||[]));return album(v.ids||[]);}));};
 search.onclick=function(){candidates.replaceChildren();run(call('nearby',[Number(place.latitude),Number(place.longitude),Number(radius.value)||100]).then(function(v){var existing=new Set(ids(place));(v.items||[]).filter(function(x){return !existing.has(x.id);}).forEach(function(x){thumbnail(x.id,candidates,false);});if(!candidates.children.length)status.textContent='Aucune photo géolocalisée trouvée dans ce rayon.';}));};
