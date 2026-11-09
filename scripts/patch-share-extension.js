@@ -90,6 +90,15 @@ function repairSourcePhases(project, appTarget, extensionTarget) {
   appSources.files = appSources.files.filter(item => item.value !== resolver.value && item.value !== controller.value);
   extensionSources.files = extensionSources.files.filter(item => item.value !== resolver.value && item.value !== controller.value);
   appSources.files.push(resolver);
+  // Cordova can accidentally attach every application plugin .m to ShareExt.
+  // ShareExt has no Cordova framework: compile only its own controller.
+  const references = project.hash.project.objects.PBXFileReference;
+  extensionSources.files = extensionSources.files.filter(item => {
+    const buildFile = buildFiles[item.value];
+    const reference = buildFile && references[buildFile.fileRef];
+    const filePath = reference && String(reference.path || reference.name || '').replace(/^"|"$/g, '');
+    return filePath === 'ShareViewController.m' || filePath.endsWith('/ShareViewController.m');
+  });
   extensionSources.files.push(controller);
 }
 
