@@ -51,7 +51,7 @@ function addToAlbums(jobs){
   if(failures.length)throw Error(failures.length+'/'+jobs.length+' album(s) iOS non synchronisé(s) : '+failures.join(' ; '));
  });
 }
-function open(place,immediateCamera,collectionName){var overlay=document.createElement('div');overlay.className='nearby-photo-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');var box=document.createElement('section');box.className='nearby-photo-dialog';var title=document.createElement('h3');title.textContent='Photos — '+place.name;var close=document.createElement('button');close.className='btn btn-secondary';close.textContent='Fermer';close.onclick=function(){overlay.remove();};var status=document.createElement('p');status.className='muted';var gallery=document.createElement('div');gallery.className='nearby-photo-grid';var actions=document.createElement('div');actions.className='nearby-photo-buttons';var camera=document.createElement('button');camera.className='btn btn-success';camera.textContent='Prendre une photo';var pick=document.createElement('button');pick.className='btn btn-secondary';pick.textContent='Choisir dans Photos';var search=document.createElement('button');search.className='btn btn-secondary';search.textContent='Photos à proximité';var radius=document.createElement('input');radius.type='number';radius.min='10';radius.max='5000';radius.value='100';radius.setAttribute('aria-label','Rayon en mètres');radius.style.width='90px';actions.append(camera,pick,search,radius);var candidates=document.createElement('div');candidates.className='nearby-photo-grid';box.append(title,close,actions,status,gallery,candidates);overlay.append(box);document.body.append(overlay);
+function open(place,immediateCamera,collectionName){var overlay=document.createElement('div');overlay.className='nearby-photo-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');var box=document.createElement('section');box.className='nearby-photo-dialog';var title=document.createElement('h3');title.textContent='Photos — '+place.name;var close=document.createElement('button');close.className='btn btn-secondary';close.textContent='Fermer';close.onclick=function(){overlay.remove();};var status=document.createElement('p');status.className='muted';var gallery=document.createElement('div');gallery.className='nearby-photo-grid';var actions=document.createElement('div');actions.className='nearby-photo-buttons';var pick=document.createElement('button');pick.className='btn btn-secondary';pick.textContent='Choisir dans Photos';var search=document.createElement('button');search.className='btn btn-secondary';search.textContent='Photos à proximité';var radius=document.createElement('input');radius.type='number';radius.min='10';radius.max='5000';radius.value='100';radius.setAttribute('aria-label','Rayon en mètres');radius.style.width='90px';actions.append(pick,search,radius);var candidates=document.createElement('div');candidates.className='nearby-photo-grid';box.append(title,close,actions,status,gallery,candidates);overlay.append(box);document.body.append(overlay);
 function thumbnail(id,container,linked){var cell=document.createElement('div');cell.className='nearby-photo-tile';var img=document.createElement('img');img.alt='Photo du lieu';img.loading='lazy';cell.append(img);var button=document.createElement('button');button.className='btn btn-sm btn-secondary';button.textContent=linked?'Dissocier':'Associer';button.onclick=function(){var list=ids(place);update(place,linked?list.filter(function(x){return x!==id;}):list.concat(id));render();if(!linked)album([id]).catch(function(err){status.textContent=err.message;});};cell.append(button);container.append(cell);call('thumbnail',[id]).then(function(v){img.src=v.dataUrl;}).catch(function(){img.alt='Photo inaccessible';});}
 function render(){gallery.replaceChildren();ids(place).forEach(function(id){thumbnail(id,gallery,true);});if(!ids(place).length){var empty=document.createElement('p');empty.className='muted';empty.textContent='Aucune photo associée.';gallery.append(empty);}}
 function album(photoIds){
@@ -60,19 +60,28 @@ function album(photoIds){
 }
 
 function run(task){status.textContent='Chargement…';task.then(function(){status.textContent='';render();}).catch(function(err){status.textContent=err.message;render();});}
-camera.onclick=function(){run(call('capture',[]).then(function(v){if(v.id){update(place,ids(place).concat(v.id));return album([v.id]);}}));};
+
 pick.onclick=function(){run(call('pick',[]).then(function(v){update(place,ids(place).concat(v.ids||[]));return album(v.ids||[]);}));};
 search.onclick=function(){candidates.replaceChildren();run(call('nearby',[Number(place.latitude),Number(place.longitude),Number(radius.value)||100]).then(function(v){var existing=new Set(ids(place));(v.items||[]).filter(function(x){return !existing.has(x.id);}).forEach(function(x){thumbnail(x.id,candidates,false);});if(!candidates.children.length)status.textContent='Aucune photo géolocalisée trouvée dans ce rayon.';}));};
-render();if(immediateCamera)camera.click();}
+render();}
 function capture(place){
- // Camera action is intentionally separate from the album management dialog.
- // Native iOS handles first-use camera permission; do not show photo-library choices.
+ // One tap = one native camera capture. PhotoKit import/suggestions live only
+ // under the album button. Cancellation is not an error.
  return call('capture',[]).then(function(result){
-  if(!result||!result.id)return;
+  if(!result||!result.id)return {cancelled:true};
   update(place,ids(place).concat(result.id));
-  return addToAlbums(albumJobs(currentCollections(),place.id,[result.id]));
+  return addToAlbums(albumJobs(currentCollections(),place.id,[result.id])).then(
+   function(){return {saved:true,albumSynced:true};},
+   function(error){
+    // The original exists in Photos and its place association is persisted.
+    // Never report a failed save or delete the association because album
+    // authorization was refused.
+    window.alert('Photo enregistrée et associée au lieu. Album Photos non synchronisé : '+(error&&error.message||String(error)));
+    return {saved:true,albumSynced:false};
+   });
  }).catch(function(error){
-  window.alert('Photo non enregistrée : '+(error&&error.message||String(error)));
+  window.alert('Prise de vue impossible : '+(error&&error.message||String(error)));
+  return {saved:false};
  });
 }
 window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:function(state){return addToAlbums(albumJobs(state));}};
