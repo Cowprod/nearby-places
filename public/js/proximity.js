@@ -97,7 +97,14 @@ function registerNotificationEvents(){
  try{
   local.on('add',function(n,event){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : confirmation native add reçue (notification ajoutée au planificateur)'+notificationEventContext(event));});
   local.on('trigger',function(n,event){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : événement natif trigger reçu (WebView active)'+notificationEventContext(event));});
-  local.on('click',function(n,event){if(isTestNotification(n))logEvent('test-notification','id '+n.id+' : notification ouverte par utilisateur'+notificationEventContext(event));});
+  local.on('click',function(n,event){
+   if(isTestNotification(n)){logEvent('test-notification','id '+n.id+' : notification ouverte par utilisateur'+notificationEventContext(event));return;}
+   var placeId=n&&n.data&&n.data.placeId;
+   if(typeof placeId!=='string'||!placeId)return;
+   try{sessionStorage.setItem('nearby-notification-target',JSON.stringify({placeId:placeId,at:Date.now()}));}catch(_){}
+   if(window.NearbyNavigation)window.NearbyNavigation.show('collections');
+   window.dispatchEvent(new CustomEvent('nearby-notification-open',{detail:{placeId:placeId}}));
+  });
   notificationEventsRegistered=true;
  }catch(error){logEvent('notification-events','écoute native indisponible : '+String(error));}
 }
@@ -138,7 +145,7 @@ function notify(place){
  // Local notifications are generated when the native SDK delivers a JavaScript event.
  // iOS may terminate the WebView; this is NOT guaranteed background delivery.
  try {
-   local.schedule({id:notificationId(place.id),title:'Lieu à proximité',text:place.name+' est à proximité (distance géographique estimée).',iOSForeground:true});
+   local.schedule({id:notificationId(place.id),title:'Lieu à proximité',text:place.name+' est à proximité (distance géographique estimée).',data:{placeId:place.id},iOSForeground:true});
    history[place.id]=now;storeSet(COOLDOWN,history);
    status('Notification de proximité : '+place.name);logEvent('notification',place.name);
  }catch(error){status('Erreur notification : '+String(error));}
