@@ -46,11 +46,22 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
   earlyURLs.forEach(url=>context.window.handleOpenURL(url));
   vm.runInNewContext(source,context,{filename:'www/js/app.js'});
   document.getElementById('category').value='culture';
+  // A human must explicitly select a collection in the import confirmation dialog.
+  // The DOM harness has no select/options behavior, so emulate that choice here.
+  function chooseTestCollection(){
+    const input=document.getElementById('import-collection');
+    if(input.value)return;
+    const state=collections.loadOrMigrate(localStorage,[]);
+    const existing=state.collections.find(c=>c.id!=='collection-default');
+    const id=existing?existing.id:collections.createCollection(state,'Tests import','');
+    collections.save(localStorage,state);
+    input.value=id;
+  }
   async function importURL(url){document.getElementById('maps-url').value=url;
     document.getElementById('maps-add').onclick();
     await new Promise(resolve => setImmediate(resolve)); // L'import suit maintenant une résolution Promise.
     const dialog=document.getElementById('import-dialog');
-    if(dialog.hidden===false){if(!document.getElementById('import-name').value)document.getElementById('import-name').value='Libellé de test';document.getElementById('import-confirm').onclick();}
+    if(dialog.hidden===false){if(!document.getElementById('import-name').value)document.getElementById('import-name').value='Libellé de test';chooseTestCollection();document.getElementById('import-confirm').onclick();}
     return JSON.parse(store.get('nearby-places-v1')||'[]');
   }
   function status(){return document.getElementById('status').textContent;}
@@ -66,7 +77,7 @@ function harness(native = false, earlyURLs = [], controlledFetch = false, seedLo
     setConfirm(value){confirmAllowed=value;},
     fire(event){(listeners.get(event)||[]).forEach(callback=>callback());},
     share(intent){nativeQueue.push(intent);(listeners.get('resume')||[]).forEach(callback=>callback());},
-    confirmImport(){document.getElementById('import-confirm').onclick();},
+    confirmImport(){chooseTestCollection();document.getElementById('import-confirm').onclick();},
     cancelImport(){document.getElementById('import-cancel').onclick();},
     input(id,value){document.getElementById(id).value=value;},
     inputValue(id){return document.getElementById(id).value;},
