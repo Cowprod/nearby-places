@@ -246,6 +246,9 @@ static const NSUInteger NearbyQueueLimit = 50;
         if (item.attributedTitle.string.length) [self.sharedTexts addObject:item.attributedTitle.string];
         if (item.attributedContentText.string.length) [self.sharedTexts addObject:item.attributedContentText.string];
         for (NSItemProvider *provider in item.attachments ?: @[]) {
+            if (provider.suggestedName.length && ![provider.suggestedName containsString:@"://"]) {
+                [self.sharedTexts addObject:provider.suggestedName];
+            }
             [self loadType:UTTypeURL.identifier provider:provider group:group];
             [self loadType:UTTypeText.identifier provider:provider group:group];
         }
@@ -339,27 +342,75 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.saveButton.enabled = YES;
 }
 
+// Apple Plans often shares /place?address=...&coordinate=... without
+// the actual venue name. Parse the public place page metadata as a
+// best-effort enhancement; never overwrite a name manually edited by user.
+- (NSString *)nameFromApplePage:(NSData *)data {
+    if (!data.length || data.length > 2 * 1024 * 1024) return nil;
+    NSString *html = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if (!html.length) return nil;
+    NSRegularExpression *tags = [NSRegularExpression regularExpressionWithPattern:@"<meta[^>]*>"
+        options:NSRegularExpressionCaseInsensitive error:nil];
+    NSRegularExpression *content = [NSRegularExpression regularExpressionWithPattern:@"content\\s*=\\s*[\"']([^\"']+)"
+        options:NSRegularExpressionCaseInsensitive error:nil];
+    NSString *candidate = nil;
+    for (NSTextCheckingResult *match in [tags matchesInString:html options:0 range:NSMakeRange(0, html.length)]) {
+        NSString *tag = [html substringWithRange:match.range];
+        if ([tag rangeOfString:@"og:title" options:NSCaseInsensitiveSearch].location == NSNotFound &&
+            [tag rangeOfString:@"twitter:title" options:NSCaseInsensitiveSearch].location == NSNotFound) continue;
+        NSTextCheckingResult *value = [content firstMatchInString:tag options:0 range:NSMakeRange(0, tag.length)];
+        if (value.numberOfRanges > 1) { candidate = [tag substringWithRange:[value rangeAtIndex:1]]; break; }
+    }
+    if (!candidate.length) {
+        NSRegularExpression *title = [NSRegularExpression regularExpressionWithPattern:@"<title[^>]*>([^<]+)</title>"
+            options:NSRegularExpressionCaseInsensitive error:nil];
+        NSTextCheckingResult *value = [title firstMatchInString:html options:0 range:NSMakeRange(0, html.length)];
+        if (value.numberOfRanges > 1) candidate = [html substringWithRange:[value rangeAtIndex:1]];
+    }
+    if (!candidate.length) return nil;
+    NSDictionary *entities = @{@"&amp;":@"&", @"&quot;":@"\"", @"&#39;":@"'", @"&lt;":@"<", @"&gt;":@">"};
+    for (NSString *key in entities) candidate = [candidate stringByReplacingOccurrencesOfString:key withString:entities[key]];
+    for (NSString *suffix in @[@" - Apple Maps", @" | Apple Maps", @" on Apple Maps", @" – Apple Maps"]) {
+        if ([candidate hasSuffix:suffix]) candidate = [candidate substringToIndex:candidate.length - suffix.length];
+    }
+    candidate = [candidate stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (!candidate.length || candidate.length > 160 ||
+        [@[@"Maps", @"Apple Maps", @"Google Maps"] containsObject:candidate]) return nil;
+    return candidate;
+}
+
 - (void)resolveSharedName {
     NSURL *url = [NSURL URLWithString:self.sharedURL];
-    BOOL google = [url.host.lowercaseString isEqualToString:@"maps.app.goo.gl"];
-    if (![@[@"maps.apple", @"maps.apple.com", @"www.maps.apple.com"] containsObject:url.host.lowercaseString ?: @""] && !google) return;
+    NSString *host = url.host.lowercaseString ?: @"";
+    BOOL apple = [@[@"maps.apple", @"maps.apple.com", @"www.maps.apple.com"] containsObject:host];
+    BOOL google = [host isEqualToString:@"maps.app.goo.gl"] || [host isEqualToString:@"goo.gl"];
+    if (!apple && !google) return;
     NSString *originalName = self.nameField.text ?: @"";
     NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
     configuration.timeoutIntervalForResource = 18;
     NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
     [[session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NSURLComponents *components = [NSURLComponents componentsWithURL:response.URL resolvingAgainstBaseURL:NO];
+        NSString *finalHost = components.host.lowercaseString ?: @"";
+        BOOL trusted = (apple && [@[@"maps.apple", @"maps.apple.com", @"www.maps.apple.com"] containsObject:finalHost]) ||
+            (google && ([@[@"www.google.com", @"google.com", @"maps.google.com", @"www.google.co.jp", @"google.co.jp", @"maps.google.co.jp"] containsObject:finalHost]));
         NSString *resolvedName = nil;
-        for (NSURLQueryItem *item in components.queryItems) {
-            if ([item.name isEqualToString:@"name"] || (google && [item.name isEqualToString:@"q"])) resolvedName = google ? [[[item.value stringByReplacingOccurrencesOfString:@"+" withString:@" "] componentsSeparatedByString:@","] firstObject] : item.value;
+        if (trusted) {
+            for (NSURLQueryItem *item in components.queryItems) {
+                NSString *key = item.name.lowercaseString;
+                if ([@[@"name",@"title",@"q",@"query"] containsObject:key] && item.value.length) {
+                    resolvedName = (google && [@[@"q",@"query"] containsObject:key])
+                        ? [[item.value componentsSeparatedByString:@","] firstObject] : item.value;
+                    break;
+                }
+            }
+            if (!resolvedName.length && apple) resolvedName = [self nameFromApplePage:data];
         }
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (!error && [response isKindOfClass:NSHTTPURLResponse.class] &&
-                [(NSHTTPURLResponse *)response statusCode] == 200 &&
-                ([components.host.lowercaseString isEqualToString:@"maps.apple.com"] || (google && [components.host.lowercaseString isEqualToString:@"www.google.com"])) && resolvedName.length) {
-                if (!google) self.sharedURL = components.URL.absoluteString;
+            if (!error && trusted && resolvedName.length && [self.nameField.text isEqualToString:originalName]) {
+                self.nameField.text = resolvedName;
+                if (apple) self.sharedURL = components.URL.absoluteString;
                 self.urlLabel.text = self.sharedURL;
-                if ([self.nameField.text isEqualToString:originalName]) self.nameField.text = resolvedName;
             }
         });
         [session finishTasksAndInvalidate];
