@@ -27,7 +27,8 @@
     "bootbox": "6.0.4",
     "jquery": "3.7.1",
     "bootstrap": "5.3.8",
-    "leaflet": "1.9.4"
+    "leaflet": "1.9.4",
+    "uk.co.workingedge.phonegap.plugin.launchnavigator": "^5.0.6"
   },
   "cordova": {
     "platforms": [
@@ -45,7 +46,10 @@
         "URL_SCHEME": "nearbyplaces"
       },
       "cordova-plugin-device": {},
-      "cordova-plugin-nearby-resolver": {}
+      "cordova-plugin-nearby-resolver": {},
+      "uk.co.workingedge.phonegap.plugin.launchnavigator": {
+        "GOOGLE_API_KEY_FOR_ANDROID": ""
+      }
     }
   },
   "dependencies": {
