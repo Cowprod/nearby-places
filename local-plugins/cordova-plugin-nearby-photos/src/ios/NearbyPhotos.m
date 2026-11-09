@@ -43,9 +43,10 @@
  self.pending=nil;
 }
 - (void)imagePickerControllerDidCancel:(UIImagePickerController*)picker {
+ NSString *callback=[self.pending copy];
  [picker dismissViewControllerAnimated:YES completion:^{
-  [self replyTo:self.pending value:@{@"cancelled":@YES} error:nil];
-  self.pending=nil;
+  // Cancellation ends only the camera request which presented this sheet.
+  [self replyTo:callback value:@{@"cancelled":@YES} error:nil];
  }];
 }
 - (void)imagePickerController:(UIImagePickerController*)picker didFinishPickingMediaWithInfo:(NSDictionary*)info {
@@ -127,10 +128,11 @@
   else unavailableCount++;
  }
  NSDictionary *payload=@{@"ids":ids.array,@"selectedCount":@(results.count),@"unavailableCount":@(unavailableCount)};
- // Only release pending after UIKit finishes dismissing the picker. Otherwise
- // a rapid second selection can start while the previous native UI is visible.
+ NSString *callback=[self.pending copy];
+ // Only release pending after UIKit finishes dismissing the picker. Capture
+ // the original callback so a late dismissal never resolves a newer request.
  [picker dismissViewControllerAnimated:YES completion:^{
-  [self replyTo:self.pending value:payload error:nil];
+  [self replyTo:callback value:payload error:nil];
  }];
 }
 // Stable mapping: an application collection owns its PhotoKit album by localIdentifier,
