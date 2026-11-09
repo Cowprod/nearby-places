@@ -5,21 +5,21 @@ const vm=require('node:vm');
 const source=fs.readFileSync('www/js/navigator.js','utf8');
 assert.equal(source,fs.readFileSync('public/js/navigator.js','utf8'),'www and public route logic match');
 
-const APP={APPLE_MAPS:'apple_maps',GOOGLE_MAPS:'google_maps',CITYMAPPER:'citymapper',TRANSIT_APP:'transit_app',MOOVIT:'moovit',HERE_MAPS:'here_maps'};
+const APP={APPLE_MAPS:'apple_maps',GOOGLE_MAPS:'google_maps',CITYMAPPER:'citymapper',TRANSIT_APP:'transit_app',MOOVIT:'moovit',HERE_MAPS:'here_maps',WAZE:'waze'};
 function harness(preference,installed){
  const values=new Map([['nearby-navigation-app-v2',preference]]);
  const localStorage={getItem:key=>values.get(key)||null,setItem:(key,val)=>values.set(key,String(val))};
- const navigations=[];
+ const navigations=[],alerts=[];
  const launchnavigator={
   APP,TRANSPORT_MODE:{WALKING:'walking',TRANSIT:'transit'},
   availableApps:ok=>ok(installed),
   isAppAvailable:(id,ok)=>ok(!!installed[id]),
   navigate:(destination,options)=>navigations.push({destination:Array.from(destination),options})
  };
- const window={launchnavigator,location:{href:'original'},dispatchEvent:()=>{}};
+ const window={launchnavigator,location:{href:'original'},dispatchEvent:()=>{},alert:message=>alerts.push(message)};
  const document={readyState:'loading',addEventListener:()=>{}};
  vm.runInNewContext(source,{window,localStorage,document,Event:function(){}});
- return {api:window.NearbyNavigator,window,navigations};
+ return {api:window.NearbyNavigator,window,navigations,alerts};
 }
 const first=harness('google',{google_maps:true,citymapper:true});
 first.api.available((found,detected)=>{
@@ -41,8 +41,10 @@ second.api.launch({latitude:35,longitude:139,name:'Tokyo'},'generic');
 assert.equal(second.navigations[0].options.app,APP.CITYMAPPER,'Citymapper is a first-class option');
 assert.equal(second.api.modes()[0],'generic');
 second.navigations[0].options.errorCallback();
-assert.match(second.window.location.href,/maps\.apple\.com/,'Apple Maps remains a fallback on native error');
+assert.equal(second.window.location.href,'original','a failed native launch must not silently switch to Apple Maps');
+assert.match(second.alerts[0],/Impossible d’ouvrir Citymapper/,'the chosen app failure must be reported');
 
 assert.match(source,/isAppAvailable/,'recheck apps not found in availableApps');
-assert.match(source,/Applications installées signalées/,'manual selection remains available when iOS detection fails');
-console.log('PASS navigator: Google Maps and Citymapper availability, navigation options and Apple fallback');
+assert.match(source,/Seules les applications détectées/,'the menu only lists installed apps');
+assert.match(source,/id:'waze'/,'Waze is an explicit navigation option');
+console.log('PASS navigator: detected apps including Waze, routing selection and visible launch errors');
