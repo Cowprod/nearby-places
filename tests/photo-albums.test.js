@@ -124,6 +124,38 @@ const state={
  window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{attempts.push(id);ok({collectionId:id});};
  await window.NearbyPlacePhotos.syncMemberships(state);
  assert.deepEqual(attempts,['c-1','c-2','c-1','c-2'],'a later reconciliation retries failed albums');
+ // PhotoKit can successfully add available assets while reporting that other
+ // local links are stale. Do not report this as a complete synchronization,
+ // discard local links, or skip the healthy collection.
+ const staleCalls=[];
+ const preservedLinks=localStorage.getItem('nearby-place-photo-links-v1');
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{
+  staleCalls.push(id);
+  ok({collectionId:id,albumId:id==='c-1'?'':'native-album',count:id==='c-1'?0:1,
+      unavailableCount:id==='c-1'?ids.length:0});
+ };
+ await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),
+   /PhotoKit partielle.*c-1.*2 photo\\(s\\) indisponible\\(s\\)/);
+ assert.deepEqual(staleCalls,['c-1','c-2'],'inaccessible originals do not block the healthy album');
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),preservedLinks,
+   'inaccessible PhotoKit assets never erase local photo associations');
+ // A partially readable collection must also be diagnosed, even when some
+ // originals were successfully added to the album.
+ staleCalls.length=0;
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{
+  staleCalls.push(id);
+  ok({collectionId:id,albumId:'native-album',count:1,unavailableCount:id==='c-1'?1:0});
+ };
+ await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),
+   /PhotoKit partielle.*c-1.*1 photo\\(s\\) indisponible\\(s\\)/);
+ assert.deepEqual(staleCalls,['c-1','c-2']);
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),preservedLinks);
+ // Once PhotoKit makes all referenced assets accessible, retry succeeds.
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>ok({collectionId:id,
+   albumId:'native-album',count:0,unavailableCount:0});
+ await window.NearbyPlacePhotos.syncMemberships(state);
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),preservedLinks);
+
  // A damaged association store must not masquerade as a successful empty
  // synchronization. No PhotoKit mutation, cleanup or overwrite is permitted.
  const validLinks=localStorage.getItem('nearby-place-photo-links-v1');
