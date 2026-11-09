@@ -323,6 +323,13 @@ static const NSUInteger NearbyQueueLimit = 50;
     NSArray *parts = components.URL.path.pathComponents;
     NSUInteger placeIndex = [parts indexOfObject:@"place"];
     if (placeIndex != NSNotFound && placeIndex + 1 < parts.count) return [parts[placeIndex + 1] stringByReplacingOccurrencesOfString:@"+" withString:@" "];
+    // Apple Plans sometimes shares a /place?address=... URL without a name.
+    // Keep the address as an editable fallback rather than leaving the form blank.
+    for (NSURLQueryItem *item in components.queryItems ?: @[]) {
+        if ([item.name isEqualToString:@"address"] && item.value.length) {
+            return [item.value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        }
+    }
     return @"";
 }
 
@@ -348,7 +355,7 @@ static const NSUInteger NearbyQueueLimit = 50;
 - (void)resolveSharedName {
     NSURL *url = [NSURL URLWithString:self.sharedURL];
     BOOL google = [url.host.lowercaseString isEqualToString:@"maps.app.goo.gl"];
-    if (![url.host.lowercaseString isEqualToString:@"maps.apple"] && !google) return;
+    if (![@[@"maps.apple", @"maps.apple.com", @"www.maps.apple.com"] containsObject:url.host.lowercaseString ?: @""] && !google) return;
     NSString *originalName = self.nameField.text ?: @"";
     NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
     configuration.timeoutIntervalForResource = 18;
@@ -513,6 +520,15 @@ static const NSUInteger NearbyQueueLimit = 50;
 }
 - (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView { return 1; }
 - (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections.count : [self categoriesForSelectedCollection].count; }
-- (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections[row][@"name"] : [self categoriesForSelectedCollection][row][@"name"]; }
+- (NSAttributedString *)pickerView:(UIPickerView *)pickerView attributedTitleForRow:(NSInteger)row forComponent:(NSInteger)component {
+    NSArray<NSDictionary *> *options = pickerView == self.collectionPicker ? self.collections : [self categoriesForSelectedCollection];
+    if (row < 0 || row >= (NSInteger)options.count) return [[NSAttributedString alloc] initWithString:@""];
+    NSString *title = [options[row][@"name"] isKindOfClass:NSString.class] ? options[row][@"name"] : @"";
+    // UIKit otherwise inherits an adaptive text colour that can become white
+    // on our explicitly white picker background in iOS dark appearance.
+    return [[NSAttributedString alloc] initWithString:title attributes:@{
+        NSForegroundColorAttributeName: [UIColor colorWithRed:0.18 green:0.24 blue:0.28 alpha:1.0]
+    }];
+}
 
 @end
