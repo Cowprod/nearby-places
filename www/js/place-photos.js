@@ -123,5 +123,29 @@ function capture(place){
   return {saved:false};
  });
 }
-window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:function(state){return Promise.resolve().then(function(){return addToAlbums(albumJobs(state));});}};
+// Even when a collection has no *currently linked* photos, its previously
+// created iOS album must retain the correct name. renameAlbum is a native
+// no-op (without requesting Photos permission) if that collection has never
+// created an album. It never creates an empty album or removes its contents.
+function reconcileMemberships(state){
+ return Promise.resolve().then(function(){
+  var jobs=albumJobs(state),linkedIds=new Set(jobs.map(function(job){return job.id;}));
+  var empty=state.collections.filter(function(c){
+   return c.id!=='collection-default'&&!linkedIds.has(c.id);
+  });
+  var failures=[];
+  return addToAlbums(jobs).catch(function(error){failures.push(error.message);}).then(function(){
+   return empty.reduce(function(previous,c){
+    return previous.then(function(){
+     return queuedAlbumCall('renameAlbum',[c.id,'Nearby Places — '+c.name]).catch(function(error){
+      failures.push('Renommage ['+c.id+'] : '+(error&&error.message||String(error)));
+     });
+    });
+   },Promise.resolve());
+  }).then(function(){
+   if(failures.length)throw Error('Synchronisation PhotoKit incomplète : '+failures.join(' ; '));
+  });
+ });
+}
+window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:reconcileMemberships};
 })();
