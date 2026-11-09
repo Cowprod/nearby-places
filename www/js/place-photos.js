@@ -72,15 +72,23 @@ function albumJobs(state,onlyPlaceId,photoIds){
  return (state.collections||[]).filter(function(c){return c.id!=='collection-default'&&albums.has(c.id)&&albums.get(c.id).size;}).map(function(c){return {id:c.id,title:'Nearby Places — '+c.name,ids:Array.from(albums.get(c.id))};});
 }
 function addToAlbums(jobs){
- // A broken album must not block photos belonging to other collections.
- // Keep the rejected sync visible so deviceready/resume can retry later.
- var failures=[];
+ // Never claim that an album is fully reconciled if PhotoKit could not find
+ // some PHAsset identifiers. Links remain local and are retried on resume;
+ // no original, album or local association is removed automatically.
+ // Continue with the other albums even when one fails or is incomplete.
+ var failures=[],unavailable=[];
  return jobs.reduce(function(p,job){return p.then(function(){
-  return queuedAlbumCall('addToAlbum',[job.id,job.title,job.ids]).catch(function(error){
+  return queuedAlbumCall('addToAlbum',[job.id,job.title,job.ids]).then(function(result){
+   var missing=result&&Number(result.unavailableCount);
+   if(Number.isSafeInteger(missing)&&missing>0){
+    unavailable.push(job.title+' ['+job.id+'] : '+missing+' photo(s) indisponible(s) dans Photos ; associations locales conservées');
+   }
+  }).catch(function(error){
    failures.push(job.title+' ['+job.id+'] : '+(error&&error.message||String(error)));
   });
  });},Promise.resolve()).then(function(){
-  if(failures.length)throw Error(failures.length+'/'+jobs.length+' album(s) iOS non synchronisé(s) : '+failures.join(' ; '));
+  if(failures.length)throw Error(failures.length+'/'+jobs.length+' album(s) iOS non synchronisé(s) : '+failures.join(' ; ')+(unavailable.length?' ; '+unavailable.join(' ; '):''));
+  if(unavailable.length)throw Error('Synchronisation PhotoKit partielle : '+unavailable.join(' ; '));
  });
 }
 function open(place,immediateCamera,collectionName){var overlay=document.createElement('div');overlay.className='nearby-photo-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');var box=document.createElement('section');box.className='nearby-photo-dialog';var title=document.createElement('h3');title.textContent='Photos — '+place.name;var close=document.createElement('button');close.className='btn btn-secondary';close.textContent='Fermer';close.onclick=function(){overlay.remove();};var status=document.createElement('p');status.className='muted';var gallery=document.createElement('div');gallery.className='nearby-photo-grid';var actions=document.createElement('div');actions.className='nearby-photo-buttons';var pick=document.createElement('button');pick.className='btn btn-secondary';pick.textContent='Choisir dans Photos';var search=document.createElement('button');search.className='btn btn-secondary';search.textContent='Photos à proximité';var radius=document.createElement('input');radius.type='number';radius.min='10';radius.max='5000';radius.value='100';radius.setAttribute('aria-label','Rayon en mètres');radius.style.width='90px';actions.append(pick,search,radius);var candidates=document.createElement('div');candidates.className='nearby-photo-grid';var galleryHeading=document.createElement('h4');galleryHeading.textContent='Photos associées au lieu';var candidateHeading=document.createElement('h4');candidateHeading.textContent='Photos à proximité proposées';candidateHeading.hidden=true;box.append(title,close,galleryHeading,gallery,actions,status,candidateHeading,candidates);overlay.append(box);document.body.append(overlay);
