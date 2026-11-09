@@ -53,36 +53,96 @@
  [picker dismissViewControllerAnimated:YES completion:nil];NSMutableArray *ids=[NSMutableArray array];for(PHPickerResult *result in results){if(result.assetIdentifier)[ids addObject:result.assetIdentifier];}
  [self replyTo:self.pending value:@{@"ids":ids} error:nil];
 }
-- (void)addToAlbum:(CDVInvokedUrlCommand*)cmd {
- NSString *callback=cmd.callbackId;
- NSString *title=cmd.arguments.count>0&&[cmd.arguments[0] isKindOfClass:NSString.class]?cmd.arguments[0]:@"";
- NSArray *identifiers=cmd.arguments.count>1&&[cmd.arguments[1] isKindOfClass:NSArray.class]?cmd.arguments[1]:@[];
- if(title.length==0||identifiers.count==0){[self replyTo:callback value:nil error:@"Album ou photos manquants"];return;}
- void (^apply)(void)=^{
- PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:identifiers options:nil];
- if(assets.count==0){[self replyTo:callback value:nil error:@"Photos non accessibles"];return;}
- PHFetchOptions *opts=[PHFetchOptions new];opts.predicate=[NSPredicate predicateWithFormat:@"title == %@",title];
- PHAssetCollection *existing=[PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum subtype:PHAssetCollectionSubtypeAlbumRegular options:opts].firstObject;
- [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
- PHAssetCollectionChangeRequest *request=nil;
- if(existing)request=[PHAssetCollectionChangeRequest changeRequestForAssetCollection:existing];
- else request=[PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:title];
- [request addAssets:assets];
- } completionHandler:^(BOOL success,NSError *error){[self replyTo:callback value:success?@{@"album":title,@"count":@(assets.count)}:nil error:success?nil:(error.localizedDescription?:@"Impossible de créer l’album")];}];
- };
- PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
- if(status==PHAuthorizationStatusNotDetermined)[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)apply();else [self replyTo:callback value:nil error:@"Autorisation Photos refusée"];}];
- else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)apply();
- else [self replyTo:callback value:nil error:@"Autorisation Photos refusée"];
+// Stable mapping: an application collection owns its PhotoKit album by localIdentifier,
+// never by display title (two collections may have identical names).
+- (NSDictionary *)albumLinks {
+ NSDictionary *value=[[NSUserDefaults standardUserDefaults] dictionaryForKey:@"nearby-places-photo-albums-v1"];
+ return [value isKindOfClass:[NSDictionary class]]?value:@{};
 }
-- (void)renameAlbum:(CDVInvokedUrlCommand*)cmd {
+- (void)storeAlbum:(NSString *)albumId forCollection:(NSString *)collectionId {
+ @synchronized([NSUserDefaults standardUserDefaults]) {
+  NSMutableDictionary *links=[[self albumLinks] mutableCopy];
+  if(albumId)links[collectionId]=albumId;else [links removeObjectForKey:collectionId];
+  [[NSUserDefaults standardUserDefaults] setObject:links forKey:@"nearby-places-photo-albums-v1"];
+ }
+}
+- (PHAssetCollection *)albumForCollection:(NSString *)collectionId {
+ NSString *albumId=[self albumLinks][collectionId];
+ if(![albumId isKindOfClass:[NSString class]]||albumId.length==0)return nil;
+ return [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[albumId] options:nil].firstObject;
+}
+- (void)withAlbumAuthorization:(void (^)(void))work callback:(NSString *)callback {
+ PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+ if(status==PHAuthorizationStatusAuthorized){work();return;}
+ if(status==PHAuthorizationStatusLimited){
+  [self replyTo:callback value:nil error:@"Pour créer ou modifier des albums, autorisez l’accès complet à Photos dans les réglages iOS. Les associations aux lieux sont conservées."];
+  return;
+ }
+ if(status==PHAuthorizationStatusNotDetermined){
+  [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus result){
+   if(result==PHAuthorizationStatusAuthorized)work();
+   else [self replyTo:callback value:nil error:result==PHAuthorizationStatusLimited?@"Accès limité : les albums nécessitent l’accès complet à Photos.":@"Autorisation Photos refusée"];
+  }];
+  return;
+ }
+ [self replyTo:callback value:nil error:@"Autorisation Photos refusée"];
+}
+- (void)addToAlbum:(CDVInvokedUrlCommand *)cmd {
  NSString *callback=cmd.callbackId;
- NSString *oldName=cmd.arguments.count>0?cmd.arguments[0]:@"";
- NSString *newName=cmd.arguments.count>1?cmd.arguments[1]:@"";
- if(!oldName.length||!newName.length){[self replyTo:callback value:nil error:@"Nom d’album manquant"];return;}
- PHFetchOptions *opts=[PHFetchOptions new];opts.predicate=[NSPredicate predicateWithFormat:@"title == %@",oldName];
- PHAssetCollection *album=[PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum subtype:PHAssetCollectionSubtypeAlbumRegular options:opts].firstObject;
- if(!album){[self replyTo:callback value:@{@"renamed":@NO} error:nil];return;}
- [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{[PHAssetCollectionChangeRequest changeRequestForAssetCollection:album].title=newName;} completionHandler:^(BOOL ok,NSError *error){[self replyTo:callback value:ok?@{@"renamed":@YES}:nil error:ok?nil:error.localizedDescription];}];
+ NSString *collectionId=cmd.arguments.count>0&&[cmd.arguments[0] isKindOfClass:[NSString class]]?cmd.arguments[0]:@"";
+ NSString *title=cmd.arguments.count>1&&[cmd.arguments[1] isKindOfClass:[NSString class]]?cmd.arguments[1]:@"";
+ NSArray *input=cmd.arguments.count>2&&[cmd.arguments[2] isKindOfClass:[NSArray class]]?cmd.arguments[2]:@[];
+ if(!collectionId.length||!title.length||!input.count){
+  [self replyTo:callback value:nil error:@"Collection ou photos manquantes"];return;
+ }
+ for(id identifier in input){
+  if(![identifier isKindOfClass:[NSString class]]||![identifier length]){
+   [self replyTo:callback value:nil error:@"Identifiant de photo invalide"];return;
+  }
+ }
+ NSArray *identifiers=[[NSOrderedSet orderedSetWithArray:input] array];
+ [self withAlbumAuthorization:^{
+  PHFetchResult<PHAsset *> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:identifiers options:nil];
+  if(assets.count!=identifiers.count){
+   [self replyTo:callback value:nil error:@"Certaines photos sont inaccessibles : aucun album modifié"];return;
+  }
+  PHAssetCollection *existing=[self albumForCollection:collectionId];
+  if(existing&&![existing canPerformEditOperation:PHCollectionEditOperationAddContent]){
+   [self replyTo:callback value:nil error:@"Cet album ne peut pas être modifié"];return;
+  }
+  __block NSString *newAlbumId=nil;
+  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+   PHAssetCollectionChangeRequest *change=nil;
+   if(existing)change=[PHAssetCollectionChangeRequest changeRequestForAssetCollection:existing];
+   else {
+    change=[PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:title];
+    newAlbumId=change.placeholderForCreatedAssetCollection.localIdentifier;
+   }
+   [change addAssets:assets];
+  } completionHandler:^(BOOL success,NSError *error){
+   if(success&&newAlbumId)[self storeAlbum:newAlbumId forCollection:collectionId];
+   [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:existing.localIdentifier,@"count":@(assets.count)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
+  }];
+ } callback:callback];
+}
+- (void)renameAlbum:(CDVInvokedUrlCommand *)cmd {
+ NSString *callback=cmd.callbackId;
+ NSString *collectionId=cmd.arguments.count>0&&[cmd.arguments[0] isKindOfClass:[NSString class]]?cmd.arguments[0]:@"";
+ NSString *newTitle=cmd.arguments.count>1&&[cmd.arguments[1] isKindOfClass:[NSString class]]?cmd.arguments[1]:@"";
+ if(!collectionId.length||!newTitle.length){[self replyTo:callback value:nil error:@"Identifiant ou titre d’album manquant"];return;}
+ // A collection with no photos has no album. Do not create empty albums or request permissions.
+ if(![self albumLinks][collectionId]){[self replyTo:callback value:@{@"renamed":@NO} error:nil];return;}
+ [self withAlbumAuthorization:^{
+  PHAssetCollection *album=[self albumForCollection:collectionId];
+  if(!album){
+   [self storeAlbum:nil forCollection:collectionId];
+   [self replyTo:callback value:@{@"renamed":@NO} error:nil];return;
+  }
+  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+   [PHAssetCollectionChangeRequest changeRequestForAssetCollection:album].title=newTitle;
+  } completionHandler:^(BOOL success,NSError *error){
+   [self replyTo:callback value:success?@{@"renamed":@YES,@"albumId":album.localIdentifier}:nil error:success?nil:(error.localizedDescription?:@"Renommage impossible")];
+  }];
+ } callback:callback];
 }
 @end
