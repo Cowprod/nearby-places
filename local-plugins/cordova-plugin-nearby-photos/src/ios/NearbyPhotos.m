@@ -103,10 +103,16 @@
  NSArray *identifiers=[[NSOrderedSet orderedSetWithArray:input] array];
  [self withAlbumAuthorization:^{
   PHFetchResult<PHAsset *> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:identifiers options:nil];
-  if(assets.count!=identifiers.count){
-   [self replyTo:callback value:nil error:@"Certaines photos sont inaccessibles : aucun album modifié"];return;
-  }
+  // A place can retain links to assets deleted in Photos. Never let one stale
+  // identifier prevent the remaining valid originals from joining their album.
+  // Keep all place-photo links intact; Photos is the source of asset availability.
+  NSUInteger unavailableCount=identifiers.count-assets.count;
   PHAssetCollection *existing=[self albumForCollection:collectionId];
+  if(!assets.count){
+   // An empty or entirely stale collection must not create an empty iOS album.
+   [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":existing.localIdentifier?:@"",@"count":@0,@"unavailableCount":@(unavailableCount)} error:nil];
+   return;
+  }
   // Reconciliation is idempotent: repeated imports, resumes and retries never
   // append a reference already present in the album.
   BOOL needsRename=existing&&![(existing.localizedTitle?:@"") isEqualToString:title];
@@ -129,7 +135,7 @@
     [self replyTo:callback value:nil error:@"Cet album ne peut pas être renommé"];return;
    }
    if(!assetsToAdd.count&&!needsRename){
-    [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":existing.localIdentifier,@"count":@0} error:nil];
+    [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":existing.localIdentifier,@"count":@0,@"unavailableCount":@(unavailableCount)} error:nil];
     return;
    }
   }
@@ -145,7 +151,7 @@
    if(assetsToAdd.count)[change addAssets:assetsToAdd];
   } completionHandler:^(BOOL success,NSError *error){
    if(success&&newAlbumId)[self storeAlbum:newAlbumId forCollection:collectionId];
-   [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:(existing.localIdentifier?:@""),@"count":@(assetsToAdd.count)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
+   [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:(existing.localIdentifier?:@""),@"count":@(assetsToAdd.count),@"unavailableCount":@(unavailableCount)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
   }];
  } callback:callback];
 }
