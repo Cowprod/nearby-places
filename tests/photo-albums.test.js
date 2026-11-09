@@ -58,7 +58,7 @@ const state={
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
  assert.match(native,/fetchAssetsInAssetCollection:existing/,'native sync inspects existing album membership before adding');
- assert.match(native,/if\(!toAdd\.count&&!needsRename\)/,'repeated reconciliation is a no-op');
+ assert.match(native,/if\(!assetsToAdd\.count&&!needsRename\)/,'repeated reconciliation is a no-op');
  assert.match(native,/if\(needsRename\)change\.title=title/,'reconciliation repairs a missed rename');
  assert.match(native,/PHCollectionEditOperationRename/,'rename support checked before mutation');
 
