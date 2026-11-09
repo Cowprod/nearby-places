@@ -14,6 +14,29 @@ const sharedResolver=read('local-plugins/cordova-plugin-nearby-resolver/src/ios/
 assert.equal(read('platforms/ios/ShareExtension/NearbyMapsResolver.h'),sharedResolver,'extension uses the versioned shared resolver');
 assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyMapsResolver.h'),sharedResolver,'app uses the same resolver');
 assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m'),read('local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m'),'installed PhotoKit native source matches repository');
+
+const photoBridgeSource=read('local-plugins/cordova-plugin-nearby-photos/www/NearbyPhotos.js');
+const photoBridgeGenerated=read('platforms/ios/www/plugins/cordova-plugin-nearby-photos/www/NearbyPhotos.js');
+// Cordova caches local-plugin JS separately from Objective-C. Catch a stale
+// generated bridge before building an app whose PhotoKit signatures mismatch.
+assert.equal(photoBridgeGenerated,
+  'cordova.define("cordova-plugin-nearby-photos.NearbyPhotos", function(require, exports, module) {\\n'+photoBridgeSource+'\\n});\\n',
+  'generated PhotoKit JS bridge matches the source plugin');
+let installedPhotoBridge;
+const photoCalls=[];
+vm.runInNewContext(photoBridgeGenerated,{cordova:{define(id,factory){
+ assert.equal(id,'cordova-plugin-nearby-photos.NearbyPhotos');
+ const module={exports:{}};
+ factory(()=>((ok,fail,service,method,args)=>photoCalls.push({service,method,args:Array.from(args)})),module.exports,module);
+ installedPhotoBridge=module.exports;
+}}});
+assert.ok(installedPhotoBridge,'generated PhotoKit plugin registers with Cordova');
+installedPhotoBridge.addToAlbum('tokyo','Nearby Places — Tokyo',['asset-1'],()=>{},()=>{});
+installedPhotoBridge.renameAlbum('tokyo','Nearby Places — Tokyo 2',()=>{},()=>{});
+assert.deepEqual(photoCalls.map(call=>({service:call.service,method:call.method,args:call.args})),[
+ {service:'NearbyPhotos',method:'addToAlbum',args:['tokyo','Nearby Places — Tokyo',['asset-1']]},
+ {service:'NearbyPhotos',method:'renameAlbum',args:['tokyo','Nearby Places — Tokyo 2']}
+],'generated PhotoKit bridge preserves native argument order');
 const picker=read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyPlacePicker.h');
 assert.equal(read('platforms/ios/ShareExtension/NearbyPlacePicker.h'),picker,'extension picker generated from Git');
 assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyPlacePicker.h'),picker,'app picker generated from Git');
