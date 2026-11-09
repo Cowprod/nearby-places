@@ -45,7 +45,7 @@ function currentCollections(){
  try{state=JSON.parse(raw);}catch(_){throw Error('Collections locales illisibles : album Photos non synchronisé, association conservée.');}
  return state;
 }
-function albumJobs(state,onlyPlaceId,photoIds){
+function albumJobs(state,onlyPlaceId){
  if(!state||!Array.isArray(state.collections)||!Array.isArray(state.memberships)){
   throw Error('Collections locales invalides : synchronisation PhotoKit interrompue, données conservées.');
  }
@@ -61,10 +61,14 @@ function albumJobs(state,onlyPlaceId,photoIds){
    throw Error('Appartenance à une collection invalide : synchronisation PhotoKit interrompue, données conservées.');
   }
  });
+ // Reconcile every linked asset in each collection containing this place. A
+ // newly recreated PhotoKit album must recover older associations too, not
+ // only the asset just selected or captured.
  var links=readForSync(),albums=new Map();
+ var targetCollections=onlyPlaceId?new Set(state.memberships.filter(function(m){return m.placeId===onlyPlaceId;}).map(function(m){return m.collectionId;})):null;
  (state.memberships||[]).forEach(function(m){
-  if(m.collectionId==='collection-default'||(onlyPlaceId&&m.placeId!==onlyPlaceId))return;
-  var selected=onlyPlaceId?photoIds:links[m.placeId];
+  if(m.collectionId==='collection-default'||(targetCollections&&!targetCollections.has(m.collectionId)))return;
+  var selected=links[m.placeId];
   if(!Array.isArray(selected)||!selected.length)return;
   if(!albums.has(m.collectionId))albums.set(m.collectionId,new Set());
   selected.forEach(function(id){if(typeof id==='string'&&id)albums.get(m.collectionId).add(id);});
@@ -92,11 +96,11 @@ function addToAlbums(jobs){
  });
 }
 function open(place,immediateCamera,collectionName){var overlay=document.createElement('div');overlay.className='nearby-photo-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');var box=document.createElement('section');box.className='nearby-photo-dialog';var title=document.createElement('h3');title.textContent='Photos — '+place.name;var close=document.createElement('button');close.className='btn btn-secondary';close.textContent='Fermer';close.onclick=function(){overlay.remove();};var status=document.createElement('p');status.className='muted';var gallery=document.createElement('div');gallery.className='nearby-photo-grid';var actions=document.createElement('div');actions.className='nearby-photo-buttons';var pick=document.createElement('button');pick.className='btn btn-secondary';pick.textContent='Choisir dans Photos';var search=document.createElement('button');search.className='btn btn-secondary';search.textContent='Photos à proximité';var radius=document.createElement('input');radius.type='number';radius.min='10';radius.max='5000';radius.value='100';radius.setAttribute('aria-label','Rayon en mètres');radius.style.width='90px';actions.append(pick,search,radius);var candidates=document.createElement('div');candidates.className='nearby-photo-grid';var galleryHeading=document.createElement('h4');galleryHeading.textContent='Photos associées au lieu';var candidateHeading=document.createElement('h4');candidateHeading.textContent='Photos à proximité proposées';candidateHeading.hidden=true;box.append(title,close,galleryHeading,gallery,actions,status,candidateHeading,candidates);overlay.append(box);document.body.append(overlay);
-function thumbnail(id,container,linked){var cell=document.createElement('div');cell.className='nearby-photo-tile';cell.dataset.photoId=id;var img=document.createElement('img');img.alt='Photo du lieu';img.loading='lazy';cell.append(img);var button=document.createElement('button');button.className='nearby-photo-link-button';button.setAttribute('aria-label',linked?'Délier la photo':'Lier la photo');button.title=linked?'Délier':'Lier';var ico=document.createElement('i');ico.className=linked?'fas fa-times-circle text-warning':'fas fa-plus-circle text-success';ico.setAttribute('aria-hidden','true');button.append(ico);button.style.position='absolute';button.style.top='6px';button.style.right='6px';button.style.zIndex='2';button.style.border='0';button.style.background='rgba(255,255,255,.92)';button.style.borderRadius='50%';button.style.padding='3px';button.style.fontSize='22px';button.onclick=function(){try{var list=ids(place);update(place,linked?list.filter(function(x){return x!==id;}):list.concat(id));if(linked&&candidateHeading.dataset.searchOpen==='true'){if(!Array.from(candidates.children).some(function(t){return t.dataset.photoId===id;}))thumbnail(id,candidates,false);}render();if(!linked)album([id]).catch(function(err){status.textContent=err.message;});}catch(error){status.textContent=error.message;}};cell.style.position='relative';cell.append(button);container.append(cell);call('thumbnail',[id]).then(function(v){img.src=v.dataUrl;}).catch(function(){img.alt='Photo inaccessible';});}
+function thumbnail(id,container,linked){var cell=document.createElement('div');cell.className='nearby-photo-tile';cell.dataset.photoId=id;var img=document.createElement('img');img.alt='Photo du lieu';img.loading='lazy';cell.append(img);var button=document.createElement('button');button.className='nearby-photo-link-button';button.setAttribute('aria-label',linked?'Délier la photo':'Lier la photo');button.title=linked?'Délier':'Lier';var ico=document.createElement('i');ico.className=linked?'fas fa-times-circle text-warning':'fas fa-plus-circle text-success';ico.setAttribute('aria-hidden','true');button.append(ico);button.style.position='absolute';button.style.top='6px';button.style.right='6px';button.style.zIndex='2';button.style.border='0';button.style.background='rgba(255,255,255,.92)';button.style.borderRadius='50%';button.style.padding='3px';button.style.fontSize='22px';button.onclick=function(){try{var list=ids(place);update(place,linked?list.filter(function(x){return x!==id;}):list.concat(id));if(linked&&candidateHeading.dataset.searchOpen==='true'){if(!Array.from(candidates.children).some(function(t){return t.dataset.photoId===id;}))thumbnail(id,candidates,false);}render();if(!linked)album().catch(function(err){status.textContent=err.message;});}catch(error){status.textContent=error.message;}};cell.style.position='relative';cell.append(button);container.append(cell);call('thumbnail',[id]).then(function(v){img.src=v.dataUrl;}).catch(function(){img.alt='Photo inaccessible';});}
 function render(){gallery.replaceChildren();var associated=new Set(ids(place));Array.from(candidates.children).forEach(function(tile){if(associated.has(tile.dataset.photoId))tile.remove();});candidateHeading.hidden=!candidates.children.length;ids(place).forEach(function(id){thumbnail(id,gallery,true);});if(!ids(place).length){var empty=document.createElement('p');empty.className='muted';empty.textContent='Aucune photo associée.';gallery.append(empty);}}
-function album(photoIds){
+function album(){
  return Promise.resolve().then(function(){
-  return addToAlbums(albumJobs(currentCollections(),place.id,photoIds));
+  return addToAlbums(albumJobs(currentCollections(),place.id));
  }).catch(function(err){throw Error('Photo associée au lieu, mais album iOS non synchronisé : '+err.message);});
 }
 
@@ -113,7 +117,7 @@ pick.onclick=function(){run(call('pick',[]).then(function(v){
   return Number.isSafeInteger(selectedCount)&&selectedCount>0?'Aucune photo sélectionnée ne peut être associée au lieu.':'Aucune photo sélectionnée.';
  }
  update(place,ids(place).concat(selected));
- return album(selected).then(function(){return notice;},function(error){throw Error(error.message+(notice?' ; '+notice:''));});
+ return album().then(function(){return notice;},function(error){throw Error(error.message+(notice?' ; '+notice:''));});
 }));};
 search.onclick=function(){candidateHeading.dataset.searchOpen='true';candidates.replaceChildren();run(call('nearby',[Number(place.latitude),Number(place.longitude),Number(radius.value)||100]).then(function(v){var existing=new Set(ids(place));(v.items||[]).filter(function(x){return !existing.has(x.id);}).forEach(function(x){thumbnail(x.id,candidates,false);});candidateHeading.hidden=!candidates.children.length;if(!candidates.children.length)status.textContent='Aucune photo géolocalisée trouvée dans ce rayon.';}));};
 render();}
@@ -127,7 +131,7 @@ function capture(place){
   update(place,ids(place).concat(result.id));
   associated=true;
   return Promise.resolve().then(function(){
-   return addToAlbums(albumJobs(currentCollections(),place.id,[result.id]));
+   return addToAlbums(albumJobs(currentCollections(),place.id));
   }).then(
    function(){return {saved:true,associated:true,albumSynced:true};},
    function(error){
