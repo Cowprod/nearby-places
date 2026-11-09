@@ -477,6 +477,6 @@ assert.match(nativeShareSource, /nearbyCollection/,'native share persists collec
 assert.match(nativeShareSource, /collectionPicker/,'native share exposes collection picker');
 assert.match(nativeResolverSource, /syncCollections:/,'native bridge synchronizes collection list');
 assert.match(bridgeSource, /syncCollections:function/,'Cordova bridge exposes collection sync');
-assert.match(source, /assignImportedPlace\(imported, selectedCollection\)/,'native import attaches collection before ack');
+assert.match(source, /assignImportedPlace\(imported, selectedCollection, category\)/,'native import attaches collection before ack');
 assert.match(source, /populateImportCollections\(\)/,'web confirmation populates collections');
 console.log('PASS collection selection: native share, bridge, and web import wiring');
