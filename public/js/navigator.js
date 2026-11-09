@@ -54,9 +54,11 @@ function launch(place,mode,event){
  if(!native){fallback();return;}
  var options={app:native,destinationName:place.name||'Lieu'};
  if(selected.modes&&nav.TRANSPORT_MODE)options.transportMode=mode==='transit'?nav.TRANSPORT_MODE.TRANSIT:nav.TRANSPORT_MODE.WALKING;
- // launch-navigator 5.x API: navigate(destination, options, success, error).
- // Old positional callbacks caused a silent failure or Apple-only fallback.
- try{nav.navigate([Number(place.latitude),Number(place.longitude)],options,function(){},fallback);}
+ // Supported plugin API: navigate(destination, options), with callbacks
+ // inside options. The 4-positional-argument overload also exists.
+ options.successCallback=function(){};
+ options.errorCallback=fallback;
+ try{nav.navigate([Number(place.latitude),Number(place.longitude)],options);}
  catch(_){fallback();}
 }
 function setup(){var host=document.querySelector('.nearby-appearance-settings');if(!host)return;var section=document.createElement('section');section.className='nearby-navigation-settings';section.innerHTML='<h2>Application de navigation</h2><label for="nearby-navigation-app">Application utilisée pour les itinéraires</label><select id="nearby-navigation-app"></select><p class="muted" id="nearby-navigation-help">Recherche des applications installées…</p><p class="muted">Si l’application accepte les modes, les icônes piéton et transports sont affichées. Sinon, une seule icône d’itinéraire apparaît. Apple Plans sert de secours.</p>';host.insertAdjacentElement('afterend',section);var select=section.querySelector('select'),help=section.querySelector('#nearby-navigation-help');
