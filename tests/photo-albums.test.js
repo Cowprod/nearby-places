@@ -135,7 +135,7 @@ const state={
       unavailableCount:id==='c-1'?ids.length:0});
  };
  await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),
-   /PhotoKit partielle.*c-1.*2 photo\\(s\\) indisponible\\(s\\)/);
+   /PhotoKit partielle.*c-1.*2 photo\(s\) indisponible\(s\)/);
  assert.deepEqual(staleCalls,['c-1','c-2'],'inaccessible originals do not block the healthy album');
  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),preservedLinks,
    'inaccessible PhotoKit assets never erase local photo associations');
@@ -147,7 +147,7 @@ const state={
   ok({collectionId:id,albumId:'native-album',count:1,unavailableCount:id==='c-1'?1:0});
  };
  await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),
-   /PhotoKit partielle.*c-1.*1 photo\\(s\\) indisponible\\(s\\)/);
+   /PhotoKit partielle.*c-1.*1 photo\(s\) indisponible\(s\)/);
  assert.deepEqual(staleCalls,['c-1','c-2']);
  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),preservedLinks);
  // Once PhotoKit makes all referenced assets accessible, retry succeeds.
