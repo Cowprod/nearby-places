@@ -12,6 +12,18 @@ function readForWrite(){
  if(!v||typeof v!=='object'||Array.isArray(v))throw Error('Format des associations photo-lieu invalide : données locales conservées.');
  return v;
 }
+// Reconciliation must not silently interpret corrupt associations as an empty
+// photo library. Otherwise the UI could report a successful album sync without
+// ever sending existing links to PhotoKit.
+function readForSync(){
+ var links=readForWrite();
+ Object.keys(links).forEach(function(placeId){
+  if(!placeId||!Array.isArray(links[placeId])||links[placeId].some(function(id){return typeof id!=='string'||!id;})){
+   throw Error('Associations photo-lieu invalides : synchronisation PhotoKit interrompue, données locales conservées.');
+  }
+ });
+ return links;
+}
 function ids(place){var v=read()[place.id];return Array.isArray(v)?v.filter(function(id){return typeof id==='string'&&id.length>0;}):[];}
 function update(place,list){
  if(!place||typeof place.id!=='string'||!place.id||!Array.isArray(list))throw Error('Association photo-lieu invalide');
@@ -26,10 +38,30 @@ function call(method,args){return new Promise(function(resolve,reject){if(!windo
 var albumQueue=Promise.resolve();
 function queuedAlbumCall(method,args){var op=albumQueue.then(function(){return call(method,args);});albumQueue=op.catch(function(){});return op;}
 // Photos belong to a place in local storage; album membership derives from collection IDs.
-function currentCollections(){try{var state=JSON.parse(localStorage.getItem('nearby-collections-v2')||'{}');return state&&Array.isArray(state.collections)&&Array.isArray(state.memberships)?state:null;}catch(_){return null;}}
+function currentCollections(){
+ var raw=localStorage.getItem('nearby-collections-v2');
+ if(raw===null)throw Error('Collections locales absentes : album Photos non synchronisé, association conservée.');
+ var state;
+ try{state=JSON.parse(raw);}catch(_){throw Error('Collections locales illisibles : album Photos non synchronisé, association conservée.');}
+ return state;
+}
 function albumJobs(state,onlyPlaceId,photoIds){
- if(!state)return [];
- var links=read(),albums=new Map();
+ if(!state||!Array.isArray(state.collections)||!Array.isArray(state.memberships)){
+  throw Error('Collections locales invalides : synchronisation PhotoKit interrompue, données conservées.');
+ }
+ var collectionIds=new Set();
+ state.collections.forEach(function(c){
+  if(!c||typeof c.id!=='string'||!c.id||typeof c.name!=='string'||collectionIds.has(c.id)){
+   throw Error('Collection locale invalide : synchronisation PhotoKit interrompue, données conservées.');
+  }
+  collectionIds.add(c.id);
+ });
+ state.memberships.forEach(function(m){
+  if(!m||typeof m.placeId!=='string'||!m.placeId||!collectionIds.has(m.collectionId)){
+   throw Error('Appartenance à une collection invalide : synchronisation PhotoKit interrompue, données conservées.');
+  }
+ });
+ var links=readForSync(),albums=new Map();
  (state.memberships||[]).forEach(function(m){
   if(m.collectionId==='collection-default'||(onlyPlaceId&&m.placeId!==onlyPlaceId))return;
   var selected=onlyPlaceId?photoIds:links[m.placeId];
@@ -55,8 +87,9 @@ function open(place,immediateCamera,collectionName){var overlay=document.createE
 function thumbnail(id,container,linked){var cell=document.createElement('div');cell.className='nearby-photo-tile';cell.dataset.photoId=id;var img=document.createElement('img');img.alt='Photo du lieu';img.loading='lazy';cell.append(img);var button=document.createElement('button');button.className='nearby-photo-link-button';button.setAttribute('aria-label',linked?'Délier la photo':'Lier la photo');button.title=linked?'Délier':'Lier';var ico=document.createElement('i');ico.className=linked?'fas fa-times-circle text-warning':'fas fa-plus-circle text-success';ico.setAttribute('aria-hidden','true');button.append(ico);button.style.position='absolute';button.style.top='6px';button.style.right='6px';button.style.zIndex='2';button.style.border='0';button.style.background='rgba(255,255,255,.92)';button.style.borderRadius='50%';button.style.padding='3px';button.style.fontSize='22px';button.onclick=function(){try{var list=ids(place);update(place,linked?list.filter(function(x){return x!==id;}):list.concat(id));if(linked&&candidateHeading.dataset.searchOpen==='true'){if(!Array.from(candidates.children).some(function(t){return t.dataset.photoId===id;}))thumbnail(id,candidates,false);}render();if(!linked)album([id]).catch(function(err){status.textContent=err.message;});}catch(error){status.textContent=error.message;}};cell.style.position='relative';cell.append(button);container.append(cell);call('thumbnail',[id]).then(function(v){img.src=v.dataUrl;}).catch(function(){img.alt='Photo inaccessible';});}
 function render(){gallery.replaceChildren();var associated=new Set(ids(place));Array.from(candidates.children).forEach(function(tile){if(associated.has(tile.dataset.photoId))tile.remove();});candidateHeading.hidden=!candidates.children.length;ids(place).forEach(function(id){thumbnail(id,gallery,true);});if(!ids(place).length){var empty=document.createElement('p');empty.className='muted';empty.textContent='Aucune photo associée.';gallery.append(empty);}}
 function album(photoIds){
- var jobs=albumJobs(currentCollections(),place.id,photoIds);
- return addToAlbums(jobs).catch(function(err){throw Error('Photo associée au lieu, mais album iOS non synchronisé : '+err.message);});
+ return Promise.resolve().then(function(){
+  return addToAlbums(albumJobs(currentCollections(),place.id,photoIds));
+ }).catch(function(err){throw Error('Photo associée au lieu, mais album iOS non synchronisé : '+err.message);});
 }
 
 function run(task){status.textContent='Chargement…';task.then(function(){status.textContent='';render();}).catch(function(err){status.textContent=err.message;render();});}
@@ -65,24 +98,30 @@ pick.onclick=function(){run(call('pick',[]).then(function(v){update(place,ids(pl
 search.onclick=function(){candidateHeading.dataset.searchOpen='true';candidates.replaceChildren();run(call('nearby',[Number(place.latitude),Number(place.longitude),Number(radius.value)||100]).then(function(v){var existing=new Set(ids(place));(v.items||[]).filter(function(x){return !existing.has(x.id);}).forEach(function(x){thumbnail(x.id,candidates,false);});candidateHeading.hidden=!candidates.children.length;if(!candidates.children.length)status.textContent='Aucune photo géolocalisée trouvée dans ce rayon.';}));};
 render();}
 function capture(place){
- // One tap = one native camera capture. PhotoKit import/suggestions live only
- // under the album button. Cancellation is not an error.
+ // One tap = one native capture. The original is already saved when the
+ // native callback returns an asset ID, regardless of subsequent local errors.
+ var photoSaved=false,associated=false;
  return call('capture',[]).then(function(result){
   if(!result||!result.id)return {cancelled:true};
+  photoSaved=true;
   update(place,ids(place).concat(result.id));
-  return addToAlbums(albumJobs(currentCollections(),place.id,[result.id])).then(
-   function(){return {saved:true,albumSynced:true};},
+  associated=true;
+  return Promise.resolve().then(function(){
+   return addToAlbums(albumJobs(currentCollections(),place.id,[result.id]));
+  }).then(
+   function(){return {saved:true,associated:true,albumSynced:true};},
    function(error){
-    // The original exists in Photos and its place association is persisted.
-    // Never report a failed save or delete the association because album
-    // authorization was refused.
     window.alert('Photo enregistrée et associée au lieu. Album Photos non synchronisé : '+(error&&error.message||String(error)));
-    return {saved:true,albumSynced:false};
+    return {saved:true,associated:true,albumSynced:false};
    });
  }).catch(function(error){
+  if(photoSaved){
+   window.alert('Photo enregistrée dans Photos, mais association au lieu impossible : '+(error&&error.message||String(error)));
+   return {saved:true,associated:associated,albumSynced:false};
+  }
   window.alert('Prise de vue impossible : '+(error&&error.message||String(error)));
   return {saved:false};
  });
 }
-window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:function(state){return addToAlbums(albumJobs(state));}};
+window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:function(state){return Promise.resolve().then(function(){return addToAlbums(albumJobs(state));});}};
 })();
