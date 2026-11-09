@@ -102,7 +102,19 @@ function album(photoIds){
 
 function run(task){status.textContent='Chargement…';task.then(function(){status.textContent='';render();}).catch(function(err){status.textContent=err.message;render();});}
 
-pick.onclick=function(){run(call('pick',[]).then(function(v){update(place,ids(place).concat(v.ids||[]));return album(v.ids||[]);}));};
+pick.onclick=function(){run(call('pick',[]).then(function(v){
+ var selected=v&&Array.isArray(v.ids)?v.ids.filter(function(id){return typeof id==='string'&&!!id;}):[];
+ var unavailable=Number(v&&v.unavailableCount);
+ var skipped=Number.isSafeInteger(unavailable)&&unavailable>0?unavailable:0;
+ var selectedCount=Number(v&&v.selectedCount);
+ var notice=skipped?skipped+' photo(s) sélectionnée(s) sans identifiant PhotoKit : non associée(s) au lieu.':'';
+ if(!selected.length){
+  if(notice)return notice;
+  return Number.isSafeInteger(selectedCount)&&selectedCount>0?'Aucune photo sélectionnée ne peut être associée au lieu.':'Aucune photo sélectionnée.';
+ }
+ update(place,ids(place).concat(selected));
+ return album(selected).then(function(){return notice;},function(error){throw Error(error.message+(notice?' ; '+notice:''));});
+}));};
 search.onclick=function(){candidateHeading.dataset.searchOpen='true';candidates.replaceChildren();run(call('nearby',[Number(place.latitude),Number(place.longitude),Number(radius.value)||100]).then(function(v){var existing=new Set(ids(place));(v.items||[]).filter(function(x){return !existing.has(x.id);}).forEach(function(x){thumbnail(x.id,candidates,false);});candidateHeading.hidden=!candidates.children.length;if(!candidates.children.length)status.textContent='Aucune photo géolocalisée trouvée dans ce rayon.';}));};
 render();}
 function capture(place){
