@@ -18,6 +18,7 @@
 - Les mutations d'albums sont sérialisées dans l'interface Cordova pour éviter deux créations simultanées.
 - Une collection liée à plusieurs lieux regroupe toutes leurs photos, sans répéter le même identifiant d'asset.
 - Les synchronisations répétées sont **idempotentes** : pour un album existant, PhotoKit lit ses membres et ajoute seulement les `PHAsset` manquants ; sans changement, aucune écriture n'est exécutée.
+- **Tolérance aux erreurs par collection** : une défaillance sur un album (droits, album devenu non modifiable) n'interrompt plus la synchronisation des autres collections ; les erreurs sont agrégées et restituées au client. Les associations locales ne sont jamais supprimées et la reprise (`resume`) peut retenter les albums en échec.
 - **Photos supprimées de la photothèque** : si un lien local vise un `PHAsset` devenu inaccessible, ce lien est conservé mais ignoré lors de l'ajout ; les autres photos disponibles sont ajoutées normalement. La réponse native expose `unavailableCount` pour le diagnostic. Si tous les identifiants sont périmés, **aucun album vide n'est créé**.
 - Un titre d'album différent du nom de la collection est rétabli lors d'une synchronisation, y compris après un échec de renommage précédent.
 - Les événements Cordova `deviceready` et `resume` redéclenchent la réconciliation, notamment après un retour des Réglages Photos ; aucun lien local n'est effacé lors d'un refus d'accès.
@@ -36,6 +37,7 @@
 - `tests/photo-albums.test.js` : tests Node du pont, de la création paresseuse, des identifiants stables, des collections multiples, de la concurrence et des erreurs d'autorisation.
 - `scripts/patch-share-extension.js` : à chaque `cordova prepare ios`, recopie `NearbyPhotos.m` et le pont JavaScript de la source versionnée vers les fichiers générés si le plugin est déjà installé, pour éviter d'utiliser une ancienne version native de PhotoKit.
 - `scripts/verify-ios-sources.sh` et `tests/ios-generated.test.js` : contrôlent aussi la concordance du `NearbyPhotos.m` généré ; un fichier natif périmé doit bloquer le build Xcode plutôt que produire silencieusement une version ancienne.
+- `tests/ios-generated.test.js` vérifie désormais également le **pont JavaScript PhotoKit réellement généré** par Cordova, sa correspondance bit à bit avec le module versionné et l'ordre des arguments `addToAlbum`/`renameAlbum`. Ce test nécessite le projet iOS généré ; il n'a pas été exécuté sur devMcp Linux.
 - `tests/photo-albums.test.js` : vérifie également le contrat de tolérance aux photos supprimées et la présence des gardes de synchronisation iOS (contrôles statiques, pas une exécution PhotoKit).
 - `.github/workflows/node-tests.yml` : nouvelle CI Node 22 sur `main` et PR, avec `npm ci --ignore-scripts` avant `npm test` (exécution GitHub Actions à constater).
 
@@ -57,3 +59,9 @@
 - **Aucune compilation native Xcode ni validation sur iPhone** n'a été faite depuis ces modifications.
 
 Règle de suivi : rapporter les commits, le résultat réel des tests et les blocages. Ne jamais confondre succès des tests JS et validation native iOS.
+
+## Avancement du 9 novembre 2026 — 21 h, Tokyo
+- Ajout de la tolérance aux échecs d'album individuels (`www/js/place-photos.js`, miroir `public/js/`). Nouveau test de récupération : l'album `c-1` échoue, `c-2` est tout de même synchronisé, puis la réconciliation suivante peut retenter `c-1`.
+- `project.test` sur devMcp : **PASS** des tests collections, albums, navigation, catalogue, proximité et imports simulés ; **exit 1 global** encore dû à `Cannot find module 'plist'` dans le test Share Extension.
+- Vérification supplémentaire du pont JS installé en iOS ajoutée dans `tests/ios-generated.test.js` ; exécution iOS/Xcode non vérifiée (requiert macOS et un projet Cordova préparé).
+- La synchronisation du workspace devMcp doit être reconfirmée après les derniers commits et aucune validation physique iPhone ne peut être déduite des tests JS.
