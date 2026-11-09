@@ -17,6 +17,9 @@
 - Après désinstallation/réinstallation de l'app (NSUserDefaults effacé), les albums iOS existants peuvent devenir orphelins : ne pas réutiliser automatiquement un album portant le même titre.
 - Les mutations d'albums sont sérialisées dans l'interface Cordova pour éviter deux créations simultanées.
 - Une collection liée à plusieurs lieux regroupe toutes leurs photos, sans répéter le même identifiant d'asset.
+- Les synchronisations répétées sont **idempotentes** : pour un album existant, PhotoKit lit ses membres et ajoute seulement les `PHAsset` manquants ; sans changement, aucune écriture n'est exécutée.
+- Un titre d'album différent du nom de la collection est rétabli lors d'une synchronisation, y compris après un échec de renommage précédent.
+- Les événements Cordova `deviceready` et `resume` redéclenchent la réconciliation, notamment après un retour des Réglages Photos ; aucun lien local n'est effacé lors d'un refus d'accès.
 
 ## Droits iOS
 - La création/la consultation des **albums utilisateur** exige l'autorisation PhotoKit `PHAccessLevelReadWrite` avec `PHAuthorizationStatusAuthorized`.
@@ -30,6 +33,7 @@
 - `www/js/collections-ui.js` : renommage, attribution groupée et édition de lieu.
 - `www/js/app.js` : import dans une collection et re-synchronisation de photos déjà associées.
 - `tests/photo-albums.test.js` : tests Node du pont, de la création paresseuse, des identifiants stables, des collections multiples, de la concurrence et des erreurs d'autorisation.
+- `.github/workflows/node-tests.yml` : nouvelle CI Node 22 sur `main` et PR, avec `npm ci --ignore-scripts` avant `npm test` (exécution GitHub Actions à constater).
 
 ## Campagne physique iOS encore requise
 1. Installer un build macOS/Xcode avec le plugin Cordova mis à jour.
@@ -43,6 +47,8 @@
 ## Validation automatisée
 - `tests/photo-albums.test.js` passe dans devMcp sur Linux, ainsi que les tests des collections, navigation, géolocalisation et import JS.
 - La suite `npm test` complète reste **bloquée dans le workspace devMcp** au test `share-extension.patch.test.js` : dépendance Node `plist` absente (installation npm non proposée par les actions autorisées devMcp).
+- Contrôle du 9 novembre 2026 : `project.test` devMcp passe `collections-model`, `collections-ui`, `photo-albums`, navigation, catalogue, proximité et imports simulés ; l'exécution complète retourne **exit 1** sur `Cannot find module 'plist'` au test Share Extension. Aucun test natif PhotoKit n'est disponible sur cet hôte Linux.
+- Une CI GitHub Actions a été ajoutée pour disposer d'un contrôle complet avec les dépendances installées, mais **son résultat n'est pas encore confirmé**.
 - **Aucune compilation native Xcode ni validation sur iPhone** n'a été faite depuis ces modifications.
 
 Règle de suivi : rapporter les commits, le résultat réel des tests et les blocages. Ne jamais confondre succès des tests JS et validation native iOS.
