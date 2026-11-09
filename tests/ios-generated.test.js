@@ -13,6 +13,7 @@ const read = file => fs.readFileSync(path.join(root,file),'utf8');
 const sharedResolver=read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyMapsResolver.h');
 assert.equal(read('platforms/ios/ShareExtension/NearbyMapsResolver.h'),sharedResolver,'extension uses the versioned shared resolver');
 assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyMapsResolver.h'),sharedResolver,'app uses the same resolver');
+assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m'),read('local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m'),'installed PhotoKit native source matches repository');
 const picker=read('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyPlacePicker.h');
 assert.equal(read('platforms/ios/ShareExtension/NearbyPlacePicker.h'),picker,'extension picker generated from Git');
 assert.equal(read('platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/NearbyPlacePicker.h'),picker,'app picker generated from Git');
@@ -58,6 +59,8 @@ try {
   const files = [
     ...['ShareViewController.h','ShareViewController.m','MainInterface.storyboard'].flatMap(name => ['native/ios/'+name,'platforms/ios/ShareExtension/'+name]),
     'native/ios/ShareExt.entitlements','platforms/ios/ShareExt.entitlements',
+    'local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m',
+    'platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m',
     ...['NearbyResolver.m','NearbyMapsResolver.h','NearbyPlacePicker.h'].flatMap(name => ['local-plugins/cordova-plugin-nearby-resolver/src/ios/'+name,'platforms/ios/App/Plugins/cordova-plugin-nearby-resolver/'+name]),
     ...['NearbyMapsResolver.h','NearbyPlacePicker.h'].map(name => 'platforms/ios/ShareExtension/'+name)
   ];
@@ -71,6 +74,10 @@ try {
   const stale = spawnSync('/bin/sh',[guard,fixture],{encoding:'utf8'});
   assert.equal(stale.status,1,'later source change blocks a stale build');
   assert.match(stale.stderr,/npm run ios:prepare/,'failure explains how to regenerate');
+  fs.copyFileSync(path.join(root,'local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m'),path.join(fixture,'local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m'));
+  fs.appendFileSync(path.join(fixture,'platforms/ios/App/Plugins/cordova-plugin-nearby-photos/NearbyPhotos.m'),'\\n// stale plugin source\\n');
+  const stalePhotoKit=spawnSync('/bin/sh',[guard,fixture],{encoding:'utf8'});
+  assert.equal(stalePhotoKit.status,1,'outdated generated PhotoKit plugin blocks Xcode build');
 } finally {
   fs.rmSync(fixture,{recursive:true,force:true});
 }
