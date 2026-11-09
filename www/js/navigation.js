@@ -38,11 +38,11 @@
     legacyContainer.id = 'nearby-legacy-places';
     legacyContainer.hidden = true;
     legacyPlaces.forEach(function(node){legacyContainer.append(node);});
-    tabs[2].nodes.push(legacyContainer);
-    collect(importTitle,backupTitle,tabs[1].nodes);
-    collect(addTitle,document.querySelector('body > script'),tabs[1].nodes);
-    collect(proximityTitle,importTitle,tabs[2].nodes);
-    collect(backupTitle,addTitle,tabs[2].nodes);
+    tabs[3].nodes.push(legacyContainer);
+    collect(importTitle,backupTitle,tabs[2].nodes);
+    collect(addTitle,document.querySelector('body > script'),tabs[2].nodes);
+    collect(proximityTitle,importTitle,tabs[3].nodes);
+    collect(backupTitle,addTitle,tabs[3].nodes);
     var mapSection=document.createElement('div');
     mapSection.innerHTML='<h2>Carte des lieux proches</h2><div class="nearby-map-controls"><label for="map-radius">Rayon affiché (m)</label><input id="map-radius" type="number" min="100" max="50000" step="100" value="1000"><button id="map-recenter" type="button">Me localiser</button></div><p id="map-status" class="muted" role="status">Ouvrez la carte pour vous localiser.</p><div id="nearby-map" aria-label="Carte des lieux enregistrés"></div><div id="map-results" aria-live="polite"></div>';
     tabs[1].nodes.push(mapSection);
@@ -54,15 +54,16 @@
       diagSummary.textContent='Journal technique';
       diagnostics.parentNode.insertBefore(diagDetails,diagnostics);
       diagDetails.append(diagSummary,diagnostics);
+      tabs[3].nodes.push(diagDetails);
     }
     var bulk = document.getElementById('collections-bulk');
-    if (bulk) tabs[2].nodes.push(bulk);
+    if (bulk) tabs[3].nodes.push(bulk);
     var globalCategories = document.getElementById('collections-global-categories');
-    if (globalCategories) tabs[2].nodes.push(globalCategories);
+    if (globalCategories) tabs[3].nodes.push(globalCategories);
     var status = document.getElementById('status');
     if (status) {
       status.insertAdjacentElement('afterend',nav);
-      tabs[2].nodes.unshift(status);
+      tabs[3].nodes.unshift(status);
     }
     nav.insertAdjacentElement('afterend',main);
     tabs.forEach(function (tab) {
