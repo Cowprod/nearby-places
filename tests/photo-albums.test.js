@@ -38,12 +38,31 @@ const state={
 };
 (async()=>{
  await window.NearbyPlacePhotos.syncMemberships(state);
- assert.equal(writes.length,2,'albums are created lazily, only with linked photos');
+ assert.equal(writes.filter(x=>x.id).length,2,'albums are created lazily, only with linked photos');
  assert.deepEqual(writes[0],{id:'c-1',title:'Nearby Places — Tokyo',ids:['asset-A','asset-B']});
  assert.deepEqual(writes[1],{id:'c-2',title:'Nearby Places — Tokyo',ids:['asset-A','asset-B']});
+ assert.deepEqual(writes[2],{rename:'c-3',title:'Nearby Places — Paris'},'empty collection checks for a previously created album without adding photos');
  assert.deepEqual(JSON.parse(localStorage.getItem('nearby-place-photo-links-v1')).place1,['asset-A','asset-B','asset-A'],'album sync never rewrites place-photo links');
  await window.NearbyPlacePhotos.renameCollection('c-2','Tokyo 2026');
- assert.deepEqual(writes[2],{rename:'c-2',title:'Nearby Places — Tokyo 2026'},'rename uses collection ID, not ambiguous title');
+ assert.deepEqual(writes[3],{rename:'c-2',title:'Nearby Places — Tokyo 2026'},'rename uses collection ID, not ambiguous title');
+ // A collection whose last place-photo link was removed may still have a
+ // PhotoKit album with originals: resume must retry its missed rename.
+ const renameAttempts=[];
+ const emptyLinksState={collections:state.collections,memberships:[]};
+ window.NearbyPhotos.addToAlbum=()=>{throw Error('an empty reconciliation must not create any albums');};
+ window.NearbyPhotos.renameAlbum=(id,title,ok,fail)=>{
+  renameAttempts.push({id,title});
+  if(id==='c-3')fail('Accès complet à Photos requis');
+  else ok({renamed:false});
+ };
+ await assert.rejects(window.NearbyPlacePhotos.syncMemberships(emptyLinksState),/Renommage \[c-3\].*Accès complet/);
+ assert.deepEqual(renameAttempts.map(x=>x.id),['c-1','c-2','c-3'],'one bad album does not starve other empty collections');
+ const beforeRetry=localStorage.getItem('nearby-place-photo-links-v1');
+ window.NearbyPhotos.renameAlbum=(id,title,ok)=>{renameAttempts.push({id,title});ok({renamed:id==='c-3'});};
+ await window.NearbyPlacePhotos.syncMemberships(emptyLinksState);
+ assert.equal(renameAttempts.filter(x=>x.id==='c-3').length,2,'resume retries a failed rename with no current photo links');
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),beforeRetry,'rename retries never remove place-photo associations');
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{writes.push({id,title,ids:Array.from(ids)});ok({collectionId:id});};
  // Cordova bridge must preserve the argument order expected by native PhotoKit.
  const bridge={exports:{}},calls=[];
  vm.runInNewContext(fs.readFileSync('local-plugins/cordova-plugin-nearby-photos/www/NearbyPhotos.js','utf8'),{
@@ -70,6 +89,8 @@ const state={
  assert.doesNotMatch(native,/assets\.count!=identifiers\.count/,'a single missing asset must never reject all valid photos');
 
  assert.doesNotMatch(native,/deleteAssetCollections/,'never delete photo albums automatically');
+ assert.match(native,/if\(!\[self albumLinks\]\[collectionId\]\)/,'rename of never-created albums is a native no-op');
+ assert.match(native,/if\(!\[self albumLinks\]\[collectionId\]\)[\s\S]*?withAlbumAuthorization/,'no album means no permission request or empty-album creation');
 
  const hook=fs.readFileSync('scripts/patch-share-extension.js','utf8');
  const guard=fs.readFileSync('scripts/verify-ios-sources.sh','utf8');
