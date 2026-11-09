@@ -1,6 +1,6 @@
 {
   "name": "nearby-places",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Cordova prototype for offline places and foreground GPS",
   "scripts": {
