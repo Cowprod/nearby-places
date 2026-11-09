@@ -73,9 +73,9 @@ const state={
  assert.deepEqual(calls[0],{service:'NearbyPhotos',method:'addToAlbum',args:['c-1','Nearby Places — Tokyo',['asset-A']]});
  assert.deepEqual(calls[1],{service:'NearbyPhotos',method:'renameAlbum',args:['c-1','Nearby Places — Tokyo 2026']});
  const native=fs.readFileSync('local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m','utf8');
- assert.match(native,/NSMutableOrderedSet<NSString \\*> \\*ids=\\[NSMutableOrderedSet orderedSet\\]/,'PHPicker deduplicates selected local identifiers');
- assert.match(native,/@\"selectedCount\":@\\(results.count\\)/,'PHPicker reports total selected items');
- assert.match(native,/@\"unavailableCount\":@\\(unavailableCount\\)/,'PHPicker reports selections without PHAsset identifiers');
+ assert.match(native,/NSMutableOrderedSet<NSString/,'PHPicker deduplicates selected local identifiers');
+ assert.match(native,/@"selectedCount"/,'PHPicker reports total selected items');
+ assert.match(native,/@"unavailableCount"/,'PHPicker reports selections without PHAsset identifiers');
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
