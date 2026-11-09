@@ -163,6 +163,12 @@ function ensureAppPhotoPrivacy(root) {
       current[key]=value;dirty=true;
     }
   }
+  // canOpenURL needs explicit schemes to detect Google Maps and Citymapper
+  // on iOS even if the apps are installed; keep existing schemes intact.
+  const schemes=['comgooglemaps','citymapper','transit','moovit','here-location'];
+  const existing=Array.isArray(current.LSApplicationQueriesSchemes)?current.LSApplicationQueriesSchemes.slice():[];
+  for(const scheme of schemes){if(!existing.includes(scheme)){existing.push(scheme);dirty=true;}}
+  current.LSApplicationQueriesSchemes=existing;
   if(dirty)fs.writeFileSync(file,plist.build(current));
 }
 
