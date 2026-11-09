@@ -112,8 +112,8 @@ assert.match(feedback.textContent,/quota exceeded/);
 rejectSave = false;
 events['nearby-places-changed']();
 saved = JSON.parse(storage.getItem('nearby-collections-v2'));
-assert.equal(saved.collections[0].name,'Tokyo');
-assert.equal(saved.collections[0].description,'Lieux visités pendant le voyage');
+assert.equal(saved.collections.find(c=>c.id===collectionId).name,'Tokyo');
+assert.equal(saved.collections.find(c=>c.id===collectionId).description,'Lieux visités pendant le voyage');
 assert.equal(editor().open,true,'refresh preserves editor state');
 assert.equal(storage.getItem('nearby-places-v1'),legacyRaw);
 assert.equal(fs.readFileSync('www/js/collections-ui.js','utf8'),
