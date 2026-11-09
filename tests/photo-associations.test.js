@@ -53,7 +53,9 @@ function harness(raw){
   [JSON.stringify({'place-a':{lost:'photo-A'},'place-b':['keep']}),/existantes invalides/]
  ];
  for(const [raw,message] of cases){
-  const h=harness(raw);await h.capture();
+  const h=harness(raw);const result=await h.capture();
+  assert.equal(result.saved,true,'original photo remains saved by PhotoKit even if local association fails');
+  assert.equal(result.associated,false,'corrupted associations are never claimed to have been saved');
   assert.equal(h.values.get('nearby-place-photo-links-v1'),raw,'corrupt raw data must never be overwritten');
   assert.match(h.alerts[0],message,'error shown to user');
   assert.equal(h.calls.length,0,'album write not started when local association failed');
@@ -66,6 +68,20 @@ function harness(raw){
  assert.deepEqual(JSON.parse(pending.values.get('nearby-place-photo-links-v1'))['place-a'],['photo-B'],
   'native permission failure never removes the associated photo');
  assert.match(pending.alerts[0],/Photo enregistrée et associée au lieu/,'never claim the photo was lost');
+ // A missing or invalid collection store must not be reported as successful
+ // album creation after an original has already been saved and linked.
+ for(const corrupt of [null,'{broken','{}']){
+  const h=harness('{}');
+  if(corrupt===null)h.values.delete('nearby-collections-v2');
+  else h.values.set('nearby-collections-v2',corrupt);
+  const result=await h.capture();
+  assert.equal(result.saved,true,'native original was saved');
+  assert.equal(result.associated,true,'place-photo link remains persisted');
+  assert.equal(result.albumSynced,false,'invalid collections cannot be silently marked synced');
+  assert.deepEqual(JSON.parse(h.values.get('nearby-place-photo-links-v1'))['place-a'],['photo-B']);
+  assert.equal(h.calls.length,0,'invalid collections never create an album');
+  assert.match(h.alerts[0],/Album Photos non synchronisé/);
+ }
  const cancelled=harness('{}');
  cancelled.window.NearbyPhotos.capture=ok=>ok({cancelled:true});
  await cancelled.capture();
