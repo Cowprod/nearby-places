@@ -80,7 +80,9 @@ const state={
  assert.ok(native.includes('if(self.viewController.presentedViewController){'),'PHPicker refuses to open over an existing native modal');
  assert.ok(native.includes('Fermez la fenêtre actuelle avant de choisir des photos'),'picker modal collision reports a user-visible error');
  assert.ok(pickerImpl.includes('[picker dismissViewControllerAnimated:YES completion:^{'),'picker results wait for native dismissal');
- assert.ok(pickerImpl.includes('[self replyTo:self.pending value:payload error:nil]'),'pending selection callback resolves only after dismissal');
+ assert.ok(pickerImpl.includes('NSString *callback=[self.pending copy];'),'picker pins the original callback before dismissal');
+ assert.ok(pickerImpl.includes('[self replyTo:callback value:payload error:nil]'),'pending selection callback resolves only after dismissal');
+ assert.doesNotMatch(pickerImpl,/replyTo:self\.pending/,'picker never replies to a newer request after dismissal');
  // Camera completion can race dismissal, PhotoKit permission prompts and
  // the next user action. The original callback must remain attached to its
  // capture until UIKit has dismissed the sheet AND Photos has finished saving.
@@ -94,6 +96,12 @@ const state={
  assert.match(cameraImpl,/dispatch_async\(dispatch_get_main_queue\(\),\^\{\[self replyTo:callback value:nil error:@"Accès Photos refusé"\];\}\)/,
   'a denied asynchronous Photos permission completes the same callback on the main queue');
  assert.doesNotMatch(cameraImpl,/replyTo:self\.pending/,'late PhotoKit callbacks never target another camera or picker operation');
+ const cameraCancel=native.split('- (void)imagePickerControllerDidCancel:(UIImagePickerController*)picker {')[1].split('- (void)imagePickerController:(UIImagePickerController*)picker didFinishPickingMediaWithInfo:')[0];
+ assert.ok(cameraCancel,'camera cancellation delegate is implemented');
+ assert.match(cameraCancel,/NSString \*callback=\[self\.pending copy\];/,'camera cancel keeps its own callback identity');
+ assert.match(cameraCancel,/dismissViewControllerAnimated:YES completion:\^\{/,'camera cancel waits for UIKit dismissal');
+ assert.match(cameraCancel,/replyTo:callback value:@\{@"cancelled":@YES\}/,'cancellation is sent to original camera request');
+ assert.doesNotMatch(cameraCancel,/replyTo:self\.pending/,'late camera cancellation cannot resolve a later request');
 
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
