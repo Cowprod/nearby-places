@@ -367,6 +367,12 @@
       try { api.createCollection(state, newName.value); newName.value = ''; persist(); feedback.textContent = 'Collection créée'; }
       catch (error) { feedback.textContent = error.message; }
     };
+    // Retry album reconciliation after Photos permission changes or an offline session.
+    // The native layer compares membership and repairs missed renames without copying photos.
+    if(typeof document.addEventListener==='function'){
+      document.addEventListener('deviceready',function(){refresh();syncPhotoAlbums();},false);
+      document.addEventListener('resume',function(){refresh();syncPhotoAlbums();},false);
+    }
     refresh();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
