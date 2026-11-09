@@ -50,6 +50,7 @@
     controls.append(newName, add);
     panel.append(title, notice, controls, list, detailView, feedback, bulk, globals);
     var selectedCollectionId = null;
+    var highlightedPlaceId = null, highlightTimer = null;
     anchor.insertAdjacentElement('afterend', panel);
     var state;
     // Visual state only: no change to persisted collections or the legacy catalogue.
@@ -62,6 +63,28 @@
       catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
     }
     window.addEventListener('nearby-places-changed',refresh);
+    function openNotificationPlace(placeId){
+      if(typeof placeId!=='string'||!placeId)return;
+      refresh();
+      var matches=state.memberships.filter(function(m){return m.placeId===placeId&&m.collectionId!=='collection-default';});
+      if(!matches.length){feedback.textContent='Lieu de la notification introuvable dans les collections';return;}
+      var target=matches[0];
+      selectedCollectionId=target.collectionId;
+      highlightedPlaceId=placeId;
+      if(highlightTimer)clearTimeout(highlightTimer);
+      if(window.NearbyNavigation)window.NearbyNavigation.show('collections');
+      render();
+      var row=Array.from(detailView.querySelectorAll('[data-place-id]')).find(function(node){return node.dataset.placeId===placeId;});
+      if(row){row.scrollIntoView({behavior:'smooth',block:'center'});}
+      highlightTimer=setTimeout(function(){highlightedPlaceId=null;var marked=detailView.querySelector('.collection-place-notification-highlight');if(marked)marked.classList.remove('collection-place-notification-highlight');},15000);
+    }
+    window.addEventListener('nearby-notification-open',function(event){openNotificationPlace(event.detail&&event.detail.placeId);});
+    try{
+      var pending=JSON.parse(sessionStorage.getItem('nearby-notification-target')||'null');
+      sessionStorage.removeItem('nearby-notification-target');
+      if(pending&&Date.now()-pending.at<60000)openNotificationPlace(pending.placeId);
+    }catch(_){}
+
     bulkButton.onclick = function () {
       var destination = bulkSelect.value;
       if (!destination || destination === 'collection-default') { bulkInfo.textContent = 'Choisir une collection de destination'; return; }
@@ -192,7 +215,7 @@
           var m=entry.membership;
           var place = places.find(function (p) { return p && p.id === m.placeId; });
           if (place) {
-            var item=el('li',null,'collection-place-item'); item.append(el('span',place.name||m.placeId));
+            var item=el('li',null,'collection-place-item'); item.dataset.placeId=place.id; if(highlightedPlaceId===place.id)item.classList.add('collection-place-notification-highlight');item.addEventListener('click',function(){if(item.classList.contains('collection-place-notification-highlight')){item.classList.remove('collection-place-notification-highlight');highlightedPlaceId=null;}}); item.append(el('span',place.name||m.placeId));
             if(place.comment){item.append(el('small',place.comment,'muted collection-place-comment'));}
             if(place.visited){
               var originalCategory=state.categories.find(function(c){return c.id===m.categoryId;});
