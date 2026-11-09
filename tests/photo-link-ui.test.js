@@ -69,7 +69,7 @@ function harness(linked){
  assert.deepEqual(h.stored(),['asset-1','asset-2'],'link persists local photo-place association');
  assert.deepEqual(h.tileIds(h.gallery),['asset-1','asset-2'],'linked photo moves into gallery');
  assert.deepEqual(h.tileIds(h.candidates),[],'linked photo disappears from suggestions immediately');
- assert.deepEqual(h.calls.add[0],{collection:'tokyo',title:'Nearby Places — Tokyo',ids:['asset-2']},'association syncs PhotoKit album');
+ assert.deepEqual(h.calls.add[0],{collection:'tokyo',title:'Nearby Places — Tokyo',ids:['asset-1','asset-2']},'association restores all PhotoKit links for the collection');
 
  h.toggle(h.gallery.children[1]).onclick();
  await h.flush();
