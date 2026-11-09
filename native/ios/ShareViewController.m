@@ -522,45 +522,59 @@ static const NSUInteger NearbyQueueLimit = 50;
     NSString *categoryName = self.selectedCategory[@"name"];
     [self.collectionButton setTitle:collectionName.length ? collectionName : @"Choisir une collection…" forState:UIControlStateNormal];
     [self.categoryButton setTitle:categoryName.length ? categoryName : @"Choisir une catégorie…" forState:UIControlStateNormal];
-    self.collections = [self loadCollections];
-    NSMutableArray<UIMenuElement *> *collectionActions = [NSMutableArray array];
-    for (NSDictionary *choice in self.collections) {
-        NSString *identifier = choice[@"id"];
-        if (![identifier isKindOfClass:NSString.class] || !identifier.length) continue;
-        UIAction *action = [UIAction actionWithTitle:choice[@"name"] image:nil identifier:nil handler:^(__kindof UIAction *selected) {
-            self.selectedCollection = choice;
-            self.selectedCategory = nil;
-            self.categories = [self loadCategories];
-            NSArray *available = [self categoriesForSelectedCollection];
-            if (available.count == 1) self.selectedCategory = available.firstObject;
-            [self refreshSelectionButtons];
-        }];
-        if ([identifier isEqualToString:self.selectedCollection[@"id"]]) action.state = UIMenuElementStateOn;
-        [collectionActions addObject:action];
+    // Real tappable buttons open a familiar native selection sheet, not a
+    // context menu whose entries can appear empty in a Share extension.
+    self.collectionButton.showsMenuAsPrimaryAction = NO;
+    self.categoryButton.showsMenuAsPrimaryAction = NO;
+    self.collectionButton.menu = nil;
+    self.categoryButton.menu = nil;
+    self.collectionButton.enabled = YES;
+    self.categoryButton.enabled = self.selectedCollection != nil;
+}
+
+- (void)showOptions:(NSArray<NSDictionary *> *)options title:(NSString *)title
+              from:(UIButton *)source onChoose:(void (^)(NSDictionary *))onChoose {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title
+        message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    NSUInteger choices = 0;
+    for (NSDictionary *choice in options) {
+        NSString *identifier = [choice[@"id"] isKindOfClass:NSString.class] ? choice[@"id"] : @"";
+        NSString *name = [choice[@"name"] isKindOfClass:NSString.class] ? choice[@"name"] : @"";
+        if (!identifier.length || !name.length) continue;
+        choices++;
+        [sheet addAction:[UIAlertAction actionWithTitle:name style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) { onChoose(choice); }]];
     }
-    self.collectionButton.menu = [UIMenu menuWithTitle:@"Collection" children:collectionActions];
-    self.collectionButton.showsMenuAsPrimaryAction = YES;
-    self.collectionButton.enabled = collectionActions.count > 0;
-    NSMutableArray<UIMenuElement *> *categoryActions = [NSMutableArray array];
-    for (NSDictionary *choice in [self categoriesForSelectedCollection]) {
-        UIAction *action = [UIAction actionWithTitle:choice[@"name"] image:nil identifier:nil handler:^(__kindof UIAction *selected) {
-            self.selectedCategory = choice;
-            [self refreshSelectionButtons];
-        }];
-        if ([choice[@"id"] isEqualToString:self.selectedCategory[@"id"]]) action.state = UIMenuElementStateOn;
-        [categoryActions addObject:action];
+    if (!choices) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Aucun choix disponible" style:UIAlertActionStyleDefault handler:nil]];
     }
-    self.categoryButton.menu = [UIMenu menuWithTitle:@"Catégorie" children:categoryActions];
-    self.categoryButton.showsMenuAsPrimaryAction = YES;
-    self.categoryButton.enabled = self.selectedCollection != nil && categoryActions.count > 0;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) { popover.sourceView = source; popover.sourceRect = source.bounds; }
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)chooseCollection {
-    [self refreshSelectionButtons];
+    self.collections = [self loadCollections];
+    [self showOptions:self.collections title:@"Collection" from:self.collectionButton
+            onChoose:^(NSDictionary *choice) {
+        self.selectedCollection = choice;
+        self.selectedCategory = nil;
+        self.categories = [self loadCategories];
+        NSArray *available = [self categoriesForSelectedCollection];
+        if (available.count == 1) self.selectedCategory = available.firstObject;
+        [self refreshSelectionButtons];
+    }];
 }
 
 - (void)chooseCategory {
-    [self refreshSelectionButtons];
+    if (!self.selectedCollection) { [self chooseCollection]; return; }
+    self.categories = [self loadCategories];
+    [self showOptions:[self categoriesForSelectedCollection] title:@"Catégorie"
+        from:self.categoryButton onChoose:^(NSDictionary *choice) {
+        self.selectedCategory = choice;
+        [self refreshSelectionButtons];
+    }];
 }
 
 @end
