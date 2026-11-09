@@ -49,10 +49,12 @@
       "cordova-plugin-nearby-resolver": {},
       "uk.co.workingedge.phonegap.plugin.launchnavigator": {
         "GOOGLE_API_KEY_FOR_ANDROID": ""
-      }
+      },
+      "cordova-plugin-nearby-photos": {}
     }
   },
   "dependencies": {
-    "cordova-plugin-nearby-resolver": "file:local-plugins/cordova-plugin-nearby-resolver"
+    "cordova-plugin-nearby-resolver": "file:local-plugins/cordova-plugin-nearby-resolver",
+    "cordova-plugin-nearby-photos": "file:local-plugins/cordova-plugin-nearby-photos"
   }
 }
