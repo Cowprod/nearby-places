@@ -1,7 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const plist = require('plist');
 const {APP_GROUP,NATIVE_FILES,patch} = require('../scripts/patch-share-extension.js');
 
 const read = file => fs.readFileSync(file,'utf8');
@@ -15,7 +14,7 @@ const resolverJS = read('local-plugins/cordova-plugin-nearby-resolver/www/resolv
 const resolverPlugin = read('local-plugins/cordova-plugin-nearby-resolver/plugin.xml');
 const pluginHook = read('local-plugins/cordova-plugin-nearby-resolver/hooks/afterPrepare.js');
 assert.equal(typeof require('../scripts/patch-share-extension.js'), 'function', 'Cordova must invoke the project hook, not silently ignore an object export');
-const shareEntitlements = plist.parse(read('native/ios/ShareExt.entitlements'));
+const shareEntitlementsXML = read('native/ios/ShareExt.entitlements');
 
 assert.deepEqual(NATIVE_FILES.sort(),[
   'MainInterface.storyboard','ShareExtension-Info.plist','ShareViewController.h','ShareViewController.m'
@@ -51,7 +50,7 @@ assert.match(resolver,/queue\.firstObject/,'consumer peeks without deleting');
 assert.match(resolver,/shareID/,'records are acknowledged by stable id');
 assert.match(resolverJS,/ackShared/);
 assert.match(resolverJS,/syncCategories/);
-assert.equal(shareEntitlements['com.apple.security.application-groups'][0],APP_GROUP,'extension App Group matches hook constant');
+assert.match(shareEntitlementsXML,new RegExp(APP_GROUP.replace(/\\./g,'\\\\.')),'extension App Group matches hook constant');
 assert.match(resolver,new RegExp(APP_GROUP.replace(/\./g,'\\.')),'app bridge uses the same App Group');
 
 const generatedPlist = patch(read('native/ios/ShareExtension-Info.plist'),{version:'9.8.7'});
