@@ -486,7 +486,8 @@ const nativeShareSource = fs.readFileSync('native/ios/ShareViewController.m','ut
 const nativeResolverSource = fs.readFileSync('local-plugins/cordova-plugin-nearby-resolver/src/ios/NearbyResolver.m','utf8');
 const bridgeSource = fs.readFileSync('local-plugins/cordova-plugin-nearby-resolver/www/resolver.js','utf8');
 assert.match(nativeShareSource, /nearbyCollection/,'native share persists collection choice');
-assert.match(nativeShareSource, /collectionPicker/,'native share exposes collection picker');
+assert.match(nativeShareSource, /collectionButton/,'native share exposes tappable collection selector');
+assert.match(nativeShareSource, /chooseCollection/,'native share opens a collection choice dialog');
 assert.match(nativeResolverSource, /syncCollections:/,'native bridge synchronizes collection list');
 assert.match(bridgeSource, /syncCollections:function/,'Cordova bridge exposes collection sync');
 assert.match(source, /assignImportedPlace\(imported, selectedCollection, category\)/,'native import attaches collection before ack');
