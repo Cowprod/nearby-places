@@ -218,7 +218,7 @@ function syncNearbyPhotos(root) {
   for(const [from,to] of targets) {
     const target=path.join(root,to);
     const transform=from.endsWith('.js')
-      ? value => 'cordova.define("cordova-plugin-nearby-photos.NearbyPhotos", function(require, exports, module) {\\n'+value+'\\n});\\n'
+      ? value => 'cordova.define("cordova-plugin-nearby-photos.NearbyPhotos", function(require, exports, module) {\n'+value+'\n});\n'
       : null;
     if(fs.existsSync(target))copyIfChanged(path.join(source,from),target,transform);
   }
