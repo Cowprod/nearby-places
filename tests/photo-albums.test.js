@@ -108,21 +108,21 @@ const state={
  // and must always complete the callback belonging to the original request.
  const captureImpl=native.split('- (void)capture:(CDVInvokedUrlCommand*)cmd {')[1].split('- (void)imagePickerControllerDidCancel:')[0];
  assert.ok(captureImpl,'camera entrypoint exists');
- assert.match(captureImpl,/NSString \\*callback=\\[cmd\\.callbackId copy\\];/,'camera request pins original callback before requesting permission');
- assert.match(captureImpl,/if\\(!\\[self\\.pending isEqualToString:callback\\]\\)return;/,'late permission callback cannot act on another camera request');
+ assert.match(captureImpl,/NSString \*callback=\[cmd\.callbackId copy\];/,'camera request pins original callback before requesting permission');
+ assert.match(captureImpl,/if\(!\[self\.pending isEqualToString:callback\]\)return;/,'late permission callback cannot act on another camera request');
  assert.match(captureImpl,/applicationState!=UIApplicationStateActive/,'camera must not present UI while app is inactive');
  assert.match(captureImpl,/Application en arrière-plan/,'camera interruption gives an actionable error');
- assert.doesNotMatch(captureImpl,/replyTo:self\\.pending/,'camera permission flow never resolves a newer callback');
+ assert.doesNotMatch(captureImpl,/replyTo:self\.pending/,'camera permission flow never resolves a newer callback');
  const nativePicker=native.split('- (void)pick:(CDVInvokedUrlCommand*)cmd {')[1].split('- (void)picker:(PHPickerViewController*)picker didFinishPicking:')[0];
  assert.match(nativePicker,/applicationState!=UIApplicationStateActive/,'PHPicker must not present UI while app is inactive');
- assert.match(nativePicker,/replyTo:cmd\\.callbackId value:nil error:@\"Application en arrière-plan/,'PHPicker interruption releases its callback');
+ assert.match(nativePicker,/replyTo:cmd\.callbackId value:nil error:@\"Application en arrière-plan/,'PHPicker interruption releases its callback');
  // PhotoKit result handlers may be invoked with degraded and final images.
  // Only the first *terminal* callback can resolve Cordova. The original photo
  // remains untouched when a thumbnail is unavailable or interrupted.
  const thumbnailImpl=native.split('- (void)thumbnail:(CDVInvokedUrlCommand*)cmd {')[1].split('- (void)pick:(CDVInvokedUrlCommand*)cmd {')[0];
  assert.match(thumbnailImpl,/__block BOOL finished=NO/,'thumbnail completion is tracked');
- assert.match(thumbnailImpl,/dispatch_async\\(dispatch_get_main_queue\\(\\),\\^\\{/,'thumbnail callbacks serialize on main queue');
- assert.match(thumbnailImpl,/if\\(finished\\|\\|\\[info\\[PHImageResultIsDegradedKey\\] boolValue\\]\\)return;/,'degraded or duplicate thumbnail callbacks are ignored');
+ assert.match(thumbnailImpl,/dispatch_async\(dispatch_get_main_queue\(\),\^\{/,'thumbnail callbacks serialize on main queue');
+ assert.match(thumbnailImpl,/if\(finished\|\|\[info\[PHImageResultIsDegradedKey\] boolValue\]\)return;/,'degraded or duplicate thumbnail callbacks are ignored');
  assert.match(thumbnailImpl,/PHImageCancelledKey/,'PhotoKit cancellation is reported');
  assert.match(thumbnailImpl,/PHImageErrorKey/,'PhotoKit image errors are propagated');
  assert.doesNotMatch(thumbnailImpl,/deleteAssets|deleteAssetCollections/,'thumbnail failure cannot delete originals');
