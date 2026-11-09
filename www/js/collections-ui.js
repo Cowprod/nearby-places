@@ -241,7 +241,8 @@
                 api.attach(state,m.placeId,collection.id,categoryId);
                 api.save(localStorage,state);
                 window.NearbyPlaceActions.updatePlace(place.id,name,commentInput.value);
-                feedback.textContent='Lieu modifié';
+                editor.hidden=true;
+                feedback.textContent='';
               }catch(error){
                 state=JSON.parse(snapshot);
                 try{api.save(localStorage,state);}catch(_){}
