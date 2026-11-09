@@ -51,6 +51,12 @@ const storageData = new Map();
 const oldPlaces = [{id:'p1',name:'Musée',categories:['culture']}];
 const legacyRaw = JSON.stringify(oldPlaces);
 storageData.set('nearby-places-v1',legacyRaw);
+// The default (unclassified) collection is intentionally hidden in the list.
+// Exercise collection editing with a visible user-created collection.
+const seededStorage={getItem:key=>storageData.get(key)??null,setItem:(key,value)=>storageData.set(key,value)};
+const seeded=model.loadOrMigrate(seededStorage,oldPlaces);
+const collectionId=model.createCollection(seeded,'Initial collection','');
+model.save(seededStorage,seeded);
 let rejectSave = false;
 const storage = {
   getItem(key) { return storageData.has(key) ? storageData.get(key) : null; },
@@ -91,8 +97,8 @@ details.children[3].onclick();
 assert.equal(feedback.textContent,'Fiche enregistrée');
 assert.equal(editor().open,true,'re-render preserves the opened editor');
 let saved = JSON.parse(storage.getItem('nearby-collections-v2'));
-assert.equal(saved.collections[0].name,'Tokyo');
-assert.equal(saved.collections[0].description,'Lieux visités pendant le voyage');
+assert.equal(saved.collections.find(c=>c.id===collectionId).name,'Tokyo');
+assert.equal(saved.collections.find(c=>c.id===collectionId).description,'Lieux visités pendant le voyage');
 assert.equal(saved.memberships.length,1);
 assert.equal(storage.getItem('nearby-places-v1'),legacyRaw,'legacy places are untouched');
 
@@ -119,9 +125,9 @@ const bulk = panel.children[6];
 assert.equal(bulk.id,'collections-bulk');
 const destination = bulk.children[1];
 const bulkButton = bulk.children[2];
-destination.value = saved.collections[0].id;
+destination.value = collectionId;
 bulkButton.onclick();
 const afterBulk = JSON.parse(storage.getItem('nearby-collections-v2'));
-assert.equal(afterBulk.memberships.filter(m=>m.collectionId===saved.collections[0].id).length,1,'bulk assignment is idempotent');
+assert.equal(afterBulk.memberships.filter(m=>m.collectionId===collectionId).length,1,'bulk assignment is idempotent');
 assert.equal(storage.getItem('nearby-places-v1'),legacyRaw,'bulk assignment preserves places');
 console.log('PASS collections UI: description, open editor, persistence rollback, legacy data and public parity');
