@@ -69,6 +69,13 @@ const state={
  assert.doesNotMatch(native,/assets\.count!=identifiers\.count/,'a single missing asset must never reject all valid photos');
 
  assert.doesNotMatch(native,/deleteAssetCollections/,'never delete photo albums automatically');
+
+ const hook=fs.readFileSync('scripts/patch-share-extension.js','utf8');
+ const guard=fs.readFileSync('scripts/verify-ios-sources.sh','utf8');
+ assert.match(hook,/function syncNearbyPhotos\(root\)/,'Cordova prepare knows how to refresh the local photos plugin');
+ assert.match(hook,/syncNearbyPhotos\(root\);/,'after_prepare refreshes the generated PhotoKit plugin');
+ assert.match(guard,/compare local-plugins\/cordova-plugin-nearby-photos\/src\/ios\/NearbyPhotos\.m platforms\/ios\/App\/Plugins\/cordova-plugin-nearby-photos\/NearbyPhotos\.m/,'Xcode guard rejects an outdated PhotoKit native plugin');
+
  // Parallel UI events must not start concurrent PhotoKit mutations for one collection.
  let active=0,peak=0;
  window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{
