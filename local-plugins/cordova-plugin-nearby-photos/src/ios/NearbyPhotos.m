@@ -108,9 +108,11 @@
   // Keep all place-photo links intact; Photos is the source of asset availability.
   NSUInteger unavailableCount=identifiers.count-assets.count;
   PHAssetCollection *existing=[self albumForCollection:collectionId];
-  if(!assets.count){
-   // An empty or entirely stale collection must not create an empty iOS album.
-   [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":existing.localIdentifier?:@"",@"count":@0,@"unavailableCount":@(unavailableCount)} error:nil];
+  // An entirely stale set must not create an empty album. However, if an
+  // album already exists, continue: its title may need repairing even when
+  // every linked original has since been deleted from Photos.
+  if(!assets.count && !existing){
+   [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":@"",@"count":@0,@"unavailableCount":@(unavailableCount)} error:nil];
    return;
   }
   // Reconciliation is idempotent: repeated imports, resumes and retries never
