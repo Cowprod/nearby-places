@@ -16,8 +16,10 @@ static const NSUInteger NearbyQueueLimit = 50;
 @property(nonatomic, strong) UILabel *urlLabel;
 @property(nonatomic, strong) UITextField *nameField;
 @property(nonatomic, strong) UITextView *commentView;
-@property(nonatomic, strong) UIPickerView *categoryPicker;
-@property(nonatomic, strong) UIPickerView *collectionPicker;
+@property(nonatomic, strong) UIButton *categoryButton;
+@property(nonatomic, strong) UIButton *collectionButton;
+@property(nonatomic, copy) NSDictionary *selectedCollection;
+@property(nonatomic, copy) NSDictionary *selectedCategory;
 @property(nonatomic, copy) NSArray<NSDictionary *> *collections;
 @property(nonatomic, strong) UIButton *saveButton;
 @property(nonatomic, copy) NSArray<NSDictionary *> *categories;
@@ -171,34 +173,15 @@ static const NSUInteger NearbyQueueLimit = 50;
     self.commentView.editable = NO;
     [self.commentView.heightAnchor constraintEqualToConstant:88].active = YES;
     [stack addArrangedSubview:self.commentView];
-    UILabel *categoryLabel = [self fieldLabel:@"Catégorie"];
-    [stack addArrangedSubview:categoryLabel];
-    self.categoryPicker = [[UIPickerView alloc] init];
-    self.categoryPicker.dataSource = self;
-    self.categoryPicker.delegate = self;
-    self.categoryPicker.userInteractionEnabled = NO;
-    self.categoryPicker.backgroundColor = UIColor.whiteColor;
-    self.categoryPicker.layer.cornerRadius = 10;
-    [self.categoryPicker.heightAnchor constraintEqualToConstant:92].active = YES;
-    [stack addArrangedSubview:self.categoryPicker];
     UILabel *collectionLabel = [self fieldLabel:@"Collection *"];
     [stack addArrangedSubview:collectionLabel];
-    self.collectionPicker = [[UIPickerView alloc] init];
-    self.collectionPicker.dataSource = self;
-    self.collectionPicker.delegate = self;
-    self.collectionPicker.userInteractionEnabled = NO;
-    self.collectionPicker.backgroundColor = UIColor.whiteColor;
-    self.collectionPicker.layer.cornerRadius = 10;
-    [self.collectionPicker.heightAnchor constraintEqualToConstant:92].active = YES;
-    [stack addArrangedSubview:self.collectionPicker];
-    // Explicit references: never use arrangedSubviews indices to reorder the form.
-    for (UIView *field in @[collectionLabel, self.collectionPicker, categoryLabel, self.categoryPicker]) {
-        [stack removeArrangedSubview:field];
-    }
-    NSInteger insertion = 6; // Immediately after the name field.
-    for (UIView *field in @[collectionLabel, self.collectionPicker, categoryLabel, self.categoryPicker]) {
-        [stack insertArrangedSubview:field atIndex:insertion++];
-    }
+    self.collectionButton = [self selectionButton:@"Choisir une collection…" action:@selector(chooseCollection)];
+    [stack addArrangedSubview:self.collectionButton];
+    UILabel *categoryLabel = [self fieldLabel:@"Catégorie"];
+    [stack addArrangedSubview:categoryLabel];
+    self.categoryButton = [self selectionButton:@"Choisir une catégorie…" action:@selector(chooseCategory)];
+    [stack addArrangedSubview:self.categoryButton];
+    [self refreshSelectionButtons];
     UIStackView *buttons = [[UIStackView alloc] init];
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.spacing = 12;
@@ -347,8 +330,7 @@ static const NSUInteger NearbyQueueLimit = 50;
     [self resolveSharedName];
     self.nameField.enabled = YES;
     self.commentView.editable = YES;
-    self.categoryPicker.userInteractionEnabled = YES;
-    self.collectionPicker.userInteractionEnabled = YES;
+    [self refreshSelectionButtons];
     self.saveButton.enabled = YES;
 }
 
@@ -395,6 +377,10 @@ static const NSUInteger NearbyQueueLimit = 50;
 }
 
 - (void)save {
+    if (!self.selectedCollection) {
+        [self chooseCollection];
+        return;
+    }
     if (![self.nameField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length) {
         self.statusLabel.text = @"Le nom du lieu est obligatoire.";
         [self.nameField becomeFirstResponder]; return;
@@ -452,11 +438,9 @@ static const NSUInteger NearbyQueueLimit = 50;
         [self showError:@"La file d’import est pleine. Ouvrez Nearby Places avant de réessayer."];
         return;
     }
-    NSInteger row = [self.categoryPicker selectedRowInComponent:0];
-    NSArray *availableCategories = [self categoriesForSelectedCollection];
-    NSDictionary *category = row >= 0 && row < (NSInteger)availableCategories.count ? availableCategories[row] : availableCategories.firstObject;
-    NSInteger collectionRow = [self.collectionPicker selectedRowInComponent:0];
-    NSDictionary *collection = collectionRow >= 0 && collectionRow < (NSInteger)self.collections.count ? self.collections[collectionRow] : nil;
+    NSDictionary *collection = self.selectedCollection;
+    NSDictionary *category = self.selectedCategory;
+    if (!category && [self categoriesForSelectedCollection].count) category = [self categoriesForSelectedCollection].firstObject;
     if (![collection[@"id"] isKindOfClass:NSString.class] || [collection[@"id"] length] == 0) {
         [self showError:self.collections.count < 2 ? @"Aucune collection disponible. Ouvrez Nearby Places, créez une collection puis réessayez le partage." : @"Choisissez une collection avant d’enregistrer ce lieu."];
         return;
@@ -502,9 +486,24 @@ static const NSUInteger NearbyQueueLimit = 50;
     [self presentViewController:confirmation animated:YES completion:nil];
 }
 
+- (UIButton *)selectionButton:(NSString *)title action:(SEL)action {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    button.titleEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+    [button setTitle:title forState:UIControlStateNormal];
+    [button setTitleColor:[UIColor colorWithRed:0.18 green:0.24 blue:0.28 alpha:1] forState:UIControlStateNormal];
+    button.backgroundColor = UIColor.whiteColor;
+    button.layer.cornerRadius = 10;
+    button.layer.borderWidth = 1;
+    button.layer.borderColor = [UIColor colorWithRed:0.88 green:0.90 blue:0.93 alpha:1].CGColor;
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:48].active = YES;
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    return button;
+}
+
 - (NSArray<NSDictionary *> *)categoriesForSelectedCollection {
-    NSInteger row = [self.collectionPicker selectedRowInComponent:0];
-    NSString *collectionId = row >= 0 && row < (NSInteger)self.collections.count ? self.collections[row][@"id"] : @"";
+    NSString *collectionId = [self.selectedCollection[@"id"] isKindOfClass:NSString.class] ? self.selectedCollection[@"id"] : @"";
     NSMutableArray *result = [NSMutableArray array];
     for (NSDictionary *category in self.categories) {
         NSString *scope = [category[@"collectionId"] isKindOfClass:NSString.class] ? category[@"collectionId"] : @"";
@@ -512,23 +511,53 @@ static const NSUInteger NearbyQueueLimit = 50;
     }
     return result;
 }
-- (void)pickerView:(UIPickerView *)pickerView didSelectRow:(NSInteger)row inComponent:(NSInteger)component {
-    if (pickerView == self.collectionPicker) {
-        [self.categoryPicker reloadAllComponents];
-        [self.categoryPicker selectRow:0 inComponent:0 animated:NO];
-    }
+
+- (void)refreshSelectionButtons {
+    NSString *collectionName = self.selectedCollection[@"name"];
+    NSString *categoryName = self.selectedCategory[@"name"];
+    [self.collectionButton setTitle:collectionName.length ? collectionName : @"Choisir une collection…" forState:UIControlStateNormal];
+    [self.categoryButton setTitle:categoryName.length ? categoryName : @"Choisir une catégorie…" forState:UIControlStateNormal];
+    self.categoryButton.enabled = self.selectedCollection != nil && [self categoriesForSelectedCollection].count > 0;
 }
-- (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView { return 1; }
-- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component { return pickerView == self.collectionPicker ? self.collections.count : [self categoriesForSelectedCollection].count; }
-- (NSAttributedString *)pickerView:(UIPickerView *)pickerView attributedTitleForRow:(NSInteger)row forComponent:(NSInteger)component {
-    NSArray<NSDictionary *> *options = pickerView == self.collectionPicker ? self.collections : [self categoriesForSelectedCollection];
-    if (row < 0 || row >= (NSInteger)options.count) return [[NSAttributedString alloc] initWithString:@""];
-    NSString *title = [options[row][@"name"] isKindOfClass:NSString.class] ? options[row][@"name"] : @"";
-    // UIKit otherwise inherits an adaptive text colour that can become white
-    // on our explicitly white picker background in iOS dark appearance.
-    return [[NSAttributedString alloc] initWithString:title attributes:@{
-        NSForegroundColorAttributeName: [UIColor colorWithRed:0.18 green:0.24 blue:0.28 alpha:1.0]
-    }];
+
+- (void)chooseCollection {
+    [self.view endEditing:YES];
+    // Reload App Group data when opening: the main app may have updated it.
+    self.collections = [self loadCollections];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Collection"
+        message:self.collections.count < 2 ? @"Aucune collection synchronisée. Ouvrez Nearby Places et réessayez." : @"Choisissez une collection"
+        preferredStyle:UIAlertControllerStyleAlert];
+    for (NSDictionary *choice in self.collections) {
+        NSString *identifier = choice[@"id"];
+        if (![identifier isKindOfClass:NSString.class] || !identifier.length) continue;
+        [sheet addAction:[UIAlertAction actionWithTitle:choice[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            self.selectedCollection = choice;
+            self.categories = [self loadCategories];
+            self.selectedCategory = nil;
+            NSArray *available = [self categoriesForSelectedCollection];
+            if (available.count == 1) self.selectedCategory = available.firstObject;
+            [self refreshSelectionButtons];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)chooseCategory {
+    [self.view endEditing:YES];
+    if (!self.selectedCollection) { [self chooseCollection]; return; }
+    NSArray<NSDictionary *> *choices = [self categoriesForSelectedCollection];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Catégorie"
+        message:choices.count ? @"Choisissez une catégorie" : @"Aucune catégorie disponible pour cette collection."
+        preferredStyle:UIAlertControllerStyleAlert];
+    for (NSDictionary *choice in choices) {
+        [sheet addAction:[UIAlertAction actionWithTitle:choice[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            self.selectedCategory = choice;
+            [self refreshSelectionButtons];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 @end
