@@ -44,7 +44,7 @@
     collect(proximityTitle,importTitle,tabs[3].nodes);
     collect(backupTitle,addTitle,tabs[3].nodes);
     var mapSection=document.createElement('div');
-    mapSection.innerHTML='<h2>Carte des lieux proches</h2><div class="nearby-map-controls"><label for="map-radius">Rayon affiché (m)</label><input id="map-radius" type="number" min="100" max="50000" step="100" value="1000"></div><p id="map-status" class="muted" role="status">Ouvrez la carte pour vous localiser.</p><div id="nearby-map" aria-label="Carte des lieux enregistrés"></div><div id="map-results" aria-live="polite"></div>';
+    mapSection.innerHTML='<h2>Carte des lieux proches</h2><div class="nearby-map-controls"><label for="map-radius">Rayon affiché (m)</label><input id="map-radius" type="number" min="100" max="50000" step="100" value="1000"></div><p id="map-status" class="muted" role="status">Ouvrez la carte pour vous localiser.</p><div id="nearby-map" aria-label="Carte des lieux enregistrés"></div><p id="map-tiles-status" class="muted" role="status"></p><div id="map-results" aria-live="polite"></div>';
     tabs[1].nodes.push(mapSection);
     var diagnostics=document.getElementById('proximity-diagnostics');
     if(diagnostics){
