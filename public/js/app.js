@@ -514,6 +514,17 @@
     var legacyCategory=selectedCategory.scope==='global'?selectedCategory.id:'culture';
     return resolveMapsURL(intent.nearbyURL).then(function(resolved){
       var parsed=parseMapsLink(resolved);
+      // A previously imported place may be shared again into another collection.
+      // Attach the existing place instead of creating a second location record.
+      var existing=places.find(function(p){return p&&validPosition(p.latitude,p.longitude)&&distanceMeters(p.latitude,p.longitude,parsed.latitude,parsed.longitude)<5;});
+      if(existing){
+        assignImportedPlace(existing,selectedCollection,category);
+        return ackNativeShare(resolver,intent.shareID).then(function(){
+          status('Lieu déjà présent, affecté à la collection');
+          recordShareResult(intent,'Lieu existant affecté',false);
+          return true;
+        });
+      }
       var imported = addManual(name,parsed.latitude,parsed.longitude,legacyCategory,String(intent.nearbyComment||''));
       if (imported) assignImportedPlace(imported, selectedCollection, category);
       return ackNativeShare(resolver,intent.shareID).then(function(){
