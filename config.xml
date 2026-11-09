@@ -15,6 +15,9 @@
   <hook type="after_prepare" src="scripts/patch-share-extension.js" />
   <platform name="ios">
     <preference name="deployment-target" value="15.0"/>
+    <config-file target="*-Info.plist" parent="NSCameraUsageDescription"><string>Prendre des photos des lieux enregistrés.</string></config-file>
+    <config-file target="*-Info.plist" parent="NSPhotoLibraryUsageDescription"><string>Rechercher et associer les photos géolocalisées aux lieux.</string></config-file>
+    <config-file target="*-Info.plist" parent="NSPhotoLibraryAddUsageDescription"><string>Enregistrer les photos prises dans la photothèque.</string></config-file>
     <edit-config target="NSLocationWhenInUseUsageDescription" file="*-Info.plist" mode="merge">
       <string>Votre position est utilisée uniquement à votre demande pour afficher la distance des lieux enregistrés.</string>
     </edit-config>
