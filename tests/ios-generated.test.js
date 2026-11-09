@@ -57,6 +57,9 @@ for (const name of ['ShareViewController.h','ShareViewController.m','MainInterfa
   assert.equal(read('platforms/ios/ShareExtension/'+name),read('native/ios/'+name),name+' generated from Git source');
 }
 const appInfo=plist.parse(read('platforms/ios/App/App-Info.plist'));
+for(const scheme of ['comgooglemaps','citymapper']){
+ assert.ok((appInfo.LSApplicationQueriesSchemes||[]).includes(scheme),scheme+' canOpenURL query is allowed');
+}
 for(const key of ['NSCameraUsageDescription','NSPhotoLibraryUsageDescription','NSPhotoLibraryAddUsageDescription']){
  assert.ok(typeof appInfo[key]==='string'&&appInfo[key].trim().length,key+' is essential for first use without iOS termination');
 }
