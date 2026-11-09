@@ -374,10 +374,6 @@
   }
   function importMapsURL(value){
     var parsed=parseMapsLink(value);
-    var duplicate=places.some(function(p){return p && validPosition(p.latitude,p.longitude) && Math.abs(p.latitude-parsed.latitude)<0.00001 &&
-      Math.abs(p.longitude-parsed.longitude)<0.00001;});
-    if(duplicate){trace('import-result','doublon '+parsed.name);status('Ce lieu existe déjà dans le catalogue');return false;}
-    if((pendingImport && Math.abs(pendingImport.latitude-parsed.latitude)<0.00001 && Math.abs(pendingImport.longitude-parsed.longitude)<0.00001) || importQueue.some(function(p){return Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;})){status('Ce lieu est déjà en attente de confirmation');return false;}
     importQueue.push(parsed);showNextImport();
     return true;
   }
@@ -387,13 +383,6 @@
     var name=$('import-name').value.trim(),category=$('import-category').value,comment=$('import-comment').value.trim();
     if(!name){status('Libellé obligatoire');$('import-name').focus();return;}
     var parsed=pendingImport;
-    // A catalogue refresh or manual addition may have inserted this location
-    // while the confirmation sheet was open. Recheck before persisting.
-    if(places.some(function(p){return p && validPosition(p.latitude,p.longitude) && Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;})){
-      trace('import-result','doublon à la confirmation '+parsed.latitude+','+parsed.longitude);
-      pendingImport=null;$('import-dialog').hidden=true;
-      status('Ce lieu existe déjà : import non enregistré');showNextImport();return;
-    }
     var collectionId = $('import-collection') ? $('import-collection').value : '';
     if (!collectionId) { status('Choisissez une collection avant de valider le lieu.'); return; }
     var imported = addManual(name,parsed.latitude,parsed.longitude,category,comment);
@@ -519,16 +508,12 @@
     var legacyCategory=selectedCategory.scope==='global'?selectedCategory.id:'culture';
     return resolveMapsURL(intent.nearbyURL).then(function(resolved){
       var parsed=parseMapsLink(resolved);
-      var duplicate=places.some(function(p){return p && validPosition(p.latitude,p.longitude) &&
-        Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;});
-      var imported = duplicate ? places.find(function(p){return p && validPosition(p.latitude,p.longitude) &&
-        Math.abs(p.latitude-parsed.latitude)<0.00001 && Math.abs(p.longitude-parsed.longitude)<0.00001;}) :
-        addManual(name,parsed.latitude,parsed.longitude,legacyCategory,String(intent.nearbyComment||''));
+      var imported = addManual(name,parsed.latitude,parsed.longitude,legacyCategory,String(intent.nearbyComment||''));
       if (imported) assignImportedPlace(imported, selectedCollection, category);
       return ackNativeShare(resolver,intent.shareID).then(function(){
-        trace('share-pending',duplicate?'doublon acquitté':'enregistré '+name);
-        status(duplicate?'Ce lieu partagé existe déjà':'Lieu partagé enregistré localement');
-        recordShareResult(intent,duplicate?'Déjà présent dans Mes lieux':'Import réussi',false);
+        trace('share-pending','enregistré '+name);
+        status('Lieu partagé enregistré localement');
+        recordShareResult(intent,'Import réussi',false);
         return true;
       });
     });
