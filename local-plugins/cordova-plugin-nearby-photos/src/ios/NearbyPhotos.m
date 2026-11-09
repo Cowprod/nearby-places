@@ -182,15 +182,27 @@
  return [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[albumId] options:nil].firstObject;
 }
 - (void)withAlbumAuthorization:(void (^)(void))work callback:(NSString *)callback {
+ // iOS authorization callbacks can arrive on a background queue, and access
+ // can change while the system prompt is open. Never continue a PhotoKit album
+ // mutation solely from a stale permission result; verify the *current*
+ // read/write authorization immediately before accessing the library.
+ void (^runIfStillAuthorized)(void)=^{
+  PHAuthorizationStatus current=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+  if(current==PHAuthorizationStatusAuthorized){work();return;}
+  NSString *reason=current==PHAuthorizationStatusLimited?
+   @"Accès limité : les albums nécessitent l’accès complet à Photos. Les associations aux lieux sont conservées.":
+   @"Accès Photos refusé ou modifié dans les réglages iOS. Les associations aux lieux sont conservées.";
+  [self replyTo:callback value:nil error:reason];
+ };
  PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
- if(status==PHAuthorizationStatusAuthorized){work();return;}
+ if(status==PHAuthorizationStatusAuthorized){runIfStillAuthorized();return;}
  if(status==PHAuthorizationStatusLimited){
   [self replyTo:callback value:nil error:@"Pour créer ou modifier des albums, autorisez l’accès complet à Photos dans les réglages iOS. Les associations aux lieux sont conservées."];
   return;
  }
  if(status==PHAuthorizationStatusNotDetermined){
   [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus result){
-   if(result==PHAuthorizationStatusAuthorized)work();
+   if(result==PHAuthorizationStatusAuthorized)runIfStillAuthorized();
    else [self replyTo:callback value:nil error:result==PHAuthorizationStatusLimited?@"Accès limité : les albums nécessitent l’accès complet à Photos.":@"Autorisation Photos refusée"];
   }];
   return;
