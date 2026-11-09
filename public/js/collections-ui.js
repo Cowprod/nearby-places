@@ -310,7 +310,7 @@
             editPlace.title='Modifier le lieu';
             editPlace.append(el('i',null,'fa-solid fa-pen'));
             editPlace.onclick=function(){editor.hidden=!editor.hidden;};
-            var cameraPhoto=el('button',null,'collection-icon-button');cameraPhoto.type='button';cameraPhoto.title='Prendre une photo';cameraPhoto.setAttribute('aria-label','Prendre une photo de '+place.name);cameraPhoto.append(el('i',null,'fa-solid fa-camera'));cameraPhoto.onclick=function(){if(window.NearbyPlacePhotos)window.NearbyPlacePhotos.open(place);};
+            var cameraPhoto=el('button',null,'collection-icon-button');cameraPhoto.type='button';cameraPhoto.title='Prendre une photo';cameraPhoto.setAttribute('aria-label','Prendre une photo de '+place.name);cameraPhoto.append(el('i',null,'fa-solid fa-camera'));cameraPhoto.onclick=function(){if(window.NearbyPlacePhotos)window.NearbyPlacePhotos.open(place,true);};
             var albumPhoto=el('button',null,'collection-icon-button');albumPhoto.type='button';albumPhoto.title='Album du lieu';albumPhoto.setAttribute('aria-label','Album photo de '+place.name);albumPhoto.append(el('i',null,'fa-solid fa-images'));albumPhoto.onclick=function(){if(window.NearbyPlacePhotos)window.NearbyPlacePhotos.open(place);};
             actions.append(directions,transit,cameraPhoto,albumPhoto,editPlace,visited,trash);
             item.append(actions,editor);placeList.append(item);
