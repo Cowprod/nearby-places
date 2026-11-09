@@ -73,6 +73,11 @@ function target(name){
 }
 const app = target('App'), extension = target('ShareExt');
 assert.ok(app && extension,'App and ShareExt targets exist');
+const appFrameworkPhase=app[1].buildPhases.find(phase=>phase.comment==='Frameworks');
+const appFrameworks=appFrameworkPhase&&project.hash.project.objects.PBXFrameworksBuildPhase[appFrameworkPhase.value];
+assert.ok(appFrameworks&&appFrameworks.files.some(file=>String(file.comment||'').includes('AVFoundation.framework')),
+  'native camera permission API is linked in App even with cached Cordova plugin metadata');
+
 for (const entry of [app, extension]) {
   assert.equal(entry[1].buildPhases[0].comment, 'Verify Nearby native sources', 'source guard runs before compilation');
 }
