@@ -81,10 +81,23 @@
 }
 - (void)pick:(CDVInvokedUrlCommand*)cmd {
  if(self.pending.length){[self replyTo:cmd.callbackId value:nil error:@"Une opération photo est déjà en cours"];return;}
- self.pending=cmd.callbackId;PHPickerConfiguration *config=[[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];config.filter=[PHPickerFilter imagesFilter];config.selectionLimit=0;PHPickerViewController *picker=[[PHPickerViewController alloc] initWithConfiguration:config];picker.delegate=self;[self.viewController presentViewController:picker animated:YES completion:nil];
+ self.pending=cmd.callbackId;
+ // PhotoKit selection can be invoked while another native sheet is visible.
+ // Never leave the callback pending if UIKit cannot present the picker.
+ dispatch_async(dispatch_get_main_queue(),^{
+  if(self.viewController.presentedViewController){
+   [self replyTo:cmd.callbackId value:nil error:@"Fermez la fenêtre actuelle avant de choisir des photos"];
+   return;
+  }
+  PHPickerConfiguration *config=[[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];
+  config.filter=[PHPickerFilter imagesFilter];
+  config.selectionLimit=0;
+  PHPickerViewController *picker=[[PHPickerViewController alloc] initWithConfiguration:config];
+  picker.delegate=self;
+  [self.viewController presentViewController:picker animated:YES completion:nil];
+ });
 }
 - (void)picker:(PHPickerViewController*)picker didFinishPicking:(NSArray<PHPickerResult*>*)results {
- [picker dismissViewControllerAnimated:YES completion:nil];
  // PHPicker may return a usable image without a PHAsset identifier (for
  // example, a provider-backed item). Such images cannot be linked to a place
  // or album by localIdentifier. Report them instead of silently dropping them.
@@ -95,7 +108,12 @@
   if(result.assetIdentifier.length)[ids addObject:result.assetIdentifier];
   else unavailableCount++;
  }
- [self replyTo:self.pending value:@{@"ids":ids.array,@"selectedCount":@(results.count),@"unavailableCount":@(unavailableCount)} error:nil];
+ NSDictionary *payload=@{@"ids":ids.array,@"selectedCount":@(results.count),@"unavailableCount":@(unavailableCount)};
+ // Only release pending after UIKit finishes dismissing the picker. Otherwise
+ // a rapid second selection can start while the previous native UI is visible.
+ [picker dismissViewControllerAnimated:YES completion:^{
+  [self replyTo:self.pending value:payload error:nil];
+ }];
 }
 // Stable mapping: an application collection owns its PhotoKit album by localIdentifier,
 // never by display title (two collections may have identical names).
