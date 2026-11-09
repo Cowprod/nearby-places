@@ -57,6 +57,11 @@ const state={
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
+ assert.match(native,/fetchAssetsInAssetCollection:existing/,'native sync inspects existing album membership before adding');
+ assert.match(native,/if\(!toAdd\.count&&!needsRename\)/,'repeated reconciliation is a no-op');
+ assert.match(native,/if\(needsRename\)change\.title=title/,'reconciliation repairs a missed rename');
+ assert.match(native,/PHCollectionEditOperationRename/,'rename support checked before mutation');
+
  assert.doesNotMatch(native,/deleteAssetCollections/,'never delete photo albums automatically');
  // Parallel UI events must not start concurrent PhotoKit mutations for one collection.
  let active=0,peak=0;
