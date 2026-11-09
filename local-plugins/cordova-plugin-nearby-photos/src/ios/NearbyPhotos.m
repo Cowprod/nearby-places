@@ -3,6 +3,7 @@
 #import <PhotosUI/PhotosUI.h>
 #import <CoreLocation/CoreLocation.h>
 #import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
 @interface NearbyPhotos : CDVPlugin <UIImagePickerControllerDelegate,UINavigationControllerDelegate,PHPickerViewControllerDelegate>
 @property(nonatomic,copy) NSString *pending;
 
@@ -10,11 +11,43 @@
 @implementation NearbyPhotos
 - (void)replyTo:(NSString*)callback value:(id)value error:(NSString*)error { CDVPluginResult *r=error?[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error]:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:value];[self.commandDelegate sendPluginResult:r callbackId:callback]; }
 - (void)capture:(CDVInvokedUrlCommand*)cmd {
+ // Camera action is independent of the photo-library picker. The permission
+ // prompt must happen on first use before presenting the camera UI.
+ if(self.pending.length){[self replyTo:cmd.callbackId value:nil error:@"Une opération photo est déjà en cours"];return;}
  self.pending=cmd.callbackId;
- if(![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]){[self replyTo:self.pending value:nil error:@"Appareil photo indisponible"];return;}
- dispatch_async(dispatch_get_main_queue(),^{UIImagePickerController *picker=[UIImagePickerController new];picker.sourceType=UIImagePickerControllerSourceTypeCamera;picker.delegate=self;[self.viewController presentViewController:picker animated:YES completion:nil];});
+ if(![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]){
+  [self replyTo:self.pending value:nil error:@"Appareil photo indisponible sur cet appareil"];self.pending=nil;return;
+ }
+ void (^showCamera)(void)=^{
+  dispatch_async(dispatch_get_main_queue(),^{
+   if(self.viewController.presentedViewController){
+    [self replyTo:self.pending value:nil error:@"Fermez la fenêtre actuelle avant de prendre une photo"];self.pending=nil;return;
+   }
+   UIImagePickerController *picker=[UIImagePickerController new];
+   picker.sourceType=UIImagePickerControllerSourceTypeCamera;
+   picker.mediaTypes=@[@"public.image"];
+   picker.delegate=self;
+   [self.viewController presentViewController:picker animated:YES completion:nil];
+  });
+ };
+ AVAuthorizationStatus permission=[AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
+ if(permission==AVAuthorizationStatusAuthorized){showCamera();return;}
+ if(permission==AVAuthorizationStatusNotDetermined){
+  [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo completionHandler:^(BOOL granted){
+   if(granted)showCamera();
+   else dispatch_async(dispatch_get_main_queue(),^{[self replyTo:self.pending value:nil error:@"Accès à l’appareil photo refusé dans les réglages iOS"];self.pending=nil;});
+  }];
+  return;
+ }
+ [self replyTo:self.pending value:nil error:@"Autorisez l’appareil photo dans les réglages iOS"];
+ self.pending=nil;
 }
-- (void)imagePickerControllerDidCancel:(UIImagePickerController*)picker {[picker dismissViewControllerAnimated:YES completion:^{[self replyTo:self.pending value:nil error:@"Annulé"];}];}
+- (void)imagePickerControllerDidCancel:(UIImagePickerController*)picker {
+ [picker dismissViewControllerAnimated:YES completion:^{
+  [self replyTo:self.pending value:@{@"cancelled":@YES} error:nil];
+  self.pending=nil;
+ }];
+}
 - (void)imagePickerController:(UIImagePickerController*)picker didFinishPickingMediaWithInfo:(NSDictionary*)info {
  UIImage *image=info[UIImagePickerControllerOriginalImage];
  [picker dismissViewControllerAnimated:YES completion:nil];
