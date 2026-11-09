@@ -58,6 +58,11 @@ const state={
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
  assert.doesNotMatch(native,/deleteAssetCollections/,'never delete photo albums automatically');
+ // Album permission errors must never erase associations kept in localStorage.
+ const beforeLinks=localStorage.getItem('nearby-place-photo-links-v1');
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>fail('Accès complet à Photos requis');
+ await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),/Accès complet/);
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),beforeLinks,'PhotoKit permission errors do not mutate links');
  assert.equal(fs.readFileSync('www/js/place-photos.js','utf8'),fs.readFileSync('public/js/place-photos.js','utf8'),'www and public parity');
  console.log('PASS photo albums: lazy creation, stable collection IDs, bridge, duplicate names, multi-album links, deletion safety');
 })().catch(error=>{console.error(error);process.exitCode=1;});
