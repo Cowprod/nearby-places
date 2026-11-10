@@ -9,7 +9,21 @@
 
 @end
 @implementation NearbyPhotos
-- (void)replyTo:(NSString*)callback value:(id)value error:(NSString*)error { if(!callback.length)return;CDVPluginResult *r=error?[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error]:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:value];[self.commandDelegate sendPluginResult:r callbackId:callback];if([callback isEqualToString:self.pending])self.pending=nil; }
+// PhotoKit completions and authorization handlers may arrive on background
+// queues. Deliver Cordova results and release pending UI state on the main
+// queue, without letting a late result clear a different request.
+- (void)replyTo:(NSString*)callback value:(id)value error:(NSString*)error {
+ if(!callback.length)return;
+ void (^deliver)(void)=^{
+  CDVPluginResult *result=error?
+   [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error]:
+   [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:value];
+  [self.commandDelegate sendPluginResult:result callbackId:callback];
+  if([callback isEqualToString:self.pending])self.pending=nil;
+ };
+ if([NSThread isMainThread])deliver();
+ else dispatch_async(dispatch_get_main_queue(),deliver);
+}
 - (void)capture:(CDVInvokedUrlCommand*)cmd {
  // Camera action is independent of the photo-library picker. The permission
  // prompt must happen on first use before presenting the camera UI.
@@ -182,32 +196,43 @@
  return [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[albumId] options:nil].firstObject;
 }
 - (void)withAlbumAuthorization:(void (^)(void))work callback:(NSString *)callback {
- // iOS authorization callbacks can arrive on a background queue, and access
- // can change while the system prompt is open. Never continue a PhotoKit album
- // mutation solely from a stale permission result; verify the *current*
- // read/write authorization immediately before accessing the library.
+ // Authorization prompts and PhotoKit completions may run off-main.
+ // Check app state and current read-write permission on the main queue,
+ // including after the permission prompt. Failed work is retried on resume.
  void (^runIfStillAuthorized)(void)=^{
-  PHAuthorizationStatus current=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
-  if(current==PHAuthorizationStatusAuthorized){work();return;}
-  NSString *reason=current==PHAuthorizationStatusLimited?
-   @"Accès limité : les albums nécessitent l’accès complet à Photos. Les associations aux lieux sont conservées.":
-   @"Accès Photos refusé ou modifié dans les réglages iOS. Les associations aux lieux sont conservées.";
-  [self replyTo:callback value:nil error:reason];
+  dispatch_async(dispatch_get_main_queue(),^{
+   if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive){
+    [self replyTo:callback value:nil error:@"Application en arrière-plan : synchronisation Photos reportée au retour. Les associations aux lieux sont conservées."];
+    return;
+   }
+   PHAuthorizationStatus current=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+   if(current==PHAuthorizationStatusAuthorized){work();return;}
+   NSString *reason=current==PHAuthorizationStatusLimited?
+    @"Accès limité : les albums nécessitent l’accès complet à Photos. Les associations aux lieux sont conservées.":
+    @"Accès Photos refusé ou modifié dans les réglages iOS. Les associations aux lieux sont conservées.";
+   [self replyTo:callback value:nil error:reason];
+  });
  };
- PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
- if(status==PHAuthorizationStatusAuthorized){runIfStillAuthorized();return;}
- if(status==PHAuthorizationStatusLimited){
-  [self replyTo:callback value:nil error:@"Pour créer ou modifier des albums, autorisez l’accès complet à Photos dans les réglages iOS. Les associations aux lieux sont conservées."];
-  return;
- }
- if(status==PHAuthorizationStatusNotDetermined){
-  [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus result){
-   if(result==PHAuthorizationStatusAuthorized)runIfStillAuthorized();
-   else [self replyTo:callback value:nil error:result==PHAuthorizationStatusLimited?@"Accès limité : les albums nécessitent l’accès complet à Photos.":@"Autorisation Photos refusée"];
-  }];
-  return;
- }
- [self replyTo:callback value:nil error:@"Autorisation Photos refusée"];
+ dispatch_async(dispatch_get_main_queue(),^{
+  if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive){
+   [self replyTo:callback value:nil error:@"Application en arrière-plan : synchronisation Photos reportée au retour. Les associations aux lieux sont conservées."];
+   return;
+  }
+  PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+  if(status==PHAuthorizationStatusAuthorized){runIfStillAuthorized();return;}
+  if(status==PHAuthorizationStatusLimited){
+   [self replyTo:callback value:nil error:@"Pour créer ou modifier des albums, autorisez l’accès complet à Photos dans les réglages iOS. Les associations aux lieux sont conservées."];
+   return;
+  }
+  if(status==PHAuthorizationStatusNotDetermined){
+   [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus result){
+    if(result==PHAuthorizationStatusAuthorized)runIfStillAuthorized();
+    else [self replyTo:callback value:nil error:result==PHAuthorizationStatusLimited?@"Accès limité : les albums nécessitent l’accès complet à Photos. Les associations aux lieux sont conservées.":@"Autorisation Photos refusée. Les associations aux lieux sont conservées."];
+   }];
+   return;
+  }
+  [self replyTo:callback value:nil error:@"Autorisation Photos refusée. Les associations aux lieux sont conservées."];
+ });
 }
 - (void)addToAlbum:(CDVInvokedUrlCommand *)cmd {
  NSString *callback=cmd.callbackId;
