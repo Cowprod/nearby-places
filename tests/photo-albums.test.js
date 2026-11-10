@@ -125,7 +125,17 @@ const state={
  const thumbnailImpl=native.split('- (void)thumbnail:(CDVInvokedUrlCommand*)cmd {')[1].split('- (void)pick:(CDVInvokedUrlCommand*)cmd {')[0];
  assert.match(thumbnailImpl,/__block BOOL finished=NO/,'thumbnail completion is tracked');
  assert.match(thumbnailImpl,/dispatch_async\(dispatch_get_main_queue\(\),\^\{/,'thumbnail callbacks serialize on main queue');
- assert.match(thumbnailImpl,/if\(finished\|\|\[info\[PHImageResultIsDegradedKey\] boolValue\]\)return;/,'degraded or duplicate thumbnail callbacks are ignored');
+ assert.match(thumbnailImpl,/if\(finished\)return;/,'duplicate terminal thumbnail callbacks are ignored');
+ assert.match(thumbnailImpl,/BOOL cancelled=\[info\[PHImageCancelledKey\] boolValue\];/,'PhotoKit cancellation is captured before degraded filtering');
+ assert.match(thumbnailImpl,/NSError \*terminalError=info\[PHImageErrorKey\];/,'PhotoKit errors are captured before degraded filtering');
+ assert.match(thumbnailImpl,/if\(\[info\[PHImageResultIsDegradedKey\] boolValue\]&&!cancelled&&!terminalError\)return;/,
+  'only nonterminal degraded thumbnails are skipped; cancellation and iCloud errors complete Cordova');
+ assert.ok(thumbnailImpl.indexOf('BOOL cancelled=')<thumbnailImpl.indexOf('if([info[PHImageResultIsDegradedKey] boolValue]'),
+  'degraded callbacks are not discarded before inspecting cancellation');
+ assert.match(thumbnailImpl,/if\(cancelled\)\{\[self replyTo:callback value:nil error:/,
+  'cancelled requests produce a terminal reply');
+ assert.match(thumbnailImpl,/if\(terminalError\)\{\[self replyTo:callback value:nil error:/,
+  'failed iCloud requests produce a terminal reply');
  assert.match(thumbnailImpl,/PHImageCancelledKey/,'PhotoKit cancellation is reported');
  assert.match(thumbnailImpl,/PHImageErrorKey/,'PhotoKit image errors are propagated');
  assert.doesNotMatch(thumbnailImpl,/deleteAssets|deleteAssetCollections/,'thumbnail failure cannot delete originals');
