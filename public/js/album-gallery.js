@@ -43,6 +43,9 @@ function linkedPlacesLabel(assetId){
 function open(collection){
  if(!collection||typeof collection.id!=='string'||!collection.id)return;
  var closed=false,loading=false,offset=0,total=0,photos=[],known=new Set(),previewRequest=0;
+ // Bound concurrent PhotoKit->Cordova image payloads, especially when the
+ // originals must be fetched from iCloud. Do not launch queued work on close.
+ var thumbnailQueue=[],thumbnailActive=0,thumbnailLimit=4;
  var overlay=node('div',null,'nearby-photo-overlay nearby-album-overlay');
  overlay.setAttribute('role','dialog');
  overlay.setAttribute('aria-modal','true');
@@ -81,7 +84,7 @@ function open(collection){
  document.body.append(viewer);
  var index=-1;
  function hideViewer(){previewRequest++;viewer.hidden=true;picture.removeAttribute('src');}
- function dismiss(){closed=true;hideViewer();viewer.remove();overlay.remove();}
+ function dismiss(){closed=true;thumbnailQueue.length=0;hideViewer();viewer.remove();overlay.remove();}
  close.onclick=dismiss;
  viewClose.onclick=hideViewer;
  function show(position){
@@ -110,6 +113,21 @@ function open(collection){
   var delta=e.changedTouches[0].clientX-touchX;touchX=null;
   if(Math.abs(delta)>55)show(index+(delta<0?1:-1));
  },{passive:true});
+ function pumpThumbnails(){
+  if(closed){thumbnailQueue.length=0;return;}
+  while(thumbnailActive<thumbnailLimit&&thumbnailQueue.length){
+   var request=thumbnailQueue.shift();
+   thumbnailActive++;
+   (function(item){
+    nativeCall('thumbnail',[item.id]).then(function(payload){
+     if(closed)return;
+     if(!payload||typeof payload.dataUrl!=='string')throw Error('Miniature inaccessible');
+     item.img.src=payload.dataUrl;item.fallback.hidden=true;
+    }).catch(function(){if(!closed)item.fallback.textContent='Photo indisponible';})
+    .then(function(){thumbnailActive--;pumpThumbnails();});
+   })(request);
+  }
+ }
  function tile(id){
   var button=node('button',null,'nearby-album-tile');
   button.type='button';
@@ -120,11 +138,8 @@ function open(collection){
   button.append(img,fallback);grid.append(button);
   var position=photos.length-1;
   button.onclick=function(){show(position);};
-  nativeCall('thumbnail',[id]).then(function(payload){
-   if(closed)return;
-   if(!payload||typeof payload.dataUrl!=='string')throw Error('Miniature inaccessible');
-   img.src=payload.dataUrl;fallback.hidden=true;
-  }).catch(function(){if(!closed)fallback.textContent='Photo indisponible';});
+  thumbnailQueue.push({id:id,img:img,fallback:fallback});
+  pumpThumbnails();
  }
  function nextPage(){
   if(closed||loading)return Promise.resolve();
