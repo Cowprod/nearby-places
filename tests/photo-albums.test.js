@@ -128,6 +128,21 @@ const state={
  assert.doesNotMatch(thumbnailImpl,/deleteAssets|deleteAssetCollections/,'thumbnail failure cannot delete originals');
 
 
+ // A Photos authorization callback can arrive after the app backgrounds
+ // or after permission changes in Settings. Recheck before showing suggestions.
+ const nearbyImpl=native.split('- (void)nearby:(CDVInvokedUrlCommand*)cmd {')[1].split('- (void)thumbnail:')[0];
+ assert.ok(nearbyImpl,'native nearby-photo discovery is implemented');
+ assert.match(nearbyImpl,/cmd\.arguments\.count<3/,'missing arguments are rejected before subscripting');
+ assert.match(nearbyImpl,/respondsToSelector:@selector\(doubleValue\)/,'malformed arguments cannot invoke doubleValue on NSNull');
+ assert.match(nearbyImpl,/void \(\^runIfStillAuthorized\)\(void\)=\^\{/,'photo discovery rechecks permissions after the prompt');
+ assert.match(nearbyImpl,/dispatch_async\(dispatch_get_main_queue\(\),\^\{/,'authorization recheck uses the UIKit main queue');
+ assert.match(nearbyImpl,/applicationState!=UIApplicationStateActive/,'inactive application never starts a new photo search');
+ assert.match(nearbyImpl,/PHAuthorizationStatus current=\[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite\]/,'search uses current authorization');
+ assert.match(nearbyImpl,/current==PHAuthorizationStatusAuthorized\|\|current==PHAuthorizationStatusLimited/,'limited access permits suggestions');
+ assert.match(nearbyImpl,/if\(result==PHAuthorizationStatusAuthorized\|\|result==PHAuthorizationStatusLimited\)runIfStillAuthorized\(\)/,'prompt triggers a fresh check');
+ assert.ok(nearbyImpl.indexOf('PHAuthorizationStatus current=')<nearbyImpl.indexOf('query();return;'),'query runs after current access check');
+ assert.doesNotMatch(nearbyImpl,/deleteAssets|deleteAssetCollections|removeAssets/,'photo discovery never removes albums or originals');
+
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
  assert.match(native,/placeholderForCreatedAssetCollection/,'new album PhotoKit ID is persisted');
  assert.match(native,/PHAuthorizationStatusLimited/,'limited access explicitly handled');
