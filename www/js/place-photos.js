@@ -156,11 +156,22 @@ function capture(place){
 // no-op (without requesting Photos permission) if that collection has never
 // created an album. It never creates an empty album or removes its contents.
 function reconcileMemberships(state){
+ // A request queued while collections were persisted must not fall back to
+ // its old UI snapshot if the durable key disappears before execution.
+ // Callers without a saved collection store may still provide an explicit
+ // state (e.g. first-run/bootstrap), but queued persisted work fails closed.
+ var hadDurableCollections=localStorage.getItem('nearby-collections-v2')!==null;
+ // Similarly, a vanished association store is not proof that all photo links
+ // were removed. Do not report a successful reconciliation from missing data.
+ var hadDurableLinks=localStorage.getItem(KEY)!==null;
  // Read the durable collection state and photo links only when this task
  // reaches the front of the queue. A resume or delayed UI event may have
  // queued a snapshot before the user renamed a collection or changed links.
  return queuedAlbumTask(function(){
-  var latest=localStorage.getItem('nearby-collections-v2')===null?state:currentCollections();
+  if(hadDurableLinks&&localStorage.getItem(KEY)===null){
+   throw Error('Associations photo-lieu absentes après mise en file : synchronisation PhotoKit interrompue, aucune association supprimée.');
+  }
+  var latest=hadDurableCollections||localStorage.getItem('nearby-collections-v2')!==null?currentCollections():state;
   var jobs=albumJobs(latest),linkedIds=new Set(jobs.map(function(job){return job.id;}));
   var empty=latest.collections.filter(function(c){
    return c.id!=='collection-default'&&!linkedIds.has(c.id);
