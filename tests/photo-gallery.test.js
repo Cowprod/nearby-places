@@ -80,10 +80,13 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(overlay.removed,true);
  assert.equal(viewer.removed,true);
  assert.deepEqual(new Set(effects.map(x=>x.method)),new Set(['list','thumbnail','preview']),'gallery is strictly read-only');
- const absent=window.NearbyAlbumGallery.open({id:'never-created',name:'Sans photos'});
  window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>ok({exists:false,count:0,offset,ids:[]});
- // The initial page has already been scheduled; its native call happens in a microtask.
+ const absent=window.NearbyAlbumGallery.open({id:'never-created',name:'Sans photos'});
  await flush();
+ const emptyPanel=document.body.children.at(-2).children[0];
+ assert.match(emptyPanel.children[2].textContent,/Aucun album Photos/,'a never-created collection has no Photos album');
+ assert.equal(emptyPanel.children[3].children.length,0,'empty preview never generates photos');
+ assert.equal(emptyPanel.children[4].hidden,true,'an empty collection cannot paginate');
  absent.close();
  // A full-access failure is reported, and no local association is changed.
  window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok,fail)=>fail('Accès Photos refusé');
