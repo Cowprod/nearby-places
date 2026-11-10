@@ -316,6 +316,7 @@ function disable(){
  });
 }
 function setPlaces(places){catalogue=Array.isArray(places)?places.slice():[];if(ready)return sync();return Promise.resolve(false);}
+if(root.addEventListener)root.addEventListener('nearby-collections-changed',function(){if(ready)sync();});
 function wire(){
  var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop'), test=document.getElementById('notification-test'), input=document.getElementById('proximity-radius');
  if(input){input.value=String(radius());input.onchange=function(){setRadius(input.value);};}
