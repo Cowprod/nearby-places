@@ -313,6 +313,9 @@
   }
  }
  NSArray *identifiers=[[NSOrderedSet orderedSetWithArray:input] array];
+ // Only an explicit restore may replace an album deleted in Photos.
+ // Ordinary synchronization and resume never silently recreate it.
+ BOOL allowRestore=cmd.arguments.count>3&&[cmd.arguments[3] isKindOfClass:[NSNumber class]]&&[cmd.arguments[3] boolValue];
  [self withAlbumAuthorization:^{
   PHFetchResult<PHAsset *> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:identifiers options:nil];
   // A place can retain links to assets deleted in Photos. Never let one stale
@@ -320,6 +323,11 @@
   // Keep all place-photo links intact; Photos is the source of asset availability.
   NSUInteger unavailableCount=identifiers.count-assets.count;
   PHAssetCollection *existing=[self albumForCollection:collectionId];
+  NSString *previousAlbumId=[self albumLinks][collectionId];
+  if(!existing && [previousAlbumId isKindOfClass:[NSString class]] && previousAlbumId.length && !allowRestore){
+   [self replyTo:callback value:nil error:@"Album Photos supprimé manuellement : ouvrez la collection et utilisez Reconstruire l'album. Associations locales conservées."];
+   return;
+  }
   // An entirely stale set must not create an empty album. However, if an
   // album already exists, continue: its title may need repairing even when
   // every linked original has since been deleted from Photos.
@@ -391,8 +399,8 @@
  [self withAlbumAuthorization:^{
   PHAssetCollection *album=[self albumForCollection:collectionId];
   if(!album){
-   // An album may have been deleted manually in Photos. The next addToAlbum
-   // reconciles its linked originals; this read never clears the mapping.
+   // An album may have been deleted manually in Photos. Only the explicit
+   // Restore action may recreate it; this read never clears the mapping.
    [self replyTo:callback value:@{@"exists":@NO,@"count":@0,@"offset":@(offset),@"ids":@[]} error:nil];return;
   }
   PHFetchOptions *options=[PHFetchOptions new];
@@ -418,8 +426,9 @@
  [self withAlbumAuthorization:^{
   PHAssetCollection *album=[self albumForCollection:collectionId];
   if(!album){
-   [self storeAlbum:nil forCollection:collectionId];
-   [self replyTo:callback value:@{@"renamed":@NO} error:nil];return;
+   // Preserve the historical album identifier so a later resume cannot
+   // mistake a manually deleted album for one that was never created.
+   [self replyTo:callback value:@{@"renamed":@NO,@"missing":@YES} error:nil];return;
   }
   if([(album.localizedTitle?:@"") isEqualToString:newTitle]){
    [self replyTo:callback value:@{@"renamed":@NO,@"albumId":album.localIdentifier} error:nil];return;
