@@ -140,7 +140,7 @@ assert.equal(typeof lifecycleEvents.deviceready,'function','Cordova startup resy
 assert.equal(typeof lifecycleEvents.resume,'function','Cordova resume handler registered');
 lifecycleEvents.deviceready();
 lifecycleEvents.resume();
-assert.equal(albumResyncs,2,'startup and resume each retry pending PhotoKit album changes');
+assert.equal(albumResyncs,2,'startup and resume each retry pending PhotoKit album changes (feedback: '+feedback.textContent+')');
 // An unreadable collection store must not cause a stale cached membership
 // snapshot to be applied to PhotoKit on resume. Recovery should permit retry.
 const intactCollections=storage.getItem('nearby-collections-v2');
