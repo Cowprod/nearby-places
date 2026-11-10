@@ -58,7 +58,7 @@
     try { state = api.loadOrMigrate(localStorage, readPlaces()); }
     catch (error) { feedback.textContent = error.message; controls.hidden = true; return; }
     function persist() { api.save(localStorage, state); render(); if(typeof window.dispatchEvent==='function' && typeof Event==='function')window.dispatchEvent(new Event('nearby-collections-changed')); }
-    function syncPhotoAlbums(){if(window.NearbyPhotos&&window.NearbyPlacePhotos){window.NearbyPlacePhotos.syncMemberships(state).catch(function(error){feedback.textContent='Collections enregistrées, mais albums Photos non synchronisés : '+error.message;});}}
+    function syncPhotoAlbums(){if(window.NearbyPhotos&&window.NearbyPlacePhotos){window.NearbyPlacePhotos.syncMemberships(state).catch(function(error){var message=String(error&&error.message||error);console.warn('[Nearby Places] Synchronisation albums Photos : '+message);if(/Application en arrière-plan|synchronisation Photos reportée au retour/i.test(message)){if(feedback.textContent.indexOf('albums Photos non synchronisés')!==-1)feedback.textContent='';return;}feedback.textContent='Synchronisation des albums Photos impossible. Consultez le journal de diagnostic dans Réglages.';});}}
     function refresh() {
       try { state=api.loadOrMigrate(localStorage,readPlaces()); if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); }
       catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
