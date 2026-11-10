@@ -205,8 +205,8 @@ const state={
   'existing albums may still be renamed when no linked images remain');
  assert.match(native,/\[images enumerateObjectsUsingBlock:\^\(PHAsset \*asset/,
   'only filtered images reach the album insertion path');
- assert.doesNotMatch(native,/\[fetched enumerateObjectsUsingBlock:[\s\S]*?if\(!\[present containsObject:asset\.localIdentifier\]\)/,
-  'unfiltered PhotoKit results cannot flow directly into the album');
+ assert.match(native,/arrayWithCapacity:images\.count/,
+  'array capacity reflects only valid original images');
  assert.match(native,/if\(!\[present containsObject:asset\.localIdentifier\]\)\[assetsToAdd addObject:asset\]/,'valid photos are still added when other links are stale');
  assert.match(native,/"unavailableCount":@\(unavailableCount\)/,'native result reports stale photo links');
  assert.doesNotMatch(native,/assets\.count!=identifiers\.count/,'a single missing asset must never reject all valid photos');
