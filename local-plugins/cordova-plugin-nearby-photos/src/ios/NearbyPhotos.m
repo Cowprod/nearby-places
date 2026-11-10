@@ -168,7 +168,12 @@
   // The default remains backward-compatible with existing thumbnail calls.
   NSUInteger edge=320;
   if(cmd.arguments.count>1&&[cmd.arguments[1] isKindOfClass:[NSNumber class]]&&[cmd.arguments[1] integerValue]==1280)edge=1280;
-  PHImageRequestOptions *options=[PHImageRequestOptions new];options.networkAccessAllowed=NO;options.deliveryMode=PHImageRequestOptionsDeliveryModeHighQualityFormat;
+  PHImageRequestOptions *options=[PHImageRequestOptions new];
+  // A linked PHAsset may be represented only by an iCloud placeholder. Fetch
+  // the requested 320/1280 px rendition on demand; never change or duplicate
+  // its original, even when the device is offline or download fails.
+  options.networkAccessAllowed=YES;
+  options.deliveryMode=PHImageRequestOptionsDeliveryModeHighQualityFormat;
  // PhotoKit can send intermediate/degraded images, then a terminal result.
  // A Cordova callback is single-use: do not resolve it twice or treat a
  // degraded image as the definitive thumbnail. All terminal replies are
@@ -181,7 +186,12 @@
    if([info[PHImageCancelledKey] boolValue]){[self replyTo:callback value:nil error:@"Demande de miniature annulée"];return;}
    NSError *photoError=info[PHImageErrorKey];
    if(photoError){[self replyTo:callback value:nil error:photoError.localizedDescription];return;}
-   if(!image){[self replyTo:callback value:nil error:@"Miniature inaccessible ou non téléchargée"];return;}
+   if(!image){
+     NSString *reason=[info[PHImageResultIsInCloudKey] boolValue]?
+       @"Photo dans iCloud indisponible : vérifiez la connexion Internet et réessayez.":
+       @"Miniature inaccessible dans Photos.";
+     [self replyTo:callback value:nil error:reason];return;
+    }
    NSData *data=UIImageJPEGRepresentation(image,0.72);
    if(!data){[self replyTo:callback value:nil error:@"Encodage de miniature impossible"];return;}
    [self replyTo:callback value:@{@"dataUrl":[NSString stringWithFormat:@"data:image/jpeg;base64,%@",[data base64EncodedStringWithOptions:0]]} error:nil];
