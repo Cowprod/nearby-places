@@ -58,7 +58,28 @@
     try { state = api.loadOrMigrate(localStorage, readPlaces()); }
     catch (error) { feedback.textContent = error.message; controls.hidden = true; return; }
     function persist() { api.save(localStorage, state); render(); if(typeof window.dispatchEvent==='function' && typeof Event==='function')window.dispatchEvent(new Event('nearby-collections-changed')); }
-    function syncPhotoAlbums(){if(window.NearbyPhotos&&window.NearbyPlacePhotos){window.NearbyPlacePhotos.syncMemberships(state).catch(function(error){var message=String(error&&error.message||error);console.warn('[Nearby Places] Synchronisation albums Photos : '+message);if(/Application en arrière-plan|synchronisation Photos reportée au retour/i.test(message)){if(feedback.textContent.indexOf('albums Photos non synchronisés')!==-1)feedback.textContent='';return;}feedback.textContent='Synchronisation des albums Photos impossible. Consultez le journal de diagnostic dans Réglages.';});}}
+    // Cordova resume can precede UIApplicationStateActive. Retry one failed
+    // PhotoKit write after UIKit settles, with fresh persisted collection data.
+    var photoResumeRetry=null;
+    function syncPhotoAlbums(afterResumeRetry){
+      if(!window.NearbyPhotos||!window.NearbyPlacePhotos)return;
+      window.NearbyPlacePhotos.syncMemberships(state).catch(function(error){
+        var message=String(error&&error.message||error);
+        console.warn('[Nearby Places] Synchronisation albums Photos : '+message);
+        if(/Application en arrière-plan|synchronisation Photos reportée au retour/i.test(message)){
+          if(feedback.textContent.indexOf('albums Photos non synchronisés')!==-1)feedback.textContent='';
+          if(!afterResumeRetry&&photoResumeRetry===null&&typeof setTimeout==='function'){
+            photoResumeRetry=setTimeout(function(){
+              photoResumeRetry=null;
+              if(document.visibilityState==='hidden')return;
+              if(refresh())syncPhotoAlbums(true); // One retry; no periodic polling.
+            },800);
+          }
+          return;
+        }
+        feedback.textContent='Synchronisation des albums Photos impossible. Consultez le journal de diagnostic dans Réglages.';
+      });
+    }
     function refresh() {
       // A failed reload must not reconcile PhotoKit against the last cached
       // collection state: persisted memberships may be unreadable or obsolete.
@@ -375,8 +396,12 @@
     // Retry album reconciliation after Photos permission changes or an offline session.
     // The native layer compares membership and repairs missed renames without copying photos.
     if(typeof document.addEventListener==='function'){
-      document.addEventListener('deviceready',function(){if(refresh())syncPhotoAlbums();},false);
-      document.addEventListener('resume',function(){if(refresh())syncPhotoAlbums();},false);
+      function refreshAlbumsOnForeground(){
+        if(photoResumeRetry!==null&&typeof clearTimeout==='function'){clearTimeout(photoResumeRetry);photoResumeRetry=null;}
+        if(refresh())syncPhotoAlbums(false);
+      }
+      document.addEventListener('deviceready',refreshAlbumsOnForeground,false);
+      document.addEventListener('resume',refreshAlbumsOnForeground,false);
     }
     refresh();
   }
