@@ -220,7 +220,7 @@
     [self replyTo:callback value:nil error:@"Accès Photos modifié pendant le chargement : actualisez l'album après autorisation."];return;
    }
    if(cancelled){[self replyTo:callback value:nil error:@"Demande de miniature annulée"];return;}
-   if(terminalError){[self replyTo:callback value:nil error:terminalError.localizedDescription];return;}
+   if(terminalError){[self replyTo:callback value:nil error:terminalError.localizedDescription?:@"Lecture Photos impossible"];return;}
    if(!image){
      NSString *reason=[info[PHImageResultIsInCloudKey] boolValue]?
        @"Photo dans iCloud indisponible : vérifiez la connexion Internet et réessayez.":
