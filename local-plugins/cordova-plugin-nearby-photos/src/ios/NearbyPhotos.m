@@ -201,6 +201,12 @@
   dispatch_async(dispatch_get_main_queue(),^{
    if(finished||[info[PHImageResultIsDegradedKey] boolValue])return;
    finished=YES;
+   // PhotoKit may finish an iCloud fetch while the app is suspended.
+   // Never send a potentially large image payload to an inactive WebView.
+   // The gallery retries its read-only requests on the next resume.
+   if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive){
+    [self replyTo:callback value:nil error:@"Application en arrière-plan : actualisez l'album au retour."];return;
+   }
    // The user may revoke Photos access while an iCloud image is loading.
    PHAuthorizationStatus latestReadAccess=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
    if(latestReadAccess!=PHAuthorizationStatusAuthorized&&latestReadAccess!=PHAuthorizationStatusLimited){
