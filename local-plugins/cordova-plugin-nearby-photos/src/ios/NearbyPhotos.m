@@ -431,14 +431,14 @@
  // Without the first associated original, an album does not exist yet.
  // Do not ask for photo access or create an empty album for a preview.
  if(![self albumLinks][collectionId]){
-  [self replyTo:callback value:@{@"exists":@NO,@"count":@0,@"offset":@(offset),@"ids":@[]} error:nil];return;
+  [self replyTo:callback value:@{@"exists":@NO,@"reason":@"not-created",@"count":@0,@"offset":@(offset),@"ids":@[]} error:nil];return;
  }
  [self withAlbumAuthorization:^{
   PHAssetCollection *album=[self albumForCollection:collectionId];
   if(!album){
    // An album may have been deleted manually in Photos. Only the explicit
    // Restore action may recreate it; this read never clears the mapping.
-   [self replyTo:callback value:@{@"exists":@NO,@"count":@0,@"offset":@(offset),@"ids":@[]} error:nil];return;
+   [self replyTo:callback value:@{@"exists":@NO,@"reason":@"missing",@"count":@0,@"offset":@(offset),@"ids":@[]} error:nil];return;
   }
   PHFetchOptions *options=[PHFetchOptions new];
   options.predicate=[NSPredicate predicateWithFormat:@"mediaType == %d",PHAssetMediaTypeImage];
