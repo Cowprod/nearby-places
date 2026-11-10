@@ -16,6 +16,7 @@
 - Si l'utilisateur supprime manuellement l'album dans Photos, le prochain ajout à cette collection peut en recréer un.
 - Après désinstallation/réinstallation de l'app (NSUserDefaults effacé), les albums iOS existants peuvent devenir orphelins : ne pas réutiliser automatiquement un album portant le même titre.
 - Les mutations d'albums sont sérialisées dans l'interface Cordova pour éviter deux créations simultanées.
+- La réconciliation relit **les collections persistées et les liens photo-lieu au moment où son tour arrive dans la file**, et non au moment de l'événement `resume` : une opération PhotoKit lente ne doit pas réappliquer un ancien nom ou des associations devenues obsolètes. Une sauvegarde des collections illisible provoque un échec explicite sans écriture native ni effacement des liens.
 - Une collection liée à plusieurs lieux regroupe toutes leurs photos, sans répéter le même identifiant d'asset.
 - Les synchronisations répétées sont **idempotentes** : pour un album existant, PhotoKit lit ses membres et ajoute seulement les `PHAsset` manquants ; sans changement, aucune écriture n'est exécutée.
 - **Tolérance aux erreurs par collection** : une défaillance sur un album (droits, album devenu non modifiable) n'interrompt plus la synchronisation des autres collections ; les erreurs sont agrégées et restituées au client. Les associations locales ne sont jamais supprimées et la reprise (`resume`) peut retenter les albums en échec.
