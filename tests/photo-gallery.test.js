@@ -26,6 +26,21 @@ assert.match(native,/edge==1280\?PHImageContentModeAspectFit:PHImageContentModeA
  'full-screen preview preserves portrait and panorama ratios while grid thumbnails may crop');
 assert.match(native,/options\.networkAccessAllowed=YES/,'iCloud-only assets can load an on-demand thumbnail or preview');
 assert.match(native,/PHImageResultIsInCloudKey/,'a missing iCloud rendition has a specific offline diagnostic');
+// Photo access can change in Settings while an iCloud rendition is pending.
+// Native previews must reject revoked read permission without modifying links.
+const thumbNative=native.split('- (void)thumbnail:(CDVInvokedUrlCommand*)cmd {')[1].split('- (void)pick:')[0];
+assert.match(thumbNative,/PHAuthorizationStatus readAccess=\[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite\]/,
+ 'thumbnail checks current Photos read permission before fetching assets');
+assert.ok(thumbNative.indexOf('PHAuthorizationStatus readAccess=')<thumbNative.indexOf('fetchAssetsWithLocalIdentifiers:'),
+ 'permission check precedes the image fetch');
+assert.match(thumbNative,/readAccess!=PHAuthorizationStatusAuthorized&&readAccess!=PHAuthorizationStatusLimited/,
+ 'limited access is supported but add-only authorization is not treated as read access');
+assert.match(thumbNative,/PHAuthorizationStatus latestReadAccess=\[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite\]/,
+ 'PhotoKit completion rechecks permission after an iCloud download');
+assert.ok(thumbNative.indexOf('PHAuthorizationStatus latestReadAccess=')<thumbNative.indexOf('UIImageJPEGRepresentation('),
+ 'revoked authorization cannot return the loaded image');
+assert.doesNotMatch(thumbNative,/deleteAssets|deleteAssetCollections|removeAssets/,
+ 'permission errors never delete photographs');
 
 const calls=[];
 const bridgeModule={exports:{}};
