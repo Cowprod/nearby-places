@@ -2,11 +2,21 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const collectionsModel = require('../www/js/collections-model.js');
 
 const script = fs.readFileSync('www/js/proximity.js', 'utf8');
 
 function harness(allowNotifications = true, slowNative = false, initialStorage, sdkInitiallyEnabled = false, silentPermission = false) {
   const storage = initialStorage || new Map();
+  // Existing proximity scenarios use a genuinely assigned place. Their former
+  // implicit assumption that every catalogue record was eligible is no longer
+  // valid: places without an active collection must be excluded.
+  if(!storage.has('nearby-collections-v2')){
+    const collections=collectionsModel.initial([
+      {id:'tokyo-station'}, {id:'disabled'}, {id:'visited'}
+    ]);
+    storage.set('nearby-collections-v2',JSON.stringify(collections));
+  }
   const scheduled = [];
   const callbacks = {};
   const pendingPermissionCallbacks = [];
@@ -35,7 +45,8 @@ function harness(allowNotifications = true, slowNative = false, initialStorage, 
       schedule(payload) { scheduled.push(payload); },
       on(name,callback) { callbacks['notification.'+name] = callback; }
     } } } },
-    BackgroundGeolocation: sdk
+    BackgroundGeolocation: sdk,
+    NearbyCollections: collectionsModel
   };
   const document = {
     getElementById(id) { return elements[id] ||= { textContent: '', onclick: null }; },
