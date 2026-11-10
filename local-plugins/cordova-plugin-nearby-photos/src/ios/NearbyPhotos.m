@@ -179,7 +179,10 @@
  // degraded image as the definitive thumbnail. All terminal replies are
  // serialized on the main queue so concurrent PhotoKit callbacks cannot race.
  __block BOOL finished=NO;
- [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(edge,edge) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){
+ // Grid tiles may be cropped, but full-screen previews must preserve the
+ // original aspect ratio (portraits and panoramas alike).
+ PHImageContentMode mode=edge==1280?PHImageContentModeAspectFit:PHImageContentModeAspectFill;
+ [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(edge,edge) contentMode:mode options:options resultHandler:^(UIImage *image,NSDictionary *info){
   dispatch_async(dispatch_get_main_queue(),^{
    if(finished||[info[PHImageResultIsDegradedKey] boolValue])return;
    finished=YES;
