@@ -164,13 +164,17 @@
 - (void)thumbnail:(CDVInvokedUrlCommand*)cmd {
  NSString *callback=cmd.callbackId;NSString *identifier=cmd.arguments.firstObject;if(![identifier isKindOfClass:[NSString class]]||!identifier.length){[self replyTo:callback value:nil error:@"Identifiant photo invalide"];return;}PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:@[identifier] options:nil];PHAsset *asset=assets.firstObject;
  if(!asset){[self replyTo:callback value:nil error:@"Photo introuvable ou accès limité"];return;}
- PHImageRequestOptions *options=[PHImageRequestOptions new];options.networkAccessAllowed=NO;options.deliveryMode=PHImageRequestOptionsDeliveryModeHighQualityFormat;
+ // 320 px for the album grid; up to 1280 px for a tapped preview.
+  // The default remains backward-compatible with existing thumbnail calls.
+  NSUInteger edge=320;
+  if(cmd.arguments.count>1&&[cmd.arguments[1] isKindOfClass:[NSNumber class]]&&[cmd.arguments[1] integerValue]==1280)edge=1280;
+  PHImageRequestOptions *options=[PHImageRequestOptions new];options.networkAccessAllowed=NO;options.deliveryMode=PHImageRequestOptionsDeliveryModeHighQualityFormat;
  // PhotoKit can send intermediate/degraded images, then a terminal result.
  // A Cordova callback is single-use: do not resolve it twice or treat a
  // degraded image as the definitive thumbnail. All terminal replies are
  // serialized on the main queue so concurrent PhotoKit callbacks cannot race.
  __block BOOL finished=NO;
- [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(320,320) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){
+ [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(edge,edge) contentMode:PHImageContentModeAspectFill options:options resultHandler:^(UIImage *image,NSDictionary *info){
   dispatch_async(dispatch_get_main_queue(),^{
    if(finished||[info[PHImageResultIsDegradedKey] boolValue])return;
    finished=YES;
@@ -350,6 +354,45 @@
    if(success&&newAlbumId)[self storeAlbum:newAlbumId forCollection:collectionId];
    [self replyTo:callback value:success?@{@"collectionId":collectionId,@"albumId":newAlbumId?:(existing.localIdentifier?:@""),@"count":@(assetsToAdd.count),@"unavailableCount":@(unavailableCount)}:nil error:success?nil:(error.localizedDescription?:@"Modification de l’album impossible")];
   }];
+ } callback:callback];
+}
+// Read-only paginated preview of the PhotoKit album bound to this application
+// collection. Reading never creates an empty album, removes an asset, or
+// modifies the durable collection -> PHAssetCollection.localIdentifier mapping.
+- (void)listAlbumAssets:(CDVInvokedUrlCommand *)cmd {
+ NSString *callback=cmd.callbackId;
+ NSString *collectionId=cmd.arguments.count>0&&[cmd.arguments[0] isKindOfClass:[NSString class]]?cmd.arguments[0]:@"";
+ NSNumber *offsetArg=cmd.arguments.count>1&&[cmd.arguments[1] isKindOfClass:[NSNumber class]]?cmd.arguments[1]:nil;
+ NSNumber *limitArg=cmd.arguments.count>2&&[cmd.arguments[2] isKindOfClass:[NSNumber class]]?cmd.arguments[2]:nil;
+ if(!collectionId.length||!offsetArg||!limitArg||offsetArg.doubleValue<0||offsetArg.doubleValue>1000000||
+    offsetArg.doubleValue!=(double)offsetArg.unsignedIntegerValue||limitArg.doubleValue<1||limitArg.doubleValue>48||
+    limitArg.doubleValue!=(double)limitArg.unsignedIntegerValue){
+  [self replyTo:callback value:nil error:@"Paramètres de galerie Photos invalides"];return;
+ }
+ NSUInteger offset=offsetArg.unsignedIntegerValue,limit=limitArg.unsignedIntegerValue;
+ // Without the first associated original, an album does not exist yet.
+ // Do not ask for photo access or create an empty album for a preview.
+ if(![self albumLinks][collectionId]){
+  [self replyTo:callback value:@{@"exists":@NO,@"count":@0,@"offset":@(offset),@"ids":@[]} error:nil];return;
+ }
+ [self withAlbumAuthorization:^{
+  PHAssetCollection *album=[self albumForCollection:collectionId];
+  if(!album){
+   // An album may have been deleted manually in Photos. The next addToAlbum
+   // reconciles its linked originals; this read never clears the mapping.
+   [self replyTo:callback value:@{@"exists":@NO,@"count":@0,@"offset":@(offset),@"ids":@[]} error:nil];return;
+  }
+  PHFetchOptions *options=[PHFetchOptions new];
+  options.predicate=[NSPredicate predicateWithFormat:@"mediaType == %d",PHAssetMediaTypeImage];
+  options.sortDescriptors=@[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
+  PHFetchResult<PHAsset *> *assets=[PHAsset fetchAssetsInAssetCollection:album options:options];
+  NSMutableArray<NSString *> *ids=[NSMutableArray array];
+  NSUInteger end=MIN(assets.count,offset+limit);
+  for(NSUInteger index=offset;index<end;index++){
+   NSString *assetId=[assets objectAtIndex:index].localIdentifier;
+   if(assetId.length)[ids addObject:assetId];
+  }
+  [self replyTo:callback value:@{@"exists":@YES,@"count":@(assets.count),@"offset":@(offset),@"ids":ids} error:nil];
  } callback:callback];
 }
 - (void)renameAlbum:(CDVInvokedUrlCommand *)cmd {
