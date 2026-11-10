@@ -140,7 +140,10 @@ const state={
  assert.match(nearbyImpl,/PHAuthorizationStatus current=\[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite\]/,'search uses current authorization');
  assert.match(nearbyImpl,/current==PHAuthorizationStatusAuthorized\|\|current==PHAuthorizationStatusLimited/,'limited access permits suggestions');
  assert.match(nearbyImpl,/if\(result==PHAuthorizationStatusAuthorized\|\|result==PHAuthorizationStatusLimited\)runIfStillAuthorized\(\)/,'prompt triggers a fresh check');
- assert.ok(nearbyImpl.indexOf('PHAuthorizationStatus current=')<nearbyImpl.indexOf('query();return;'),'query runs after current access check');
+ assert.match(nearbyImpl,/dispatch_async\(dispatch_get_global_queue\(QOS_CLASS_USER_INITIATED,0\),\^\{/,'large PhotoKit searches do not block UIKit');
+ assert.match(nearbyImpl,/PHAuthorizationStatus latest=\[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite\]/,'read authorization is checked again on worker queue');
+ assert.match(nearbyImpl,/latest!=PHAuthorizationStatusAuthorized&&latest!=PHAuthorizationStatusLimited/,'revoked access is rejected before the worker scans assets');
+ assert.ok(nearbyImpl.indexOf('PHAuthorizationStatus latest=')<nearbyImpl.indexOf('query();'),'query runs only after worker rechecks permission');
  assert.doesNotMatch(nearbyImpl,/deleteAssets|deleteAssetCollections|removeAssets/,'photo discovery never removes albums or originals');
 
  assert.match(native,/fetchAssetCollectionsWithLocalIdentifiers/,'albums are resolved through stable PhotoKit IDs');
