@@ -156,16 +156,17 @@ function capture(place){
 // no-op (without requesting Photos permission) if that collection has never
 // created an album. It never creates an empty album or removes its contents.
 function reconcileMemberships(state){
- return Promise.resolve().then(function(){
-  var jobs=albumJobs(state),linkedIds=new Set(jobs.map(function(job){return job.id;}));
-  var empty=state.collections.filter(function(c){
+ // Read the durable collection state and photo links only when this task
+ // reaches the front of the queue. A resume or delayed UI event may have
+ // queued a snapshot before the user renamed a collection or changed links.
+ return queuedAlbumTask(function(){
+  var latest=localStorage.getItem('nearby-collections-v2')===null?state:currentCollections();
+  var jobs=albumJobs(latest),linkedIds=new Set(jobs.map(function(job){return job.id;}));
+  var empty=latest.collections.filter(function(c){
    return c.id!=='collection-default'&&!linkedIds.has(c.id);
   });
-  // One queue task for the entire reconciliation. Previously an explicit
-  // rename could run between two album additions, allowing an older batch
-  // to restore a stale title after the user's newer rename completed.
-  return queuedAlbumTask(function(){
-   var failures=[];
+  // Keep the entire reconciliation (including renames) under one queue task.
+  var failures=[];
    return addToAlbumsDirect(jobs).catch(function(error){failures.push(error.message);}).then(function(){
     return empty.reduce(function(previous,c){
      return previous.then(function(){
@@ -177,7 +178,6 @@ function reconcileMemberships(state){
    }).then(function(){
     if(failures.length)throw Error('Synchronisation PhotoKit incomplète : '+failures.join(' ; '));
    });
-  });
  });
 }
 window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:reconcileMemberships};
