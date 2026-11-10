@@ -246,6 +246,26 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(permissionReads,3,'foreground return refreshes the existing album');
  permissions.close();
  assert.equal(listeners.has('resume'),false,'closed galleries unsubscribe from resume');
+ // Slow iCloud reads from a discarded generation cannot freeze a fresh page.
+ const stalled=[],current=[];let generation='stalled';
+ window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>ok({exists:true,count:8,offset,ids:Array.from({length:8},(_,i)=>'fresh-'+i).slice(offset,offset+limit)});
+ window.NearbyPhotos.thumbnail=(id,ok)=>(generation==='stalled'?stalled:current).push(ok);
+ const refreshed=window.NearbyAlbumGallery.open({id:'stalled-icloud',name:'iCloud'});
+ await flush();
+ const refreshedPanel=document.body.children.at(-2).children[0];
+ assert.equal(stalled.length,4,'first generation starts at most four requests');
+ generation='current';
+ refreshedPanel.children[7].onclick();await flush();
+ assert.equal(current.length,4,'new generation can start four requests while older iCloud calls are stalled');
+ const newTile=refreshedPanel.children[3].children[0];
+ stalled[0]({dataUrl:'data:obsolete'});await flush();
+ assert.equal(newTile.children[0].src,'','stale result cannot paint a refreshed tile');
+ assert.equal(current.length,4,'stale completion never releases a new-generation slot');
+ current[0]({dataUrl:'data:fresh'});await flush();
+ assert.equal(newTile.children[0].src,'data:fresh','fresh thumbnail is displayed');
+ assert.equal(current.length,5,'fresh completion releases one slot for the next image');
+ refreshed.close();
+ assert.equal(stored.get('nearby-place-photo-links-v1'),originalLinks,'refresh cannot change photo associations');
  // Old in-flight pagination must not contaminate an updated album snapshot.
  const pendingPages=[];
  window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>pendingPages.push(ok);
