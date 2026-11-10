@@ -61,7 +61,9 @@ function open(collection){
  more.type='button';more.hidden=true;
  var error=node('p','','muted');
  error.setAttribute('role','status');
- dialog.append(heading,close,count,grid,more,error);
+ var restore=node('button','Reconstruire l’album depuis les photos associées','btn btn-secondary');
+ restore.type='button';restore.hidden=true;
+ dialog.append(heading,close,count,grid,more,error,restore);
  overlay.append(dialog);
  document.body.append(overlay);
  var viewer=node('div',null,'nearby-album-viewer');
@@ -141,6 +143,21 @@ function open(collection){
   thumbnailQueue.push({id:id,img:img,fallback:fallback});
   pumpThumbnails();
  }
+ // Opening the gallery remains strictly read-only. A manually deleted album
+ // can only be recreated after the user explicitly presses Restore.
+ restore.onclick=function(){
+  if(closed||restore.disabled||!root.NearbyPlacePhotos||typeof root.NearbyPlacePhotos.restoreCollectionAlbum!=='function')return;
+  restore.disabled=true;error.textContent='Reconstruction de l’album Photos…';
+  root.NearbyPlacePhotos.restoreCollectionAlbum(collection.id).then(function(result){
+   if(closed)return;
+   offset=0;total=0;photos.length=0;known.clear();grid.replaceChildren();
+   return nextPage().then(function(){
+    if(!closed&&result&&result.unavailableCount>0)
+     error.textContent='Album restauré avec les photos disponibles ; '+result.unavailableCount+' photo(s) introuvable(s). Associations conservées.';
+   });
+  }).catch(function(err){if(!closed)error.textContent='Reconstruction impossible : '+err.message;})
+  .then(function(){if(!closed)restore.disabled=false;});
+ };
  function nextPage(){
   if(closed||loading)return Promise.resolve();
   loading=true;more.disabled=true;error.textContent='';
@@ -151,8 +168,15 @@ function open(collection){
    total=payload.count;
    if(payload.exists===false){
     count.textContent='Aucun album Photos pour cette collection (création à la première photo associée).';
-    more.hidden=true;return;
+    more.hidden=true;
+    restore.hidden=true;
+    if(root.NearbyPlacePhotos&&typeof root.NearbyPlacePhotos.hasLinkedAlbumPhotos==='function'){
+     try{restore.hidden=!root.NearbyPlacePhotos.hasLinkedAlbumPhotos(collection.id);}
+     catch(e){error.textContent='Associations locales indisponibles : '+e.message;}
+    }
+    return;
    }
+   restore.hidden=true;
    payload.ids.forEach(function(id){
     if(typeof id!=='string'||!id||known.has(id))return;
     known.add(id);photos.push(id);tile(id);
