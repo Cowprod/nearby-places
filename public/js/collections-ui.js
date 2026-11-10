@@ -12,6 +12,50 @@
       return Array.isArray(value) ? value : [];
     } catch (error) { throw new Error('Liste de lieux illisible : migration interrompue'); }
   }
+
+  // Single action bar used by Collections and the nearby map.
+  function createPlaceActionBar(place, options) {
+    options = options || {};
+    var bar = el('div', null, 'collection-place-actions');
+    function action(tag, icon, label, callback, danger) {
+      var control = el(tag, null, 'collection-icon-button' + (danger ? ' collection-danger' : ''));
+      control.title = label;
+      control.setAttribute('aria-label', label);
+      control.append(el('i', null, 'fa-solid ' + icon));
+      if (tag === 'button') { control.type = 'button'; control.onclick = callback; }
+      return control;
+    }
+    var modes = window.NearbyNavigator && window.NearbyNavigator.modes() || ['walking', 'transit'];
+    modes.forEach(function(mode) {
+      var generic = mode === 'generic', transit = mode === 'transit';
+      var label = generic ? 'Itinéraire vers ' : transit ? 'Transports en commun vers ' : 'Itinéraire à pied vers ';
+      var link = action('a', generic ? 'fa-diamond-turn-right' : transit ? 'fa-train-subway' : 'fa-person-walking', label + (place.name || 'Lieu'));
+      link.href = window.NearbyNavigator && window.NearbyNavigator.appleUrl
+        ? window.NearbyNavigator.appleUrl(place, mode)
+        : 'https://maps.apple.com/?daddr=' + encodeURIComponent(place.latitude + ',' + place.longitude) + '&dirflg=' + (transit ? 'r' : 'w');
+      link.target = '_blank'; link.rel = 'noopener noreferrer';
+      link.addEventListener('click', function(event) {
+        if (window.NearbyNavigator) window.NearbyNavigator.launch(place, mode, event);
+      });
+      bar.append(link);
+    });
+    bar.append(
+      action('button', 'fa-camera', 'Prendre une photo de ' + place.name, function() {
+        if (window.NearbyPlacePhotos) window.NearbyPlacePhotos.capture(place);
+      }),
+      action('button', 'fa-images', 'Album photo de ' + place.name, function() {
+        if (window.NearbyPlacePhotos) window.NearbyPlacePhotos.open(place, false, options.collectionName || '');
+      }),
+      action('button', 'fa-pen', 'Modifier ' + place.name, options.onEdit || function() {}),
+      action('button', place.visited ? 'fa-bell' : 'fa-bell-slash',
+        place.visited ? 'Réactiver les alertes de ' + place.name : 'Marquer ' + place.name + ' comme visité',
+        options.onVisited || function() {}),
+      action('button', 'fa-trash', 'Supprimer ' + place.name,
+        options.onDelete || function() {}, true)
+    );
+    return bar;
+  }
+  window.NearbyPlaceActionBar = { create: createPlaceActionBar };
   function init() {
     var api = window.NearbyCollections;
     if (!api) return;
@@ -280,15 +324,7 @@
               }
             };
             editor.append(nameInput,commentInput,categorySelect,saveEdit,cancelEdit);
-            var actions=el('div',null,'collection-place-actions');
-            var visited=el('button',null,'collection-icon-button');
-            visited.append(el('i',null,place.visited?'fa-solid fa-bell':'fa-solid fa-bell-slash'));
-            visited.setAttribute('aria-label',place.visited?'Réactiver les alertes de '+place.name:'Marquer '+place.name+' comme visité');
-            visited.onclick=function(){try{window.NearbyPlaceActions.setVisited(place.id,!place.visited);feedback.textContent='Statut du lieu actualisé';}catch(error){feedback.textContent=error.message;}};
-            var trash=el('button',null,'collection-icon-button collection-danger');
-            trash.append(el('i',null,'fa-solid fa-trash'));
-            trash.setAttribute('aria-label','Supprimer '+place.name+' de cette collection');
-            trash.onclick=function(){
+            function deleteFromCollection(){
               var others=state.memberships.filter(function(x){return x.placeId===place.id && x.collectionId!==collection.id;});
               var permanent=others.length===0;
               var message=permanent
@@ -321,27 +357,13 @@
                   callback:function(confirmed){if(confirmed)performDelete();}
                 });
               }else if(window.confirm(message)){performDelete();}
-            };
-            var directions=el('a',null,'collection-icon-button');
-            directions.href='https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=w&q='+encodeURIComponent(place.name||'Lieu');
-            directions.target='_blank';directions.rel='noopener noreferrer';
-            directions.setAttribute('aria-label','Plans : itinéraire à pied vers '+place.name);
-            directions.title='Plans';
-            directions.append(el('i',null,'fa-solid fa-person-walking'));
-            var transit=el('a',null,'collection-icon-button');
-            transit.href='https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg=r&q='+encodeURIComponent(place.name||'Lieu');
-            transit.target='_blank';transit.rel='noopener noreferrer';
-            transit.setAttribute('aria-label','Plans : itinéraire en transports en commun vers '+place.name);
-            transit.title='Transports en commun';
-            transit.append(el('i',null,'fa-solid fa-train-subway'));
-            var editPlace=el('button',null,'collection-icon-button');
-            editPlace.setAttribute('aria-label','Modifier '+place.name);
-            editPlace.title='Modifier le lieu';
-            editPlace.append(el('i',null,'fa-solid fa-pen'));
-            editPlace.onclick=function(){editor.hidden=!editor.hidden;};
-            var cameraPhoto=el('button',null,'collection-icon-button');cameraPhoto.type='button';cameraPhoto.title='Prendre une photo';cameraPhoto.setAttribute('aria-label','Prendre une photo de '+place.name);cameraPhoto.append(el('i',null,'fa-solid fa-camera'));cameraPhoto.onclick=function(){if(window.NearbyPlacePhotos)window.NearbyPlacePhotos.capture(place);};
-            var albumPhoto=el('button',null,'collection-icon-button');albumPhoto.type='button';albumPhoto.title='Album du lieu';albumPhoto.setAttribute('aria-label','Album photo de '+place.name);albumPhoto.append(el('i',null,'fa-solid fa-images'));albumPhoto.onclick=function(){if(window.NearbyPlacePhotos)window.NearbyPlacePhotos.open(place,false,collection.name);};
-            actions.append(directions,transit,cameraPhoto,albumPhoto,editPlace,visited,trash);
+            }
+            var actions=createPlaceActionBar(place,{
+              collectionName:collection.name,
+              onEdit:function(){editor.hidden=!editor.hidden;},
+              onVisited:function(){try{window.NearbyPlaceActions.setVisited(place.id,!place.visited);feedback.textContent='Statut du lieu actualisé';}catch(error){feedback.textContent=error.message;}},
+              onDelete:deleteFromCollection
+            });
             item.append(actions,editor);placeList.append(item);
           }
           });
