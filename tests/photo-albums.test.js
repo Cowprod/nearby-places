@@ -217,6 +217,34 @@ const state={
  };
  await Promise.all([window.NearbyPlacePhotos.syncMemberships(state),window.NearbyPlacePhotos.syncMemberships(state)]);
  assert.equal(peak,1,'PhotoKit changes are serialized across concurrent sync requests');
+
+ // A slow PhotoKit album write must not let an older reconciliation overwrite
+ // a later collection rename. Cover both nonempty and already-created empty
+ // albums, which use different native operations.
+ const ordered=[];
+ window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{
+  ordered.push('add:'+id+':'+title);
+  if(id==='c-1')setTimeout(()=>ok({collectionId:id}),8);
+  else ok({collectionId:id});
+ };
+ window.NearbyPhotos.renameAlbum=(id,title,ok)=>{
+  ordered.push('rename:'+id+':'+title);
+  ok({renamed:true});
+ };
+ const previousSync=window.NearbyPlacePhotos.syncMemberships(state);
+ await new Promise(resolve=>setTimeout(resolve,2)); // c-1 is still awaiting PhotoKit.
+ const laterRename=window.NearbyPlacePhotos.renameCollection('c-2','Tokyo nouveau');
+ const laterEmptyRename=window.NearbyPlacePhotos.renameCollection('c-3','Paris nouveau');
+ await Promise.all([previousSync,laterRename,laterEmptyRename]);
+ assert.ok(ordered.indexOf('add:c-2:Nearby Places — Tokyo')<
+  ordered.indexOf('rename:c-2:Nearby Places — Tokyo nouveau'),
+  'later user rename must run after the prior complete batch');
+ assert.ok(ordered.indexOf('rename:c-3:Nearby Places — Paris')<
+  ordered.indexOf('rename:c-3:Nearby Places — Paris nouveau'),
+  'empty-album reconciliation must finish before a later explicit rename');
+ assert.equal(ordered.at(-1),'rename:c-3:Nearby Places — Paris nouveau',
+  'the last requested album title remains the final native mutation');
+
  // Album permission errors must never erase associations kept in localStorage.
  const beforeLinks=localStorage.getItem('nearby-place-photo-links-v1');
  window.NearbyPhotos.addToAlbum=(id,title,ids,ok,fail)=>fail('Accès complet à Photos requis');
