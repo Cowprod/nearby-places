@@ -343,11 +343,16 @@
  // Ordinary synchronization and resume never silently recreate it.
  BOOL allowRestore=cmd.arguments.count>3&&[cmd.arguments[3] isKindOfClass:[NSNumber class]]&&[cmd.arguments[3] boolValue];
  [self withAlbumAuthorization:^{
-  PHFetchResult<PHAsset *> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:identifiers options:nil];
-  // A place can retain links to assets deleted in Photos. Never let one stale
-  // identifier prevent the remaining valid originals from joining their album.
-  // Keep all place-photo links intact; Photos is the source of asset availability.
-  NSUInteger unavailableCount=identifiers.count-assets.count;
+  PHFetchResult<PHAsset *> *fetched=[PHAsset fetchAssetsWithLocalIdentifiers:identifiers options:nil];
+  // Only image PHAssets belong in a Nearby Places photo album. Stale,
+  // inaccessible and non-image identifiers must not create an album or
+  // prevent valid original photographs from being linked.
+  NSMutableArray<PHAsset *> *images=[NSMutableArray array];
+  [fetched enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger index,BOOL *stop){
+   if(asset.mediaType==PHAssetMediaTypeImage)[images addObject:asset];
+  }];
+  // Keep the place-photo links unchanged when PhotoKit rejects an identifier.
+  NSUInteger unavailableCount=identifiers.count-images.count;
   PHAssetCollection *existing=[self albumForCollection:collectionId];
   NSString *previousAlbumId=[self albumLinks][collectionId];
   if(!existing && [previousAlbumId isKindOfClass:[NSString class]] && previousAlbumId.length && !allowRestore){
@@ -357,7 +362,7 @@
   // An entirely stale set must not create an empty album. However, if an
   // album already exists, continue: its title may need repairing even when
   // every linked original has since been deleted from Photos.
-  if(!assets.count && !existing){
+  if(!images.count && !existing){
    [self replyTo:callback value:@{@"collectionId":collectionId,@"albumId":@"",@"count":@0,@"unavailableCount":@(unavailableCount)} error:nil];
    return;
   }
@@ -371,8 +376,8 @@
     if(member.localIdentifier)[present addObject:member.localIdentifier];
    }];
   }
-  NSMutableArray<PHAsset *> *assetsToAdd=[NSMutableArray arrayWithCapacity:assets.count];
-  [assets enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger index,BOOL *stop){
+  NSMutableArray<PHAsset *> *assetsToAdd=[NSMutableArray arrayWithCapacity:images.count];
+  [images enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger index,BOOL *stop){
    if(![present containsObject:asset.localIdentifier])[assetsToAdd addObject:asset];
   }];
   if(existing){
