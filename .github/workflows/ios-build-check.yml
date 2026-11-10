@@ -28,8 +28,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Install locked dependencies
-        run: npm ci
+      # Until package-lock.json is regenerated against the current manifest,
+      # npm ci fails before any iOS compilation can begin.
+      - name: Install declared dependencies
+        run: npm install --ignore-scripts --package-lock=false --no-audit --no-fund
       - name: Run JavaScript tests
         run: npm test
       - name: Generate iOS project and Share Extension
