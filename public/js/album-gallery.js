@@ -43,6 +43,9 @@ function linkedPlacesLabel(assetId){
 function open(collection){
  if(!collection||typeof collection.id!=='string'||!collection.id)return;
  var closed=false,loading=false,offset=0,total=0,photos=[],known=new Set(),previewRequest=0;
+ // Each gallery reload invalidates old page and thumbnail callbacks. Changes
+ // to iOS Photos permissions or a manual album restore cannot mix two snapshots.
+ var readGeneration=0,resumeTimer=null;
  // Bound concurrent PhotoKit->Cordova image payloads, especially when the
  // originals must be fetched from iCloud. Do not launch queued work on close.
  var thumbnailQueue=[],thumbnailActive=0,thumbnailLimit=4;
@@ -63,7 +66,9 @@ function open(collection){
  error.setAttribute('role','status');
  var restore=node('button','Reconstruire l’album depuis les photos associées','btn btn-secondary');
  restore.type='button';restore.hidden=true;
- dialog.append(heading,close,count,grid,more,error,restore);
+ var refresh=node('button','Actualiser les photos','btn btn-secondary');
+ refresh.type='button';
+ dialog.append(heading,close,count,grid,more,error,restore,refresh);
  overlay.append(dialog);
  document.body.append(overlay);
  var viewer=node('div',null,'nearby-album-viewer');
@@ -86,7 +91,12 @@ function open(collection){
  document.body.append(viewer);
  var index=-1;
  function hideViewer(){previewRequest++;viewer.hidden=true;picture.removeAttribute('src');}
- function dismiss(){closed=true;thumbnailQueue.length=0;hideViewer();viewer.remove();overlay.remove();}
+ function dismiss(){
+  closed=true;readGeneration++;thumbnailQueue.length=0;
+  if(resumeTimer!==null){clearTimeout(resumeTimer);resumeTimer=null;}
+  if(typeof document.removeEventListener==='function')document.removeEventListener('resume',onResume,false);
+  hideViewer();viewer.remove();overlay.remove();
+ }
  close.onclick=dismiss;
  viewClose.onclick=hideViewer;
  function show(position){
@@ -122,10 +132,10 @@ function open(collection){
    thumbnailActive++;
    (function(item){
     nativeCall('thumbnail',[item.id]).then(function(payload){
-     if(closed)return;
+     if(closed||item.generation!==readGeneration)return;
      if(!payload||typeof payload.dataUrl!=='string')throw Error('Miniature inaccessible');
      item.img.src=payload.dataUrl;item.fallback.hidden=true;
-    }).catch(function(){if(!closed)item.fallback.textContent='Photo indisponible';})
+    }).catch(function(){if(!closed&&item.generation===readGeneration)item.fallback.textContent='Photo indisponible';})
     .then(function(){thumbnailActive--;pumpThumbnails();});
    })(request);
   }
@@ -140,30 +150,29 @@ function open(collection){
   button.append(img,fallback);grid.append(button);
   var position=photos.length-1;
   button.onclick=function(){show(position);};
-  thumbnailQueue.push({id:id,img:img,fallback:fallback});
+  thumbnailQueue.push({id:id,img:img,fallback:fallback,generation:readGeneration});
   pumpThumbnails();
  }
  // Opening the gallery remains strictly read-only. A manually deleted album
  // can only be recreated after the user explicitly presses Restore.
  restore.onclick=function(){
   if(closed||restore.disabled||!root.NearbyPlacePhotos||typeof root.NearbyPlacePhotos.restoreCollectionAlbum!=='function')return;
-  restore.disabled=true;error.textContent='Reconstruction de l’album Photos…';
+  restore.disabled=true;refresh.disabled=true;error.textContent='Reconstruction de l’album Photos…';
   root.NearbyPlacePhotos.restoreCollectionAlbum(collection.id).then(function(result){
    if(closed)return;
-   offset=0;total=0;photos.length=0;known.clear();grid.replaceChildren();
-   return nextPage().then(function(){
+   return reload().then(function(){
     if(!closed&&result&&result.unavailableCount>0)
      error.textContent='Album restauré avec les photos disponibles ; '+result.unavailableCount+' photo(s) introuvable(s). Associations conservées.';
    });
   }).catch(function(err){if(!closed)error.textContent='Reconstruction impossible : '+err.message;})
-  .then(function(){if(!closed)restore.disabled=false;});
+  .then(function(){if(!closed){restore.disabled=false;refresh.disabled=false;}});
  };
  function nextPage(){
   if(closed||loading)return Promise.resolve();
   loading=true;more.disabled=true;error.textContent='';
-  var requested=offset;
+  var requested=offset,generation=readGeneration;
   return nativeCall('listAlbumAssets',[collection.id,requested,24]).then(function(payload){
-   if(closed)return;
+   if(closed||generation!==readGeneration)return;
    if(!payload||!Array.isArray(payload.ids)||!Number.isSafeInteger(payload.count)||payload.count<0)throw Error('Réponse PhotoKit invalide');
    total=payload.count;
    if(payload.exists===false){
@@ -186,9 +195,29 @@ function open(collection){
    if(total===0)count.textContent='Cet album ne contient aucune photo.';
    more.hidden=offset>=total||payload.ids.length===0;
   }).catch(function(err){
-   if(!closed){error.textContent='Lecture de l’album impossible : '+err.message;more.hidden=false;}
-  }).then(function(){loading=false;more.disabled=false;});
+   if(!closed&&generation===readGeneration){error.textContent='Lecture de l’album impossible : '+err.message;more.hidden=false;}
+  }).then(function(){if(!closed&&generation===readGeneration){loading=false;more.disabled=false;}});
  }
+ // Read-only retry after a permission change, iCloud network failure or Photos
+ // edit. A stale in-flight page cannot repopulate the new gallery snapshot.
+ function reload(){
+  if(closed)return Promise.resolve();
+  readGeneration++;loading=false;offset=0;total=0;
+  photos.length=0;known.clear();thumbnailQueue.length=0;
+  hideViewer();grid.replaceChildren();more.hidden=true;restore.hidden=true;
+  count.textContent='Actualisation de l’album…';
+  return nextPage();
+ }
+ refresh.onclick=function(){if(!closed&&!restore.disabled)return reload();};
+ function onResume(){
+  if(closed)return;
+  if(resumeTimer!==null)clearTimeout(resumeTimer);
+  // iOS may emit resume before PhotoKit is ready to read the new permissions.
+  resumeTimer=setTimeout(function(){
+   resumeTimer=null;if(!closed&&!restore.disabled)reload();
+  },800);
+ }
+ if(typeof document.addEventListener==='function')document.addEventListener('resume',onResume,false);
  more.onclick=nextPage;
  nextPage();
  return {close:dismiss};
