@@ -191,7 +191,8 @@ function restoreCollectionAlbum(collectionId){
  return queuedAlbumTask(function(){
   var job=linkedAlbumJob(collectionId);
   if(!job)throw Error('Aucune photo associée à cette collection : aucun album vide ne sera créé.');
-  return call('addToAlbum',[job.id,job.title,job.ids]).then(function(result){
+  // Explicit user action: do not let ordinary background reconciliation restore deleted albums.
+  return call('restoreAlbum',[job.id,job.title,job.ids]).then(function(result){
    if(!result||typeof result.albumId!=='string'||!result.albumId){
     throw Error('Aucune photo associée actuellement accessible dans Photos. Les liens locaux sont conservés.');
    }
