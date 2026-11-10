@@ -21,12 +21,13 @@ function harness(preference,installed){
  vm.runInNewContext(source,{window,localStorage,document,Event:function(){}});
  return {api:window.NearbyNavigator,window,navigations,alerts};
 }
-const first=harness('google',{google_maps:true,citymapper:true});
+const first=harness('google',{apple_maps:true,google_maps:true,citymapper:true,waze:true});
 first.api.available((found,detected)=>{
  assert.equal(detected,true);
  assert.equal(found.apple,true);
  assert.equal(found.google,true,'Google Maps must be recognized');
  assert.equal(found.citymapper,true,'Citymapper must be recognized');
+ assert.equal(found.waze,true,'Waze must be recognized');
 });
 assert.equal(first.api.preference(),'google');
 first.api.launch({latitude:35.66,longitude:139.7,name:'Tokyo'},'walking');
@@ -44,7 +45,11 @@ second.navigations[0].options.errorCallback();
 assert.equal(second.window.location.href,'original','a failed native launch must not silently switch to Apple Maps');
 assert.match(second.alerts[0],/Impossible d’ouvrir Citymapper/,'the chosen app failure must be reported');
 
-assert.match(source,/isAppAvailable/,'recheck apps not found in availableApps');
-assert.match(source,/Seules les applications détectées/,'the menu only lists installed apps');
+first.window.launchnavigator.availableApps=(ok,fail)=>fail('Class LaunchNavigatorPlugin not found');
+first.api.available((found,detected,error)=>{
+ assert.equal(detected,false,'bridge failure is not a successful empty detection');
+ assert.deepEqual(Object.keys(found),[],'no application is assumed installed after native failure');
+ assert.match(error,/LaunchNavigatorPlugin/,'native detection error is preserved');
+});
 assert.match(source,/id:'waze'/,'Waze is an explicit navigation option');
 console.log('PASS navigator: detected apps including Waze, routing selection and visible launch errors');

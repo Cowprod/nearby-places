@@ -10,40 +10,15 @@ function modes(){return app().modes?['walking','transit']:['generic'];}
 function setPreference(id){if(!catalog().some(function(a){return a.id===id;}))return;try{localStorage.setItem(KEY,id);}catch(_){}window.dispatchEvent(new Event('nearby-navigation-changed'));}
 function appleUrl(place,mode){return 'https://maps.apple.com/?daddr='+encodeURIComponent(place.latitude+','+place.longitude)+'&dirflg='+(mode==='transit'?'r':'w')+'&q='+encodeURIComponent(place.name||'Lieu');}
 function available(callback){
- var nav=plugin(),items=catalog(),fallback={apple:true};
- // The UI never hides a user's installed navigation app just because iOS
- // cannot query a custom URI scheme (or deviceready has not fired yet).
- if(!nav){callback(fallback,false);return;}
- function normalize(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
- function detected(installed,a){
-  if(!installed)return false;
-  var keys=[a.id,a.native,nav.APP&&nav.APP[a.native],a.nativeValue,a.label];
-  if(Array.isArray(installed))return installed.some(function(value){return keys.some(function(k){return normalize(k)===normalize(value);});});
-  return Object.keys(installed).some(function(key){
-   return !!installed[key]&&keys.some(function(k){return normalize(k)===normalize(key);});
-  });
- }
- function done(installed){
-  var result={apple:true},pending=0,complete=false;
-  items.filter(function(a){return a.id!=='apple'&&nav.APP&&nav.APP[a.native];}).forEach(function(a){
-   result[a.id]=detected(installed,a);
-  });
-  var unresolved=items.filter(function(a){return a.id!=='apple'&&nav.APP&&nav.APP[a.native]&&!result[a.id];});
-  if(!unresolved.length||typeof nav.isAppAvailable!=='function'){callback(result,true);return;}
-  pending=unresolved.length;
-  unresolved.forEach(function(a){
-   function finish(isAvailable){
-    if(complete)return;
-    result[a.id]=result[a.id]||!!isAvailable;
-    if(--pending===0){complete=true;callback(result,true);}
-   }
-   try{nav.isAppAvailable(nav.APP[a.native],function(ok){finish(ok);},function(){finish(false);});}
-   catch(_){finish(false);}
-  });
- }
- if(typeof nav.availableApps==='function'){
-  try{nav.availableApps(done,function(){done(null);});}catch(_){done(null);}
- }else done(null);
+ var nav=plugin(),items=catalog();
+ function failed(error){callback({},false,String(error||'Module de navigation indisponible.'));}
+ if(!nav||typeof nav.availableApps!=='function'){failed('Module de navigation indisponible.');return;}
+ try{nav.availableApps(function(installed){
+  if(!installed||typeof installed!=='object'||Array.isArray(installed)){failed('Réponse du module de navigation invalide.');return;}
+  var result={};
+  items.forEach(function(a){result[a.id]=!!(nav.APP&&installed[nav.APP[a.native]]===true);});
+  callback(result,true);
+ },failed);}catch(error){failed(error);}
 }
 function launch(place,mode,event){
  if(event)event.preventDefault();
@@ -62,7 +37,7 @@ function launch(place,mode,event){
  catch(error){fallback(error);}
 }
 function setup(){var host=document.querySelector('.nearby-appearance-settings');if(!host||!host.parentNode||document.querySelector('.nearby-navigation-settings'))return;var section=document.createElement('section');section.className='nearby-navigation-settings';section.innerHTML='<h2>Application de navigation</h2><label for="nearby-navigation-app">Application utilisée pour les itinéraires</label><select id="nearby-navigation-app"></select><p class="muted" id="nearby-navigation-help">Recherche des applications installées…</p><p class="muted">Si l’application accepte les modes, les icônes piéton et transports sont affichées. Sinon, une seule icône d’itinéraire apparaît. En cas d’erreur, un message indique pourquoi l’application choisie ne s’ouvre pas.</p>';host.insertAdjacentElement('afterend',section);var select=section.querySelector('select'),help=section.querySelector('#nearby-navigation-help');
-function fill(found,detected){var current=preference();select.replaceChildren();catalog().forEach(function(a){var option=document.createElement('option');option.value=a.id;option.textContent=a.label+(a.id!=='apple'&&!found[a.id]?' (installation non détectée)':'');select.append(option);});select.value=current;select.onchange=function(){setPreference(select.value);};help.textContent=detected?'Les applications non détectées restent sélectionnables : leur ouverture vérifiera leur disponibilité.':(window.cordova&&window.cordova.platformId?'Détection native indisponible : sélection possible, ouverture à vérifier sur cet iPhone.':'Détection en attente du démarrage du module natif.');}
+function fill(found,detected,error){var current=preference();select.replaceChildren();catalog().forEach(function(a){var option=document.createElement('option');option.value=a.id;option.textContent=a.label+(!detected?' (présence non vérifiée)':(!found[a.id]?' (installation non détectée)':''));select.append(option);});select.value=current;select.onchange=function(){setPreference(select.value);};help.textContent=detected?'Applications installées vérifiées sur cet appareil.':'Échec de la détection : '+error;}
 available(fill);document.addEventListener('deviceready',function(){available(fill);},false);document.addEventListener('resume',function(){available(fill);},false);if(window.cordova&&window.cordova.platformId&&plugin())available(fill);
 }
 window.NearbyNavigator={launch:launch,appleUrl:appleUrl,available:available,preference:preference,modes:modes,setup:setup};

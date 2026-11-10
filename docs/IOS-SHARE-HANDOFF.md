@@ -59,6 +59,16 @@ masqués durablement lors des actualisations suivantes.
 
 ## Contrôles
 
+La détection des applications de navigation dépend du code natif LaunchNavigator,
+pas seulement de sa déclaration dans config.xml. Le hook rétablit les entrées de
+compilation à partir des `source-file` iOS des manifestes installés de
+LaunchNavigator, ActionSheet et Dialogs. `npm run ios:verify` vérifie leur présence
+exactement une fois dans App et leur absence de ShareExt, et teste la réparation
+des entrées manquantes. Ne pas chercher un hypothétique `LaunchNavigator.m` :
+la version 5.0.7 utilise notamment `LaunchNavigatorPlugin.m` et `LN_LaunchNavigator.m`.
+Une erreur du pont natif doit être affichée comme erreur de détection ; elle ne
+prouve pas que les applications de navigation sont absentes.
+
 Sur Linux/devMCP, avec Node et les dépendances installées : `npm test`.
 Ce test ne prouve pas le comportement natif d'iOS.
 

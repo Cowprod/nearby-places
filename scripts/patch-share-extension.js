@@ -73,6 +73,37 @@ function buildFileForPath(project, suffix) {
   return null;
 }
 
+function ensureNavigationSources(root, project, appTarget) {
+  const {PluginInfo} = require('cordova-common');
+  const phase = sourcePhase(project, appTarget);
+  const references = project.hash.project.objects.PBXFileReference;
+  const buildFiles = project.hash.project.objects.PBXBuildFile;
+  for (const pluginID of ['uk.co.workingedge.phonegap.plugin.launchnavigator', 'cordova-plugin-actionsheet', 'cordova-plugin-dialogs']) {
+    const plugin = new PluginInfo(path.join(root, 'plugins', pluginID));
+    for (const source of plugin.getSourceFiles('ios')) {
+      if (source.framework) continue;
+      const suffix = pluginID+'/'+path.basename(source.src);
+      if (!fs.existsSync(path.join(root,'platforms/ios/App/Plugins',suffix))) {
+        throw Error('Navigation native source missing: '+suffix+'. Restore Cordova plugins before building.');
+      }
+      const reference = Object.entries(references).find(([id, value]) =>
+        !id.endsWith('_comment') && String(value.path || '').replace(/^"|"$/g,'') === suffix);
+      if (!reference) throw Error('Navigation Xcode source reference missing: '+suffix);
+      let build = Object.entries(buildFiles).find(([id,value]) => !id.endsWith('_comment') && value.fileRef === reference[0]);
+      if (!build) {
+        const id = project.generateUuid();
+        const name = path.basename(source.src);
+        buildFiles[id] = {isa:'PBXBuildFile',fileRef:reference[0],fileRef_comment:name};
+        if (source.compilerFlags) buildFiles[id].settings = {COMPILER_FLAGS:JSON.stringify(source.compilerFlags)};
+        buildFiles[id+'_comment'] = name+' in Sources';
+        build = [id,buildFiles[id]];
+      }
+      phase.files = phase.files.filter(item => item.value !== build[0]);
+      phase.files.push({value:build[0],comment:path.basename(source.src)+' in Sources'});
+    }
+  }
+}
+
 function repairSourcePhases(project, appTarget, extensionTarget) {
   const buildFiles = project.hash.project.objects.PBXBuildFile;
   const appSources = sourcePhase(project, appTarget);
@@ -84,9 +115,6 @@ function repairSourcePhases(project, appTarget, extensionTarget) {
 
   const resolver = buildFileForPath(project, 'cordova-plugin-nearby-resolver/NearbyResolver.m');
   const photos = buildFileForPath(project, 'cordova-plugin-nearby-photos/NearbyPhotos.m');
-  // LaunchNavigator uses a Swift source on some plugin versions; do not
-  // hard-code a nonexistent Objective-C filename and abort Cordova prepare.
-  const navigator = buildFileForPath(project, 'LaunchNavigator.m');
   if (!photos) throw Error('NearbyPhotos.m is not registered in the iOS Xcode project. Reinstall the local cordova-plugin-nearby-photos before building.');
   const controller = buildFileForPath(project, 'ShareViewController.m');
   if (!resolver || !controller) throw Error('Required native source reference missing from Xcode project');
@@ -96,11 +124,6 @@ function repairSourcePhases(project, appTarget, extensionTarget) {
   // Never leave PhotoKit registered in config.xml but absent from the App binary.
   appSources.files = appSources.files.filter(item => item.value !== photos.value);
   appSources.files.push(photos);
-  // Cordova navigation must be compiled into App, never into ShareExt.
-  if (navigator) {
-    appSources.files = appSources.files.filter(item => item.value !== navigator.value);
-    appSources.files.push(navigator);
-  }
   // Cordova can accidentally attach every application plugin .m to ShareExt.
   // ShareExt has no Cordova framework: compile only its own controller.
   const references = project.hash.project.objects.PBXFileReference;
@@ -165,7 +188,7 @@ function ensureAppPhotoPrivacy(root) {
   }
   // canOpenURL needs explicit schemes to detect Google Maps and Citymapper
   // on iOS even if the apps are installed; keep existing schemes intact.
-  const schemes=['comgooglemaps','citymapper','transit','moovit','here-location'];
+  const schemes=['comgooglemaps','citymapper','waze','transit','moovit','here-route'];
   const existing=Array.isArray(current.LSApplicationQueriesSchemes)?current.LSApplicationQueriesSchemes.slice():[];
   for(const scheme of schemes){if(!existing.includes(scheme)){existing.push(scheme);dirty=true;}}
   current.LSApplicationQueriesSchemes=existing;
@@ -185,6 +208,7 @@ function ensureProject(root, metadata) {
   const app = targetEntry(project, 'Nearby Places') || targetEntry(project, 'App');
   if (!app) throw Error('Main iOS app target missing');
   repairSourcePhases(project, app.target, extension.target);
+  ensureNavigationSources(root, project, app.target);
   // Existing Cordova installations may cache the local plugin.xml and omit
   // AVFoundation even after a Git update. Keep the camera permission API
   // linked in the generated App target without requiring platform removal.
@@ -311,4 +335,4 @@ function prepareHook(context) {
 
 // Cordova only invokes function exports; named helpers remain available to tests
 // and to the local plugin hook.
-module.exports = Object.assign(prepareHook, {APP_GROUP, NATIVE_FILES, patch, sync, syncResolver, syncNearbyPhotos});
+module.exports = Object.assign(prepareHook, {APP_GROUP, NATIVE_FILES, patch, sync, syncResolver, syncNearbyPhotos, ensureNavigationSources});

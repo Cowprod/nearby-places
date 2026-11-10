@@ -57,7 +57,7 @@ for (const name of ['ShareViewController.h','ShareViewController.m','MainInterfa
   assert.equal(read('platforms/ios/ShareExtension/'+name),read('native/ios/'+name),name+' generated from Git source');
 }
 const appInfo=plist.parse(read('platforms/ios/App/App-Info.plist'));
-for(const scheme of ['comgooglemaps','citymapper']){
+for(const scheme of ['comgooglemaps','citymapper','waze']){
  assert.ok((appInfo.LSApplicationQueriesSchemes||[]).includes(scheme),scheme+' canOpenURL query is allowed');
 }
 for(const key of ['NSCameraUsageDescription','NSPhotoLibraryUsageDescription','NSPhotoLibraryAddUsageDescription']){
@@ -123,8 +123,28 @@ function sourceComments(entry){
 }
 const appSources=sourceComments(app), extensionSources=sourceComments(extension);
 assert.equal(appSources.filter(name=>name==='NearbyPhotos.m in Sources').length,1,'PhotoKit native plugin compiled once by App');
-// LaunchNavigator may be implemented in Swift; validate its installed Cordova manifest separately.
-assert.equal(extensionSources.some(name=>name==='LaunchNavigator.m in Sources'||name==='NearbyPhotos.m in Sources'),false,'navigation and photos excluded from ShareExt');
+const navigationPlugins=['uk.co.workingedge.phonegap.plugin.launchnavigator','cordova-plugin-actionsheet','cordova-plugin-dialogs'];
+const {PluginInfo}=require('cordova-common');
+const navigationNames=navigationPlugins.flatMap(id=>new PluginInfo(path.join(root,'plugins',id)).getSourceFiles('ios').filter(file=>!file.framework).map(file=>path.basename(file.src)+' in Sources'));
+for(const name of navigationNames){
+ assert.equal(appSources.filter(item=>item===name).length,1,name+' is actually compiled by App');
+ assert.equal(extensionSources.includes(name),false,name+' is excluded from ShareExt');
+}
+// Reproduce the broken generated project: file references survive but build
+// records disappear. Repair must restore them once, without duplicate entries.
+const appPhase=project.hash.project.objects.PBXSourcesBuildPhase[app[1].buildPhases.find(item=>item.comment==='Sources').value];
+const buildFiles=project.hash.project.objects.PBXBuildFile;
+for(const item of appPhase.files.filter(item=>navigationNames.includes(item.comment))){
+ delete buildFiles[item.value];delete buildFiles[item.value+'_comment'];
+}
+appPhase.files=appPhase.files.filter(item=>!navigationNames.includes(item.comment));
+const {ensureNavigationSources}=require('../scripts/patch-share-extension.js');
+ensureNavigationSources(root,project,app[1]);
+ensureNavigationSources(root,project,app[1]);
+for(const name of navigationNames){
+ assert.equal(sourceComments(app).filter(item=>item===name).length,1,'repair restores '+name+' exactly once');
+}
+assert.equal(extensionSources.includes('NearbyPhotos.m in Sources'),false,'photos excluded from ShareExt');
 assert.equal(appSources.filter(name=>name==='NearbyResolver.m in Sources').length,1,'resolver compiled once by App');
 assert.equal(extensionSources.filter(name=>name==='ShareViewController.m in Sources').length,1,'controller compiled once by ShareExt');
 assert.equal(extensionSources.some(name=>name==='NearbyResolver.m in Sources'),false,'resolver excluded from ShareExt');
