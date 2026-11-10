@@ -41,6 +41,12 @@ assert.ok(thumbNative.indexOf('PHAuthorizationStatus latestReadAccess=')<thumbNa
  'revoked authorization cannot return the loaded image');
 assert.doesNotMatch(thumbNative,/deleteAssets|deleteAssetCollections|removeAssets/,
  'permission errors never delete photographs');
+const deliveryGuard=thumbNative.indexOf('finished=YES;');
+const backgroundGuard=thumbNative.indexOf('if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive)',deliveryGuard);
+assert.ok(deliveryGuard>=0&&backgroundGuard>deliveryGuard&&backgroundGuard<thumbNative.indexOf('UIImageJPEGRepresentation('),
+ 'an iCloud thumbnail completing after app suspension is rejected before creating its WebView payload');
+assert.match(thumbNative.slice(backgroundGuard),/actualisez l'album au retour/,
+ 'interrupted iCloud downloads instruct the user to retry after returning to the foreground');
 
 const calls=[];
 const bridgeModule={exports:{}};
@@ -196,6 +202,23 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(started.length,5,'closing the album cancels queued thumbnail launches');
  assert.equal(window.localStorage.getItem('nearby-place-photo-links-v1'),originalLinks,
    'throttling thumbnails does not alter photo-place associations');
+ // A PhotoKit failure has an actionable, sanitized tile label. In particular,
+ // iCloud-only originals and revoked Photos access are not reported alike.
+ window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>ok({exists:true,count:1,offset,ids:['photo-0']});
+ window.NearbyPhotos.thumbnail=(id,ok,fail)=>fail('Photo dans iCloud indisponible : vérifiez la connexion Internet');
+ const cloudError=window.NearbyAlbumGallery.open({id:'cloud-offline',name:'Hors ligne'});
+ await flush();
+ const cloudTile=document.body.children.at(-2).children[0].children[3].children[0];
+ assert.match(cloudTile.children[1].textContent,/iCloud indisponible/,'offline iCloud assets show a retryable diagnostic');
+ cloudError.close();
+ window.NearbyPhotos.thumbnail=(id,ok,fail)=>fail('Accès Photos modifié pendant le chargement');
+ const permissionError=window.NearbyAlbumGallery.open({id:'permission-changed',name:'Accès'});
+ await flush();
+ const permissionTile=document.body.children.at(-2).children[0].children[3].children[0];
+ assert.match(permissionTile.children[1].textContent,/Accès Photos à vérifier/,'revoked authorization gives a distinct diagnostic');
+ permissionError.close();
+ assert.equal(stored.get('nearby-place-photo-links-v1'),originalLinks,
+   'thumbnail errors do not rewrite any durable photo-place associations');
  // iOS permission can change in Settings while this gallery is visible.
  // Retrying must be read-only and retain local photo-place associations.
  let allowed=false,permissionReads=0;
