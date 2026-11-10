@@ -20,7 +20,7 @@
     var panel = el('section', null, 'collections-panel');
     panel.id = 'collections-panel';
     var title = el('h2', 'Collections');
-    var notice = el('p', 'Tous les lieux sont surveillés, quelle que soit leur collection.', 'muted');
+    var notice = el('p', 'Seuls les lieux appartenant à une collection active peuvent être surveillés.', 'muted');
     var list = el('div');
     list.className = 'collection-list';
     var detailView = el('section', null, 'collection-detail');
@@ -71,7 +71,7 @@
       if(typeof placeId!=='string'||!placeId)return;
       refresh();
       var matches=state.memberships.filter(function(m){return m.placeId===placeId&&m.collectionId!=='collection-default';});
-      if(!matches.length){feedback.textContent='Lieu de la notification introuvable dans les collections';return;}
+      if(!matches.length){feedback.textContent='';return;}
       var target=matches[0];
       selectedCollectionId=target.collectionId;
       highlightedPlaceId=placeId;
