@@ -132,6 +132,8 @@
       catch(error){feedback.textContent='Actualisation impossible : '+error.message;return false;}
     }
     window.addEventListener('nearby-places-changed',refresh);
+    // Rebuild the shared action bar when the selected navigation app changes.
+    window.addEventListener('nearby-navigation-changed',render);
     function openNotificationPlace(placeId){
       if(typeof placeId!=='string'||!placeId)return;
       refresh();
