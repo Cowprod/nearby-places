@@ -199,7 +199,14 @@
  PHImageContentMode mode=edge==1280?PHImageContentModeAspectFit:PHImageContentModeAspectFill;
  [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:CGSizeMake(edge,edge) contentMode:mode options:options resultHandler:^(UIImage *image,NSDictionary *info){
   dispatch_async(dispatch_get_main_queue(),^{
-   if(finished||[info[PHImageResultIsDegradedKey] boolValue])return;
+   if(finished)return;
+   // Even a degraded callback can be terminal if PhotoKit cancelled the
+   // request or reports an error (for example, a failed iCloud download).
+   // Never strand the Cordova callback waiting for a final image that will
+   // not arrive. Ignore only nonterminal degraded previews.
+   BOOL cancelled=[info[PHImageCancelledKey] boolValue];
+   NSError *terminalError=info[PHImageErrorKey];
+   if([info[PHImageResultIsDegradedKey] boolValue]&&!cancelled&&!terminalError)return;
    finished=YES;
    // PhotoKit may finish an iCloud fetch while the app is suspended.
    // Never send a potentially large image payload to an inactive WebView.
@@ -212,9 +219,8 @@
    if(latestReadAccess!=PHAuthorizationStatusAuthorized&&latestReadAccess!=PHAuthorizationStatusLimited){
     [self replyTo:callback value:nil error:@"Accès Photos modifié pendant le chargement : actualisez l'album après autorisation."];return;
    }
-   if([info[PHImageCancelledKey] boolValue]){[self replyTo:callback value:nil error:@"Demande de miniature annulée"];return;}
-   NSError *photoError=info[PHImageErrorKey];
-   if(photoError){[self replyTo:callback value:nil error:photoError.localizedDescription];return;}
+   if(cancelled){[self replyTo:callback value:nil error:@"Demande de miniature annulée"];return;}
+   if(terminalError){[self replyTo:callback value:nil error:terminalError.localizedDescription];return;}
    if(!image){
      NSString *reason=[info[PHImageResultIsInCloudKey] boolValue]?
        @"Photo dans iCloud indisponible : vérifiez la connexion Internet et réessayez.":
