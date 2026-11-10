@@ -301,6 +301,47 @@ const state={
  await window.NearbyPlacePhotos.syncMemberships(state);
  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),preservedLinks);
 
+ // A slow earlier album operation must never make a later queued sync
+ // replay old collection titles or photo links. Read the latest saved state
+ // when its queued turn begins, not when a resume event requests the work.
+ const refreshedWrites=[];
+ let resumeHeldAlbum,signalHeldAlbum;
+ const heldAlbumStarted=new Promise(resolve=>{signalHeldAlbum=resolve;});
+ let holdFirst=true;
+ window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>{
+  refreshedWrites.push({id,title,ids:Array.from(assetIds)});
+  if(id==='c-1'&&holdFirst){
+   holdFirst=false;
+   resumeHeldAlbum=()=>ok({collectionId:id});
+   signalHeldAlbum();
+  }else ok({collectionId:id});
+ };
+ const originalSync=window.NearbyPlacePhotos.syncMemberships(state);
+ await heldAlbumStarted;
+ const queuedSync=window.NearbyPlacePhotos.syncMemberships(state);
+ const latestState=JSON.parse(JSON.stringify(state));
+ latestState.collections.find(c=>c.id==='c-1').name='Tokyo actuel';
+ localStorage.setItem('nearby-collections-v2',JSON.stringify(latestState));
+ localStorage.setItem('nearby-place-photo-links-v1',JSON.stringify({
+  place1:['asset-C'],place2:['asset-A'],place3:[]
+ }));
+ resumeHeldAlbum();
+ await Promise.all([originalSync,queuedSync]);
+ assert.deepEqual(refreshedWrites.filter(x=>x.id==='c-1').at(-1),
+  {id:'c-1',title:'Nearby Places — Tokyo actuel',ids:['asset-C','asset-A']},
+  'queued reconciliation must use the current persisted collection name and links');
+ assert.deepEqual(refreshedWrites.filter(x=>x.id==='c-2').at(-1),
+  {id:'c-2',title:'Nearby Places — Tokyo',ids:['asset-C']},
+  'queued synchronization must not re-add photos unlinked before it began');
+ const callsBeforeCorruption=refreshedWrites.length;
+ localStorage.setItem('nearby-collections-v2','{truncated');
+ await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),/illisibles/,
+  'corrupt persisted collections must not fall back to an obsolete memory snapshot');
+ assert.equal(refreshedWrites.length,callsBeforeCorruption,
+  'corrupt persisted state must not initiate any native PhotoKit writes');
+ localStorage.setItem('nearby-place-photo-links-v1',preservedLinks);
+ values.delete('nearby-collections-v2');
+
  // A damaged association store must not masquerade as a successful empty
  // synchronization. No PhotoKit mutation, cleanup or overwrite is permitted.
  const validLinks=localStorage.getItem('nearby-place-photo-links-v1');
