@@ -162,7 +162,22 @@
  else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"];
 }
 - (void)thumbnail:(CDVInvokedUrlCommand*)cmd {
- NSString *callback=cmd.callbackId;NSString *identifier=cmd.arguments.firstObject;if(![identifier isKindOfClass:[NSString class]]||!identifier.length){[self replyTo:callback value:nil error:@"Identifiant photo invalide"];return;}PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:@[identifier] options:nil];PHAsset *asset=assets.firstObject;
+ NSString *callback=cmd.callbackId;
+ NSString *identifier=cmd.arguments.firstObject;
+ if(![identifier isKindOfClass:[NSString class]]||!identifier.length){
+  [self replyTo:callback value:nil error:@"Identifiant photo invalide"];return;
+ }
+ // Thumbnail and preview reads must not reuse an earlier permission decision.
+ // Camera capture may have add-only authorization, which is not read access.
+ if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive){
+  [self replyTo:callback value:nil error:@"Application en arrière-plan : actualisez l'album au retour."];return;
+ }
+ PHAuthorizationStatus readAccess=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+ if(readAccess!=PHAuthorizationStatusAuthorized&&readAccess!=PHAuthorizationStatusLimited){
+  [self replyTo:callback value:nil error:@"Accès aux photos indisponible : autorisez la lecture dans les réglages iOS puis actualisez l'album."];return;
+ }
+ PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:@[identifier] options:nil];
+ PHAsset *asset=assets.firstObject;
  if(!asset){[self replyTo:callback value:nil error:@"Photo introuvable ou accès limité"];return;}
  // 320 px for the album grid; up to 1280 px for a tapped preview.
   // The default remains backward-compatible with existing thumbnail calls.
@@ -186,6 +201,11 @@
   dispatch_async(dispatch_get_main_queue(),^{
    if(finished||[info[PHImageResultIsDegradedKey] boolValue])return;
    finished=YES;
+   // The user may revoke Photos access while an iCloud image is loading.
+   PHAuthorizationStatus latestReadAccess=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+   if(latestReadAccess!=PHAuthorizationStatusAuthorized&&latestReadAccess!=PHAuthorizationStatusLimited){
+    [self replyTo:callback value:nil error:@"Accès Photos modifié pendant le chargement : actualisez l'album après autorisation."];return;
+   }
    if([info[PHImageCancelledKey] boolValue]){[self replyTo:callback value:nil error:@"Demande de miniature annulée"];return;}
    NSError *photoError=info[PHImageErrorKey];
    if(photoError){[self replyTo:callback value:nil error:photoError.localizedDescription];return;}
