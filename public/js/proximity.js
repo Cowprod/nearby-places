@@ -109,12 +109,23 @@ function registerNotificationEvents(){
  }catch(error){logEvent('notification-events','écoute native indisponible : '+String(error));}
 }
 function notificationId(id){var n=7;for(var i=0;i<id.length;i++)n=(Math.imul(n,31)+id.charCodeAt(i))|0;return (n>>>0)%2000000000+1;}
+function eligibleCollectionPlaceIds(){
+  // Fail closed if memberships are unreadable: never notify an orphaned place.
+  try{
+    var raw=localStorage.getItem('nearby-collections-v2');
+    if(!raw)return new Set();
+    var data=JSON.parse(raw);
+    if(!root.NearbyCollections || !root.NearbyCollections.validate(data))return new Set();
+    var available=new Set(data.collections.filter(function(c){return c.active!==false && c.enabled!==false;}).map(function(c){return c.id;}));
+    return new Set(data.memberships.filter(function(m){return available.has(m.collectionId);}).map(function(m){return m.placeId;}));
+  }catch(error){logEvent('collections-error','appartenances illisibles : '+String(error));return new Set();}
+}
 function currentPlaces(){
  // A restored catalogue may contain duplicate identifiers. Keep all local data,
  // but submit each valid identifier only once to the native geofence manager.
- var seen=new Set();
+ var seen=new Set(), eligible=eligibleCollectionPlaceIds();
  return catalogue.filter(function(p){
-  if(!p || typeof p.id!=='string' || !p.id || p.visited ||
+  if(!p || typeof p.id!=='string' || !p.id || !eligible.has(p.id) || p.visited ||
     (p.alert && p.alert.enabled===false) ||
     !Number.isFinite(p.latitude) || Math.abs(p.latitude)>90 ||
     !Number.isFinite(p.longitude) || Math.abs(p.longitude)>180 ||
@@ -305,6 +316,7 @@ function disable(){
  });
 }
 function setPlaces(places){catalogue=Array.isArray(places)?places.slice():[];if(ready)return sync();return Promise.resolve(false);}
+if(root.addEventListener)root.addEventListener('nearby-collections-changed',function(){if(ready)sync();});
 function wire(){
  var start=document.getElementById('proximity-start'), stop=document.getElementById('proximity-stop'), test=document.getElementById('notification-test'), input=document.getElementById('proximity-radius');
  if(input){input.value=String(radius());input.onchange=function(){setRadius(input.value);};}
