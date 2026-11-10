@@ -371,6 +371,17 @@
           editButton.setAttribute('aria-label', 'Modifier ' + collection.name);
           editButton.title = 'Modifier le nom et la description';
           editButton.onclick = function () { details.open = !details.open; };
+          var showPhotos=el('button',null,'collection-edit collection-album-preview-button');
+          showPhotos.type='button';
+          showPhotos.title='Prévisualiser les photos de '+collection.name;
+          showPhotos.setAttribute('aria-label','Voir l’album Photos de '+collection.name);
+          showPhotos.append(el('i',null,'fa-solid fa-images'));
+          showPhotos.onclick=function(){
+            if(window.NearbyAlbumGallery&&typeof window.NearbyAlbumGallery.open==='function'){
+              window.NearbyAlbumGallery.open({id:collection.id,name:collection.name});
+            }else feedback.textContent='Galerie Photos indisponible : mettre à jour l’application iOS.';
+          };
+          header.append(showPhotos);
           header.append(editButton);
           card.append(header,details);
           var descriptionText = el('p', collection.description || '', 'muted');
