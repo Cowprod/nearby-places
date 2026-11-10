@@ -301,6 +301,32 @@ const state={
  await window.NearbyPlacePhotos.syncMemberships(state);
  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),preservedLinks);
 
+ // Recovery after an album is manually deleted in Apple Photos must use
+ // existing place links, reconstruct only that collection, and never create
+ // an empty album or remove any original/association.
+ values.set('nearby-collections-v2',JSON.stringify(state));
+ const recoveryWrites=[],recoveryLinks=localStorage.getItem('nearby-place-photo-links-v1');
+ window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>{
+  recoveryWrites.push({id,title,ids:Array.from(assetIds)});
+  ok({collectionId:id,albumId:'restored-'+id,count:assetIds.length,unavailableCount:0});
+ };
+ assert.equal(window.NearbyPlacePhotos.hasLinkedAlbumPhotos('c-1'),true);
+ assert.equal(window.NearbyPlacePhotos.hasLinkedAlbumPhotos('c-3'),false,'empty collections do not offer repair');
+ const recovered=await window.NearbyPlacePhotos.restoreCollectionAlbum('c-1');
+ assert.equal(recovered.albumId,'restored-c-1');
+ assert.deepEqual(recoveryWrites,[{id:'c-1',title:'Nearby Places — Tokyo',ids:['asset-A','asset-B']}],
+  'restore only the requested album using deduplicated stable PHAsset IDs');
+ await assert.rejects(window.NearbyPlacePhotos.restoreCollectionAlbum('c-3'),/Aucune photo associée/);
+ assert.equal(recoveryWrites.length,1,'empty albums are never created by restore');
+ window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>ok({albumId:'',unavailableCount:assetIds.length,count:0});
+ await assert.rejects(window.NearbyPlacePhotos.restoreCollectionAlbum('c-1'),/Aucune photo associée actuellement accessible/);
+ window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>ok({albumId:'restored-c-1',unavailableCount:1,count:1});
+ const partialRestore=await window.NearbyPlacePhotos.restoreCollectionAlbum('c-1');
+ assert.equal(partialRestore.unavailableCount,1,'recover available originals while reporting missing photos');
+ assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),recoveryLinks,
+  'repair and failed repair never modify place-photo associations');
+ values.delete('nearby-collections-v2');
+
  // A slow earlier album operation must never make a later queued sync
  // replay old collection titles or photo links. Read the latest saved state
  // when its queued turn begins, not when a resume event requests the work.
