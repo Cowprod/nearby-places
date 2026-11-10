@@ -78,7 +78,20 @@ function albumJobs(state,onlyPlaceId){
  });
  return (state.collections||[]).filter(function(c){return c.id!=='collection-default'&&albums.has(c.id)&&albums.get(c.id).size;}).map(function(c){return {id:c.id,title:'Nearby Places — '+c.name,ids:Array.from(albums.get(c.id))};});
 }
-function addToAlbums(jobs){return queuedAlbumTask(function(){return addToAlbumsDirect(jobs);});}
+// Recompute an individual place's album memberships when its queued native
+// write actually runs, not when PHPicker/camera finished. A user can rename or
+// reassign a collection while an earlier PhotoKit operation is still pending.
+function syncPlaceAlbums(placeId){
+ var hadLinks=localStorage.getItem(KEY)!==null;
+ var hadCollections=localStorage.getItem('nearby-collections-v2')!==null;
+ return queuedAlbumTask(function(){
+  if(hadLinks&&localStorage.getItem(KEY)===null)
+   throw Error('Associations photo-lieu disparues pendant l’attente : synchronisation PhotoKit interrompue, données conservées.');
+  if(hadCollections&&localStorage.getItem('nearby-collections-v2')===null)
+   throw Error('Collections locales disparues pendant l’attente : synchronisation PhotoKit interrompue, données conservées.');
+  return addToAlbumsDirect(albumJobs(currentCollections(),placeId));
+ });
+}
 function addToAlbumsDirect(jobs){
  // Never claim that an album is fully reconciled if PhotoKit could not find
  // some PHAsset identifiers. Links remain local and are retried on resume;
@@ -104,7 +117,7 @@ function thumbnail(id,container,linked){var cell=document.createElement('div');c
 function render(){gallery.replaceChildren();var associated=new Set(ids(place));Array.from(candidates.children).forEach(function(tile){if(associated.has(tile.dataset.photoId))tile.remove();});candidateHeading.hidden=!candidates.children.length;ids(place).forEach(function(id){thumbnail(id,gallery,true);});if(!ids(place).length){var empty=document.createElement('p');empty.className='muted';empty.textContent='Aucune photo associée.';gallery.append(empty);}}
 function album(){
  return Promise.resolve().then(function(){
-  return addToAlbums(albumJobs(currentCollections(),place.id));
+  return syncPlaceAlbums(place.id);
  }).catch(function(err){throw Error('Photo associée au lieu, mais album iOS non synchronisé : '+err.message);});
 }
 
@@ -135,7 +148,7 @@ function capture(place){
   update(place,ids(place).concat(result.id));
   associated=true;
   return Promise.resolve().then(function(){
-   return addToAlbums(albumJobs(currentCollections(),place.id));
+   return syncPlaceAlbums(place.id);
   }).then(
    function(){return {saved:true,associated:true,albumSynced:true};},
    function(error){
