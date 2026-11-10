@@ -81,7 +81,6 @@
     applyAppearance();
     // The settings host is created here; navigator.js runs earlier so its
     // DOMContentLoaded handler cannot reliably find it.
-    if(window.NearbyNavigator&&window.NearbyNavigator.setup)window.NearbyNavigator.setup();
     var status = document.getElementById('status');
     if (status) {
       status.insertAdjacentElement('afterend',nav);
@@ -109,6 +108,8 @@
       nav.append(button);
       button.onclick = function () { activate(tab.id); };
     });
+    // Settings nodes must be mounted before navigator inserts its section.
+    if(window.NearbyNavigator&&window.NearbyNavigator.setup)window.NearbyNavigator.setup();
     function activate(id) {
       if (!tabs.some(function (tab) { return tab.id === id; })) return;
       tabs.forEach(function (tab) {
