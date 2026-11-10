@@ -222,19 +222,25 @@ const state={
  // a later collection rename. Cover both nonempty and already-created empty
  // albums, which use different native operations.
  const ordered=[];
+ let releaseFirstAlbum;
+ let firstAlbumStarted;
+ const firstAlbumPending=new Promise(resolve=>{firstAlbumStarted=resolve;});
  window.NearbyPhotos.addToAlbum=(id,title,ids,ok)=>{
   ordered.push('add:'+id+':'+title);
-  if(id==='c-1')setTimeout(()=>ok({collectionId:id}),8);
-  else ok({collectionId:id});
+  if(id==='c-1'){
+   releaseFirstAlbum=()=>ok({collectionId:id});
+   firstAlbumStarted();
+  }else ok({collectionId:id});
  };
  window.NearbyPhotos.renameAlbum=(id,title,ok)=>{
   ordered.push('rename:'+id+':'+title);
   ok({renamed:true});
  };
  const previousSync=window.NearbyPlacePhotos.syncMemberships(state);
- await new Promise(resolve=>setTimeout(resolve,2)); // c-1 is still awaiting PhotoKit.
+ await firstAlbumPending; // Native PhotoKit write is held until both renames are queued.
  const laterRename=window.NearbyPlacePhotos.renameCollection('c-2','Tokyo nouveau');
  const laterEmptyRename=window.NearbyPlacePhotos.renameCollection('c-3','Paris nouveau');
+ releaseFirstAlbum();
  await Promise.all([previousSync,laterRename,laterEmptyRename]);
  assert.ok(ordered.indexOf('add:c-2:Nearby Places — Tokyo')<
   ordered.indexOf('rename:c-2:Nearby Places — Tokyo nouveau'),
