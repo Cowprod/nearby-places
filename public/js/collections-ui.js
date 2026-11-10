@@ -60,8 +60,11 @@
     function persist() { api.save(localStorage, state); render(); if(typeof window.dispatchEvent==='function' && typeof Event==='function')window.dispatchEvent(new Event('nearby-collections-changed')); }
     function syncPhotoAlbums(){if(window.NearbyPhotos&&window.NearbyPlacePhotos){window.NearbyPlacePhotos.syncMemberships(state).catch(function(error){var message=String(error&&error.message||error);console.warn('[Nearby Places] Synchronisation albums Photos : '+message);if(/Application en arrière-plan|synchronisation Photos reportée au retour/i.test(message)){if(feedback.textContent.indexOf('albums Photos non synchronisés')!==-1)feedback.textContent='';return;}feedback.textContent='Synchronisation des albums Photos impossible. Consultez le journal de diagnostic dans Réglages.';});}}
     function refresh() {
-      try { state=api.loadOrMigrate(localStorage,readPlaces()); if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); }
-      catch(error){feedback.textContent='Actualisation impossible : '+error.message;}
+      // A failed reload must not reconcile PhotoKit against the last cached
+      // collection state: persisted memberships may be unreadable or obsolete.
+      // Keep originals and associations untouched until a clean reload.
+      try { state=api.loadOrMigrate(localStorage,readPlaces()); if(api.reconcile(state,readPlaces())) api.save(localStorage,state); render(); return true; }
+      catch(error){feedback.textContent='Actualisation impossible : '+error.message;return false;}
     }
     window.addEventListener('nearby-places-changed',refresh);
     function openNotificationPlace(placeId){
@@ -372,8 +375,8 @@
     // Retry album reconciliation after Photos permission changes or an offline session.
     // The native layer compares membership and repairs missed renames without copying photos.
     if(typeof document.addEventListener==='function'){
-      document.addEventListener('deviceready',function(){refresh();syncPhotoAlbums();},false);
-      document.addEventListener('resume',function(){refresh();syncPhotoAlbums();},false);
+      document.addEventListener('deviceready',function(){if(refresh())syncPhotoAlbums();},false);
+      document.addEventListener('resume',function(){if(refresh())syncPhotoAlbums();},false);
     }
     refresh();
   }
