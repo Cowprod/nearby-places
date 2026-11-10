@@ -16,6 +16,30 @@ function nativeCall(method,args){
   root.NearbyPhotos[method].apply(null,args.concat([resolve,function(err){reject(Error(String(err)));}]));
  });
 }
+// Read local place-photo associations without modifying them or the iOS album.
+// Photos added directly in Apple Photos may legitimately have no place link.
+function linkedPlacesLabel(assetId){
+ var storage=root.localStorage;
+ if(!storage||typeof storage.getItem!=='function')return 'Associations de lieux indisponibles.';
+ try{
+  var raw=storage.getItem('nearby-place-photo-links-v1');
+  if(raw===null)return 'Aucun lieu Nearby Places associé.';
+  var links=JSON.parse(raw);
+  if(!links||typeof links!=='object'||Array.isArray(links))throw Error('Associations invalides');
+  var placeIds=Object.keys(links).filter(function(id){
+   if(!Array.isArray(links[id]))throw Error('Association invalide');
+   return links[id].includes(assetId);
+  });
+  if(!placeIds.length)return 'Aucun lieu Nearby Places associé.';
+  var places=JSON.parse(storage.getItem('nearby-places-v1')||'[]');
+  if(!Array.isArray(places))throw Error('Lieux invalides');
+  var names=placeIds.map(function(id){
+   var place=places.find(function(item){return item&&item.id===id;});
+   return place&&typeof place.name==='string'&&place.name.trim()?place.name:'Lieu non répertorié';
+  });
+  return 'Lieux associés : '+names.join(', ');
+ }catch(_){return 'Associations locales illisibles : aucun changement effectué.';}
+}
 function open(collection){
  if(!collection||typeof collection.id!=='string'||!collection.id)return;
  var closed=false,loading=false,offset=0,total=0,photos=[],known=new Set(),previewRequest=0;
@@ -50,9 +74,10 @@ function open(collection){
  var next=node('button','›','btn btn-secondary');
  next.setAttribute('aria-label','Photo suivante');
  var viewStatus=node('p','','nearby-album-view-status');
+ var linkedPlaces=node('p','','nearby-album-linked-places muted');
  var controls=node('div',null,'nearby-album-view-controls');
  controls.append(previous,picture,next);
- viewer.append(viewClose,controls,viewStatus);
+ viewer.append(viewClose,controls,viewStatus,linkedPlaces);
  document.body.append(viewer);
  var index=-1;
  function hideViewer(){previewRequest++;viewer.hidden=true;picture.removeAttribute('src');}
@@ -67,6 +92,7 @@ function open(collection){
   next.disabled=index===photos.length-1;
   picture.removeAttribute('src');
   viewStatus.textContent='Chargement de la photo '+(index+1)+' / '+photos.length+'…';
+  linkedPlaces.textContent=linkedPlacesLabel(photos[position]);
   var current=++previewRequest,id=photos[position];
   nativeCall('preview',[id]).then(function(payload){
    if(closed||current!==previewRequest)return;
