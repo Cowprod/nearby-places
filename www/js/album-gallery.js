@@ -188,7 +188,11 @@ function open(collection){
    if(!payload||!Array.isArray(payload.ids)||!Number.isSafeInteger(payload.count)||payload.count<0)throw Error('Réponse PhotoKit invalide');
    total=payload.count;
    if(payload.exists===false){
-    count.textContent='Aucun album Photos pour cette collection (création à la première photo associée).';
+    // Distinguish a never-created album from a manually removed one.
+    // Never reconstruct or alter Photos as a side effect of opening a gallery.
+    count.textContent=payload.reason==='missing'
+     ?'Album Photos introuvable ou supprimé dans Photos. La reconstruction nécessite votre confirmation.'
+     :'Aucun album Photos créé pour cette collection (création à la première photo associée).';
     more.hidden=true;
     restore.hidden=true;
     if(root.NearbyPlacePhotos&&typeof root.NearbyPlacePhotos.hasLinkedAlbumPhotos==='function'){
