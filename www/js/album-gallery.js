@@ -135,7 +135,15 @@ function open(collection){
      if(closed||item.generation!==readGeneration)return;
      if(!payload||typeof payload.dataUrl!=='string')throw Error('Miniature inaccessible');
      item.img.src=payload.dataUrl;item.fallback.hidden=true;
-    }).catch(function(){if(!closed&&item.generation===readGeneration)item.fallback.textContent='Photo indisponible';})
+    }).catch(function(err){
+     if(closed||item.generation!==readGeneration)return;
+     var reason=err&&err.message||'';
+     if(/iCloud|connexion Internet|r[eé]seau|hors ligne/i.test(reason))
+      item.fallback.textContent='iCloud indisponible — actualisez plus tard';
+     else if(/acc[eè]s Photos|acc[eè]s aux photos|autoris|r[eé]glages/i.test(reason))
+      item.fallback.textContent='Accès Photos à vérifier';
+     else item.fallback.textContent='Photo indisponible';
+    })
     .then(function(){thumbnailActive--;pumpThumbnails();});
    })(request);
   }
