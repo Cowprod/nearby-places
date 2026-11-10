@@ -446,6 +446,49 @@ const state={
   assert.equal(attempts.length,priorCalls,'invalid collection state prevents native mutations');
  }
  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),validLinks,'validation is entirely read-only');
+ // Regression: a camera capture can finish while an older PhotoKit mutation
+ // is still in flight. Reassigning that place before the queued capture sync
+ // must not add its newly captured asset to the former collection.
+ const beforeDelayedCapture=localStorage.getItem('nearby-place-photo-links-v1');
+ localStorage.setItem('nearby-collections-v2',JSON.stringify(state));
+ localStorage.setItem('nearby-place-photo-links-v1',JSON.stringify({
+  place1:['asset-A'],place2:['asset-B'],place3:[]
+ }));
+ const lateWrites=[];
+ let releasePendingCaptureSync,signalPendingCaptureSync,firstPending=true;
+ const pendingCaptureSyncStarted=new Promise(resolve=>{signalPendingCaptureSync=resolve;});
+ window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>{
+  lateWrites.push({id,title,ids:Array.from(assetIds)});
+  if(firstPending){
+   firstPending=false;
+   releasePendingCaptureSync=()=>ok({collectionId:id,unavailableCount:0});
+   signalPendingCaptureSync();
+  }else ok({collectionId:id,unavailableCount:0});
+ };
+ window.NearbyPhotos.renameAlbum=(id,title,ok)=>ok({renamed:false});
+ window.NearbyPhotos.capture=ok=>ok({id:'asset-new'});
+ window.alert=()=>{};
+ const waitingNative=window.NearbyPlacePhotos.syncMemberships(state);
+ await pendingCaptureSyncStarted;
+ const pendingCapture=window.NearbyPlacePhotos.capture({id:'place1',name:'Tokyo'});
+ await Promise.resolve();await Promise.resolve();
+ assert.deepEqual(JSON.parse(localStorage.getItem('nearby-place-photo-links-v1')).place1,
+  ['asset-A','asset-new'],'capture saves its place association before album synchronization');
+ const moved=JSON.parse(JSON.stringify(state));
+ moved.memberships=moved.memberships.filter(m=>!(m.placeId==='place1'&&m.collectionId==='c-1'));
+ moved.collections.find(c=>c.id==='c-2').name='Tokyo déplacé';
+ localStorage.setItem('nearby-collections-v2',JSON.stringify(moved));
+ releasePendingCaptureSync();
+ const captureOutcome=await Promise.all([waitingNative,pendingCapture]);
+ assert.equal(captureOutcome[1].albumSynced,true,'capture completes after fresh album reconciliation');
+ assert.deepEqual(lateWrites.at(-1),{id:'c-2',title:'Nearby Places — Tokyo déplacé',ids:['asset-A','asset-new']},
+  'queued camera synchronization uses current collection memberships, title, and photo links');
+ assert.equal(lateWrites.filter(w=>w.id==='c-1').length,1,
+  'capture must not replay its new asset into an old collection after reassignment');
+ assert.deepEqual(JSON.parse(localStorage.getItem('nearby-place-photo-links-v1')).place1,['asset-A','asset-new'],
+  'race protection never removes the photo-place association');
+ localStorage.setItem('nearby-place-photo-links-v1',beforeDelayedCapture);
+ values.delete('nearby-collections-v2');
  assert.equal(fs.readFileSync('www/js/place-photos.js','utf8'),fs.readFileSync('public/js/place-photos.js','utf8'),'www and public parity');
  console.log('PASS photo albums: lazy creation, stable collection IDs, bridge, duplicate names, multi-album links, deletion safety');
 })().catch(error=>{console.error(error);process.exitCode=1;});
