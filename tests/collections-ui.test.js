@@ -79,7 +79,13 @@ const document = {
   createElement(tag) { return new Element(tag); },
   querySelector(value) { assert.equal(value,'h1'); return h1; }
 };
-const context = {window,document,localStorage:storage,Set,Array,Date};
+const pendingTimers = new Map();
+let nextTimerId = 0;
+const context = {window,document,localStorage:storage,Set,Array,Date,
+  setTimeout(handler,delay) { const id=++nextTimerId;pendingTimers.set(id,{handler,delay});return id; },
+  clearTimeout(id) { pendingTimers.delete(id); },
+  console: {warn() {}}
+};
 vm.runInNewContext(fs.readFileSync('www/js/collections-ui.js','utf8'),context,{filename:'collections-ui.js'});
 const panel = body.children[1];
 assert.equal(panel.id,'collections-panel');
@@ -153,4 +159,45 @@ assert.equal(storage.getItem('nearby-collections-v2'),'{invalid-json','resume pr
 storage.setItem('nearby-collections-v2',intactCollections);
 lifecycleEvents.resume();
 assert.equal(albumResyncs,3,'PhotoKit reconciliation resumes after local collection recovery');
-console.log('PASS collections UI: description, open editor, persistence rollback, PhotoKit resume guard and public parity');
+// A Cordova resume event can race iOS switching back to UIApplicationStateActive.
+// An explicit native 'background' error schedules one retry, using fresh local
+// memberships. A corrupt store blocks that retry instead of writing stale data.
+(async()=>{
+  let attempted=0;
+  const interrupted=()=>{attempted++;return Promise.reject(Error('Application en arrière-plan : synchronisation Photos reportée au retour.'));};
+  window.NearbyPlacePhotos.syncMemberships=interrupted;
+  lifecycleEvents.resume();
+  await Promise.resolve();
+  assert.equal(attempted,1);
+  assert.equal(pendingTimers.size,1,'native foreground race schedules a deferred PhotoKit retry');
+  let [timerId,timer]=Array.from(pendingTimers.entries())[0];
+  assert.equal(timer.delay,800,'UI settles before retrying PhotoKit');
+  pendingTimers.delete(timerId);
+  const original=storage.getItem('nearby-collections-v2');
+  storage.setItem('nearby-collections-v2','{corrupt');
+  timer.handler();
+  assert.equal(attempted,1,'retry must reload persisted collections before touching native PhotoKit');
+  assert.equal(storage.getItem('nearby-collections-v2'),'{corrupt','bad collection bytes are preserved');
+  storage.setItem('nearby-collections-v2',original);
+  lifecycleEvents.resume();
+  await Promise.resolve();
+  assert.equal(attempted,2);
+  assert.equal(pendingTimers.size,1);
+  window.NearbyPlacePhotos.syncMemberships=()=>{attempted++;return Promise.resolve();};
+  [timerId,timer]=Array.from(pendingTimers.entries())[0];
+  pendingTimers.delete(timerId);
+  timer.handler();
+  assert.equal(attempted,3,'retry succeeds without discarding photos or associations');
+  assert.equal(storage.getItem('nearby-collections-v2'),original,'reconciliation never overwrites valid memberships');
+
+  window.NearbyPlacePhotos.syncMemberships=interrupted;
+  lifecycleEvents.resume();
+  await Promise.resolve();
+  assert.equal(pendingTimers.size,1);
+  [timerId,timer]=Array.from(pendingTimers.entries())[0];
+  pendingTimers.delete(timerId);
+  timer.handler();
+  await Promise.resolve();
+  assert.equal(pendingTimers.size,0,'repeated background failure cannot create an endless retry loop');
+  console.log('PASS collections UI: persistence, PhotoKit guarded resume, one-shot foreground retry, public parity');
+})().catch(error=>{console.error(error);process.exitCode=1;});
