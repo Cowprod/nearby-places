@@ -22,6 +22,8 @@ assert.match(readMethod,/if\(!\[self albumLinks\]\[collectionId\]\)/,'no album e
 assert.doesNotMatch(readMethod,/performChanges|deleteAssets|deleteAssetCollections|removeAssets|storeAlbum\(/,'opening a gallery never changes photos or album mappings');
 assert.match(native,/NSUInteger edge=320/,'existing thumbnails remain 320 px');
 assert.match(native,/integerValue\]==1280/,'the preview can request a larger image');
+assert.match(native,/options\.networkAccessAllowed=YES/,'iCloud-only assets can load an on-demand thumbnail or preview');
+assert.match(native,/PHImageResultIsInCloudKey/,'a missing iCloud rendition has a specific offline diagnostic');
 
 const calls=[];
 const bridgeModule={exports:{}};
@@ -45,7 +47,12 @@ function element(tag){
 const document={body:element('body'),createElement:element};
 const ids=Array.from({length:26},(_,i)=>'photo-'+i);
 const effects=[];
-const window={NearbyPhotos:{
+const stored=new Map([
+ ['nearby-place-photo-links-v1',JSON.stringify({'place-1':['photo-0','photo-2'],'place-2':['photo-0']})],
+ ['nearby-places-v1',JSON.stringify([{id:'place-1',name:'Musée'},{id:'place-2',name:'Librairie'}])]
+]);
+const localStorage={getItem:key=>stored.has(key)?stored.get(key):null};
+const window={localStorage,NearbyPhotos:{
  listAlbumAssets:(id,offset,limit,ok)=>{effects.push({method:'list',id,offset,limit});ok({exists:true,count:26,offset,ids:ids.slice(offset,offset+limit)});},
  thumbnail:(id,ok)=>{effects.push({method:'thumbnail',id});ok({dataUrl:'data:image/jpeg;base64,thumb'});},
  preview:(id,ok)=>{effects.push({method:'preview',id});ok({dataUrl:'data:image/jpeg;base64,preview'});},
@@ -72,8 +79,16 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(viewer.hidden,false);
  assert.equal(effects.filter(e=>e.method==='preview').length,1,'tapping a thumbnail loads the larger preview');
  assert.equal(viewer.children[1].children[1].src,'data:image/jpeg;base64,preview');
+ assert.equal(viewer.children[3].textContent,'Lieux associés : Musée, Librairie','preview displays existing local photo-place links');
  viewer.children[1].children[2].onclick();await flush();
  assert.equal(effects.filter(e=>e.method==='preview').at(-1).id,'photo-1','next navigates within the gallery');
+ assert.equal(viewer.children[3].textContent,'Aucun lieu Nearby Places associé.','a photo in the album may not have a place link');
+ const originalLinks=stored.get('nearby-place-photo-links-v1');
+ stored.set('nearby-place-photo-links-v1','{broken');
+ viewer.children[1].children[0].onclick();await flush();
+ assert.match(viewer.children[3].textContent,/Associations locales illisibles/,'corrupt links are reported instead of silently discarded');
+ assert.equal(stored.get('nearby-place-photo-links-v1'),'{broken','preview never rewrites corrupt local links');
+ stored.set('nearby-place-photo-links-v1',originalLinks);
  viewer.children[0].onclick();
  assert.equal(viewer.hidden,true,'closing the preview returns to the album');
  session.close();
