@@ -22,6 +22,8 @@ assert.match(readMethod,/if\(!\[self albumLinks\]\[collectionId\]\)/,'no album e
 assert.doesNotMatch(readMethod,/performChanges|deleteAssets|deleteAssetCollections|removeAssets|storeAlbum\(/,'opening a gallery never changes photos or album mappings');
 assert.match(native,/NSUInteger edge=320/,'existing thumbnails remain 320 px');
 assert.match(native,/integerValue\]==1280/,'the preview can request a larger image');
+assert.match(native,/edge==1280\?PHImageContentModeAspectFit:PHImageContentModeAspectFill/,
+ 'full-screen preview preserves portrait and panorama ratios while grid thumbnails may crop');
 assert.match(native,/options\.networkAccessAllowed=YES/,'iCloud-only assets can load an on-demand thumbnail or preview');
 assert.match(native,/PHImageResultIsInCloudKey/,'a missing iCloud rendition has a specific offline diagnostic');
 
@@ -38,6 +40,7 @@ assert.deepEqual(calls,[
 function element(tag){
  return {tag,children:[],dataset:{},hidden:false,attributes:{},style:{},src:'',textContent:'',
   append(...items){this.children.push(...items);},
+  replaceChildren(...items){this.children=items;},
   setAttribute(k,v){this.attributes[k]=v;},
   removeAttribute(k){if(k==='src')this.src='';else delete this.attributes[k];},
   addEventListener(){},
@@ -103,6 +106,45 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(emptyPanel.children[3].children.length,0,'empty preview never generates photos');
  assert.equal(emptyPanel.children[4].hidden,true,'an empty collection cannot paginate');
  absent.close();
+ // A deleted album can be rebuilt explicitly from durable place-photo links.
+ // Merely opening the gallery must never mutate PhotoKit.
+ let rebuilt=false,rebuildCalls=0,hasLinksCalls=0;
+ window.NearbyPlacePhotos={
+  hasLinkedAlbumPhotos:id=>{hasLinksCalls++;return id==='deleted-album';},
+  restoreCollectionAlbum:id=>{rebuildCalls++;rebuilt=true;return Promise.resolve({albumId:'restored',unavailableCount:0});}
+ };
+ window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>{
+  ok(rebuilt?{exists:true,count:1,offset,ids:['photo-0']}:{exists:false,count:0,offset,ids:[]});
+ };
+ const missing=window.NearbyAlbumGallery.open({id:'deleted-album',name:'Tokyo supprimé'});
+ await flush();
+ const repairPanel=document.body.children.at(-2).children[0];
+ const restoreButton=repairPanel.children[6];
+ assert.equal(restoreButton.hidden,false,'repair is offered only with a durable photo link');
+ assert.equal(rebuildCalls,0,'opening a missing album never writes to Photos');
+ restoreButton.onclick();
+ await flush();await flush();
+ assert.equal(rebuildCalls,1,'explicit repair performs exactly one reconstruction');
+ assert.equal(repairPanel.children[3].children.length,1,'gallery reloads recovered album after repair');
+ assert.equal(restoreButton.hidden,true,'repair button disappears when the album exists');
+ missing.close();
+ // An album with no linked photos never offers reconstruction.
+ window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>ok({exists:false,count:0,offset,ids:[]});
+ const unlinked=window.NearbyAlbumGallery.open({id:'empty-album',name:'Sans liens'});
+ await flush();
+ assert.equal(document.body.children.at(-2).children[0].children[6].hidden,true);
+ assert.equal(rebuildCalls,1,'empty album does not trigger native writes');
+ unlinked.close();
+ // Failed recovery keeps all associations, displays an actionable error.
+ window.NearbyPlacePhotos.hasLinkedAlbumPhotos=()=>true;
+ window.NearbyPlacePhotos.restoreCollectionAlbum=()=>Promise.reject(Error('Accès Photos refusé'));
+ const failed=window.NearbyAlbumGallery.open({id:'deleted-album',name:'Accès refusé'});
+ await flush();
+ const failedPanel=document.body.children.at(-2).children[0];
+ failedPanel.children[6].onclick();
+ await flush();await flush();
+ assert.match(failedPanel.children[5].textContent,/Reconstruction impossible : Accès Photos refusé/);
+ failed.close();
  // A full-access failure is reported, and no local association is changed.
  window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok,fail)=>fail('Accès Photos refusé');
  const denied=window.NearbyAlbumGallery.open({id:'restricted',name:'Privée'});
