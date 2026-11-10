@@ -380,6 +380,31 @@ const state={
  assert.deepEqual(refreshedWrites.filter(x=>x.id==='c-2').at(-1),
   {id:'c-2',title:'Nearby Places — Tokyo',ids:['asset-C']},
   'queued synchronization must not re-add photos unlinked before it began');
+ // Regression: a queued resume must not reuse an old in-memory snapshot
+ // if the persistent collection or association key vanishes while waiting.
+ async function checkVanishedSource(key,expected){
+  localStorage.setItem('nearby-collections-v2',JSON.stringify(latestState));
+  localStorage.setItem('nearby-place-photo-links-v1',JSON.stringify({place1:['asset-C'],place2:['asset-A'],place3:[]}));
+  const albumCalls=[];
+  let release,signal;
+  const started=new Promise(resolve=>{signal=resolve;});
+  window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>{
+   albumCalls.push(id);
+   if(!release){release=()=>ok({collectionId:id});signal();}
+   else ok({collectionId:id});
+  };
+  const active=window.NearbyPlacePhotos.syncMemberships(state);
+  await started;
+  const pending=window.NearbyPlacePhotos.syncMemberships(state);
+  values.delete(key);
+  release();
+  await active;
+  await assert.rejects(pending,expected,'missing persisted data must not trigger stale PhotoKit writes');
+  assert.deepEqual(albumCalls,['c-1','c-2'],'queued operation made no native writes after source disappeared');
+ }
+ await checkVanishedSource('nearby-collections-v2',/Collections locales absentes/);
+ await checkVanishedSource('nearby-place-photo-links-v1',/Associations photo-lieu absentes/);
+ localStorage.setItem('nearby-place-photo-links-v1',JSON.stringify({place1:['asset-C'],place2:['asset-A'],place3:[]}));
  const callsBeforeCorruption=refreshedWrites.length;
  localStorage.setItem('nearby-collections-v2','{truncated');
  await assert.rejects(window.NearbyPlacePhotos.syncMemberships(state),/illisibles/,
