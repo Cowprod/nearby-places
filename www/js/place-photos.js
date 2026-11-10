@@ -180,5 +180,27 @@ function reconcileMemberships(state){
    });
  });
 }
-window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:reconcileMemberships};
+// Restore an album deleted manually in Apple Photos only on explicit user
+// request. Read current durable links when the queued task starts, never a
+// stale UI snapshot; never delete originals, albums or place-photo relations.
+function linkedAlbumJob(collectionId){
+ if(typeof collectionId!=='string'||!collectionId)throw Error('Collection Photos invalide');
+ return albumJobs(currentCollections()).find(function(job){return job.id===collectionId;})||null;
+}
+function restoreCollectionAlbum(collectionId){
+ return queuedAlbumTask(function(){
+  var job=linkedAlbumJob(collectionId);
+  if(!job)throw Error('Aucune photo associée à cette collection : aucun album vide ne sera créé.');
+  return call('addToAlbum',[job.id,job.title,job.ids]).then(function(result){
+   if(!result||typeof result.albumId!=='string'||!result.albumId){
+    throw Error('Aucune photo associée actuellement accessible dans Photos. Les liens locaux sont conservés.');
+   }
+   // The album can be restored with the available originals even if some
+   // links reference deleted/inaccessible assets. Surface the partial state.
+   var missing=Number(result.unavailableCount);
+   return {albumId:result.albumId,unavailableCount:Number.isSafeInteger(missing)&&missing>0?missing:0};
+  });
+ });
+}
+window.NearbyPlacePhotos={capture:capture,open:open,renameCollection:function(collectionId,newName){return queuedAlbumCall('renameAlbum',[collectionId,'Nearby Places — '+newName]);},syncMemberships:reconcileMemberships,hasLinkedAlbumPhotos:function(collectionId){return !!linkedAlbumJob(collectionId);},restoreCollectionAlbum:restoreCollectionAlbum};
 })();
