@@ -137,7 +137,18 @@
     [self replyTo:callback value:nil error:@"Application en arrière-plan : réessayez la recherche de photos au retour."];return;
    }
    PHAuthorizationStatus current=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
-   if(current==PHAuthorizationStatusAuthorized||current==PHAuthorizationStatusLimited){query();return;}
+   if(current==PHAuthorizationStatusAuthorized||current==PHAuthorizationStatusLimited){
+    // Scanning the library can be expensive on large iCloud libraries.
+    // Avoid blocking the UIKit queue; check access again at the actual read.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+     PHAuthorizationStatus latest=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+     if(latest!=PHAuthorizationStatusAuthorized&&latest!=PHAuthorizationStatusLimited){
+      [self replyTo:callback value:nil error:@"Accès Photos modifié avant la recherche : réessayez après autorisation."];return;
+     }
+     query();
+    });
+    return;
+   }
    [self replyTo:callback value:nil error:@"Accès à la photothèque modifié ou refusé : vérifiez les réglages iOS."];
   });
  };
