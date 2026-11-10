@@ -102,16 +102,53 @@
 }
 - (void)nearby:(CDVInvokedUrlCommand*)cmd {
  NSString *callback=cmd.callbackId;
+ // A malformed Cordova call must not index past the argument array or invoke
+ // doubleValue on NSNull while the photo library is being queried.
+ if(cmd.arguments.count<3||
+    ![cmd.arguments[0] respondsToSelector:@selector(doubleValue)]||
+    ![cmd.arguments[1] respondsToSelector:@selector(doubleValue)]||
+    ![cmd.arguments[2] respondsToSelector:@selector(doubleValue)]){
+  [self replyTo:callback value:nil error:@"Coordonnées ou rayon invalides"];return;
+ }
  double lat=[cmd.arguments[0] doubleValue],lon=[cmd.arguments[1] doubleValue],radius=MAX(10,MIN(5000,[cmd.arguments[2] doubleValue]));
- if(!isfinite(lat)||!isfinite(lon)||fabs(lat)>90||fabs(lon)>180){[self replyTo:callback value:nil error:@"Coordonnées invalides"];return;}
+ if(!isfinite(lat)||!isfinite(lon)||fabs(lat)>90||fabs(lon)>180){
+  [self replyTo:callback value:nil error:@"Coordonnées invalides"];return;
+ }
  void (^query)(void)=^{
- PHFetchOptions *options=[PHFetchOptions new];options.sortDescriptors=@[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithMediaType:PHAssetMediaTypeImage options:options];CLLocation *center=[[CLLocation alloc] initWithLatitude:lat longitude:lon];NSMutableArray *items=[NSMutableArray array];
- [assets enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger idx,BOOL *stop){if(items.count>=150){*stop=YES;return;}if(!asset.location)return;CLLocationDistance d=[asset.location distanceFromLocation:center];if(d<=radius)[items addObject:@{@"id":asset.localIdentifier,@"distance":@(round(d)),@"createdAt":@([asset.creationDate timeIntervalSince1970]*1000)}];}];
- [self replyTo:callback value:@{@"items":items} error:nil];
+  PHFetchOptions *options=[PHFetchOptions new];
+  options.sortDescriptors=@[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
+  PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithMediaType:PHAssetMediaTypeImage options:options];
+  CLLocation *center=[[CLLocation alloc] initWithLatitude:lat longitude:lon];
+  NSMutableArray *items=[NSMutableArray array];
+  [assets enumerateObjectsUsingBlock:^(PHAsset *asset,NSUInteger idx,BOOL *stop){
+   if(items.count>=150){*stop=YES;return;}
+   if(!asset.location)return;
+   CLLocationDistance d=[asset.location distanceFromLocation:center];
+   if(d<=radius)[items addObject:@{@"id":asset.localIdentifier,@"distance":@(round(d)),@"createdAt":@([asset.creationDate timeIntervalSince1970]*1000)}];
+  }];
+  [self replyTo:callback value:@{@"items":items} error:nil];
+ };
+ // An authorization prompt may finish after a Settings change or app
+ // backgrounding. Recheck *current* access on the UIKit queue before reading
+ // photos, rather than returning a misleading empty set of suggestions.
+ void (^runIfStillAuthorized)(void)=^{
+  dispatch_async(dispatch_get_main_queue(),^{
+   if([UIApplication sharedApplication].applicationState!=UIApplicationStateActive){
+    [self replyTo:callback value:nil error:@"Application en arrière-plan : réessayez la recherche de photos au retour."];return;
+   }
+   PHAuthorizationStatus current=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+   if(current==PHAuthorizationStatusAuthorized||current==PHAuthorizationStatusLimited){query();return;}
+   [self replyTo:callback value:nil error:@"Accès à la photothèque modifié ou refusé : vérifiez les réglages iOS."];
+  });
  };
  PHAuthorizationStatus status=[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
- if(status==PHAuthorizationStatusNotDetermined){[PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus result){if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)query();else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"]; }];}
- else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)query();else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"];
+ if(status==PHAuthorizationStatusNotDetermined){
+  [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus result){
+   if(result==PHAuthorizationStatusAuthorized||result==PHAuthorizationStatusLimited)runIfStillAuthorized();
+   else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"];
+  }];
+ }else if(status==PHAuthorizationStatusAuthorized||status==PHAuthorizationStatusLimited)runIfStillAuthorized();
+ else [self replyTo:callback value:nil error:@"Accès à la photothèque refusé"];
 }
 - (void)thumbnail:(CDVInvokedUrlCommand*)cmd {
  NSString *callback=cmd.callbackId;NSString *identifier=cmd.arguments.firstObject;if(![identifier isKindOfClass:[NSString class]]||!identifier.length){[self replyTo:callback value:nil error:@"Identifiant photo invalide"];return;}PHFetchResult<PHAsset*> *assets=[PHAsset fetchAssetsWithLocalIdentifiers:@[identifier] options:nil];PHAsset *asset=assets.firstObject;
