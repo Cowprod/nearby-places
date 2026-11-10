@@ -195,9 +195,18 @@ const state={
  assert.match(native,/if\(needsRename\)change\.title=title/,'reconciliation repairs a missed rename');
  assert.match(native,/PHCollectionEditOperationRename/,'rename support checked before mutation');
 
- assert.match(native,/NSUInteger unavailableCount=identifiers\.count-assets\.count;/,'deleted photos are counted independently');
- assert.match(native,/if\(!assets\.count && !existing\)/,'all-inaccessible photos never create a new empty album');
- assert.match(native,/if\(!assets\.count && !existing\)[\s\S]*?BOOL needsRename=existing/,'an existing album can still be renamed when all linked photos are missing');
+ assert.match(native,/if\(asset\.mediaType==PHAssetMediaTypeImage\)\[images addObject:asset\]/,
+  'native album reconciliation rejects non-image PHAssets, including stale video IDs');
+ assert.match(native,/NSUInteger unavailableCount=identifiers\.count-images\.count;/,
+  'deleted, inaccessible or non-image identifiers are counted without altering links');
+ assert.match(native,/if\(!images\.count && !existing\)/,
+  'an album is never created from exclusively inaccessible or non-image identifiers');
+ assert.match(native,/if\(!images\.count && !existing\)[\s\S]*?BOOL needsRename=existing/,
+  'existing albums may still be renamed when no linked images remain');
+ assert.match(native,/\[images enumerateObjectsUsingBlock:\^\(PHAsset \*asset/,
+  'only filtered images reach the album insertion path');
+ assert.doesNotMatch(native,/\[fetched enumerateObjectsUsingBlock:[\s\S]*?if\(!\[present containsObject:asset\.localIdentifier\]\)/,
+  'unfiltered PhotoKit results cannot flow directly into the album');
  assert.match(native,/if\(!\[present containsObject:asset\.localIdentifier\]\)\[assetsToAdd addObject:asset\]/,'valid photos are still added when other links are stale');
  assert.match(native,/"unavailableCount":@\(unavailableCount\)/,'native result reports stale photo links');
  assert.doesNotMatch(native,/assets\.count!=identifiers\.count/,'a single missing asset must never reject all valid photos');
