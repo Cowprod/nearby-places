@@ -47,7 +47,11 @@ function element(tag){
   remove(){this.removed=true;}
  };
 }
-const document={body:element('body'),createElement:element};
+const listeners=new Map(),timers=new Map();let timerSequence=0;
+const document={body:element('body'),createElement:element,
+ addEventListener:(name,handler)=>listeners.set(name,handler),
+ removeEventListener:(name,handler)=>{if(listeners.get(name)===handler)listeners.delete(name);}
+};
 const ids=Array.from({length:26},(_,i)=>'photo-'+i);
 const effects=[];
 const stored=new Map([
@@ -62,7 +66,10 @@ const window={localStorage,NearbyPhotos:{
  addToAlbum:()=>{throw Error('gallery must not write Photos albums');},
  renameAlbum:()=>{throw Error('gallery must not rename albums');}
 }};
-vm.runInNewContext(ui,{window,document,Promise,Set,Number,Error,Array});
+vm.runInNewContext(ui,{window,document,Promise,Set,Number,Error,Array,
+ setTimeout:callback=>{const id=++timerSequence;timers.set(id,callback);return id;},
+ clearTimeout:id=>timers.delete(id)
+});
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
  const session=window.NearbyAlbumGallery.open({id:'collection-1',name:'Tokyo'});
@@ -174,5 +181,47 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(started.length,5,'closing the album cancels queued thumbnail launches');
  assert.equal(window.localStorage.getItem('nearby-place-photo-links-v1'),originalLinks,
    'throttling thumbnails does not alter photo-place associations');
+ // iOS permission can change in Settings while this gallery is visible.
+ // Retrying must be read-only and retain local photo-place associations.
+ let allowed=false,permissionReads=0;
+ window.NearbyPhotos.thumbnail=(id,ok)=>ok({dataUrl:'data:image/jpeg;base64,retry'});
+ window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok,fail)=>{
+  permissionReads++;
+  if(!allowed)fail('Accès Photos refusé');
+  else ok({exists:true,count:1,offset,ids:['photo-0']});
+ };
+ const permissions=window.NearbyAlbumGallery.open({id:'permissions',name:'Permissions'});
+ await flush();
+ const permissionsPanel=document.body.children.at(-2).children[0];
+ assert.match(permissionsPanel.children[5].textContent,/Accès Photos refusé/);
+ allowed=true;
+ permissionsPanel.children[7].onclick();await flush();
+ assert.equal(permissionReads,2,'retry rechecks Photos permissions');
+ assert.equal(permissionsPanel.children[3].children.length,1,'album appears after permission is granted');
+ assert.equal(stored.get('nearby-place-photo-links-v1'),originalLinks,'refresh retains local links');
+ const onResume=listeners.get('resume');
+ assert.equal(typeof onResume,'function');
+ onResume();onResume();
+ assert.equal(timers.size,1,'repeated resumes coalesce into one retry');
+ const scheduled=Array.from(timers.entries())[0];
+ timers.delete(scheduled[0]);scheduled[1]();await flush();
+ assert.equal(permissionReads,3,'foreground return refreshes the existing album');
+ permissions.close();
+ assert.equal(listeners.has('resume'),false,'closed galleries unsubscribe from resume');
+ // Old in-flight pagination must not contaminate an updated album snapshot.
+ const pendingPages=[];
+ window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>pendingPages.push(ok);
+ const concurrent=window.NearbyAlbumGallery.open({id:'changing',name:'Données changeantes'});
+ await flush();
+ const concurrentPanel=document.body.children.at(-2).children[0];
+ assert.equal(pendingPages.length,1);
+ concurrentPanel.children[7].onclick();await flush();
+ assert.equal(pendingPages.length,2,'refresh starts a new page request');
+ pendingPages[0]({exists:true,count:1,offset:0,ids:['obsolete']});await flush();
+ assert.equal(concurrentPanel.children[3].children.length,0,'stale page is discarded');
+ pendingPages[1]({exists:true,count:1,offset:0,ids:['recent']});await flush();
+ assert.deepEqual(concurrentPanel.children[3].children.map(tile=>tile.dataset.photoId),['recent']);
+ concurrent.close();
+ assert.equal(stored.get('nearby-place-photo-links-v1'),originalLinks);
  console.log('PASS PhotoKit album gallery: paged IDs, native read-only, thumb and preview, no duplicates, permissions, bounded iCloud thumbnails');
 })().catch(error=>{console.error(error);process.exitCode=1;});
