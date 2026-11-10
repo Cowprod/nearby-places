@@ -27,6 +27,7 @@ class Element {
     this.append(...items);
   }
   setAttribute(key, value) { this.attributes[key] = value; }
+  addEventListener() { /* DOM event subscription is inert in this harness. */ }
   insertAdjacentElement(position, element) {
     assert.equal(position,'afterend');
     const index = this.parent.children.indexOf(this);
