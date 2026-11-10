@@ -144,7 +144,11 @@ function open(collection){
       item.fallback.textContent='Accès Photos à vérifier';
      else item.fallback.textContent='Photo indisponible';
     })
-    .then(function(){thumbnailActive--;pumpThumbnails();});
+    .then(function(){
+     // Completion from an old iCloud read must never modify the refreshed
+     // snapshot's concurrency counter or starve its new thumbnails.
+     if(!closed&&item.generation===readGeneration){thumbnailActive--;pumpThumbnails();}
+    });
    })(request);
   }
  }
@@ -211,6 +215,8 @@ function open(collection){
  function reload(){
   if(closed)return Promise.resolve();
   readGeneration++;loading=false;offset=0;total=0;
+  // Previous iCloud reads can remain pending after a refresh.
+  thumbnailActive=0; // Per-snapshot limit; stale completions are ignored.
   photos.length=0;known.clear();thumbnailQueue.length=0;
   hideViewer();grid.replaceChildren();more.hidden=true;restore.hidden=true;
   count.textContent='Actualisation de l’album…';
