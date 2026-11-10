@@ -36,7 +36,10 @@ function update(place,list){
 }
 function call(method,args){return new Promise(function(resolve,reject){if(!window.NearbyPhotos||!window.NearbyPhotos[method]){reject(Error('Module photo iOS indisponible : reconstruire l’application.'));return;}window.NearbyPhotos[method].apply(null,args.concat([resolve,function(err){reject(Error(String(err)));}]));});}
 var albumQueue=Promise.resolve();
-function queuedAlbumCall(method,args){var op=albumQueue.then(function(){return call(method,args);});albumQueue=op.catch(function(){});return op;}
+// A complete reconciliation (including renames of already-created empty
+// albums) must not be interleaved with another photo write or user rename.
+function queuedAlbumTask(work){var op=albumQueue.then(work);albumQueue=op.catch(function(){});return op;}
+function queuedAlbumCall(method,args){return queuedAlbumTask(function(){return call(method,args);});}
 // Photos belong to a place in local storage; album membership derives from collection IDs.
 function currentCollections(){
  var raw=localStorage.getItem('nearby-collections-v2');
@@ -75,14 +78,15 @@ function albumJobs(state,onlyPlaceId){
  });
  return (state.collections||[]).filter(function(c){return c.id!=='collection-default'&&albums.has(c.id)&&albums.get(c.id).size;}).map(function(c){return {id:c.id,title:'Nearby Places — '+c.name,ids:Array.from(albums.get(c.id))};});
 }
-function addToAlbums(jobs){
+function addToAlbums(jobs){return queuedAlbumTask(function(){return addToAlbumsDirect(jobs);});}
+function addToAlbumsDirect(jobs){
  // Never claim that an album is fully reconciled if PhotoKit could not find
  // some PHAsset identifiers. Links remain local and are retried on resume;
  // no original, album or local association is removed automatically.
  // Continue with the other albums even when one fails or is incomplete.
  var failures=[],unavailable=[];
  return jobs.reduce(function(p,job){return p.then(function(){
-  return queuedAlbumCall('addToAlbum',[job.id,job.title,job.ids]).then(function(result){
+  return call('addToAlbum',[job.id,job.title,job.ids]).then(function(result){
    var missing=result&&Number(result.unavailableCount);
    if(Number.isSafeInteger(missing)&&missing>0){
     unavailable.push(job.title+' ['+job.id+'] : '+missing+' photo(s) indisponible(s) dans Photos ; associations locales conservées');
@@ -157,17 +161,22 @@ function reconcileMemberships(state){
   var empty=state.collections.filter(function(c){
    return c.id!=='collection-default'&&!linkedIds.has(c.id);
   });
-  var failures=[];
-  return addToAlbums(jobs).catch(function(error){failures.push(error.message);}).then(function(){
-   return empty.reduce(function(previous,c){
-    return previous.then(function(){
-     return queuedAlbumCall('renameAlbum',[c.id,'Nearby Places — '+c.name]).catch(function(error){
-      failures.push('Renommage ['+c.id+'] : '+(error&&error.message||String(error)));
+  // One queue task for the entire reconciliation. Previously an explicit
+  // rename could run between two album additions, allowing an older batch
+  // to restore a stale title after the user's newer rename completed.
+  return queuedAlbumTask(function(){
+   var failures=[];
+   return addToAlbumsDirect(jobs).catch(function(error){failures.push(error.message);}).then(function(){
+    return empty.reduce(function(previous,c){
+     return previous.then(function(){
+      return call('renameAlbum',[c.id,'Nearby Places — '+c.name]).catch(function(error){
+       failures.push('Renommage ['+c.id+'] : '+(error&&error.message||String(error)));
+      });
      });
-    });
-   },Promise.resolve());
-  }).then(function(){
-   if(failures.length)throw Error('Synchronisation PhotoKit incomplète : '+failures.join(' ; '));
+    },Promise.resolve());
+   }).then(function(){
+    if(failures.length)throw Error('Synchronisation PhotoKit incomplète : '+failures.join(' ; '));
+   });
   });
  });
 }
