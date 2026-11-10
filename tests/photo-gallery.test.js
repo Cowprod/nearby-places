@@ -110,5 +110,27 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  const denial=document.body.children.at(-2).children[0].children[5].textContent;
  assert.match(denial,/Accès Photos refusé/);
  denied.close();
- console.log('PASS PhotoKit album gallery: paged IDs, native read-only, thumb and preview, no duplicates, permissions');
+ // iCloud downloads may be slow: launching all 24 thumbnails at once can flood
+ // the Cordova bridge and consume unnecessary image memory. Limit in-flight
+ // native thumbnail requests and discard the pending queue on close.
+ const started=[],pending=[];
+ window.NearbyPhotos.listAlbumAssets=(id,offset,limit,ok)=>ok({exists:true,count:26,offset,ids:ids.slice(offset,offset+limit)});
+ window.NearbyPhotos.thumbnail=(id,ok)=>{
+  started.push(id);
+  pending.push(()=>ok({dataUrl:'data:image/jpeg;base64,delayed'}));
+ };
+ const slow=window.NearbyAlbumGallery.open({id:'slow-icloud',name:'iCloud'});
+ await flush();
+ assert.equal(document.body.children.at(-2).children[0].children[3].children.length,24,
+   'the first album page still renders 24 placeholders');
+ assert.equal(started.length,4,'at most four thumbnail requests start concurrently');
+ pending[0]();await flush();
+ assert.equal(started.length,5,'a completed thumbnail starts exactly one pending request');
+ slow.close();
+ pending.slice(1).forEach(complete=>complete());
+ await flush();
+ assert.equal(started.length,5,'closing the album cancels queued thumbnail launches');
+ assert.equal(window.localStorage.getItem('nearby-place-photo-links-v1'),originalLinks,
+   'throttling thumbnails does not alter photo-place associations');
+ console.log('PASS PhotoKit album gallery: paged IDs, native read-only, thumb and preview, no duplicates, permissions, bounded iCloud thumbnails');
 })().catch(error=>{console.error(error);process.exitCode=1;});
