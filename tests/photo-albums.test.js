@@ -70,8 +70,11 @@ const state={
  });
  bridge.exports.addToAlbum('c-1','Nearby Places — Tokyo',['asset-A'],()=>{},()=>{});
  bridge.exports.renameAlbum('c-1','Nearby Places — Tokyo 2026',()=>{},()=>{});
+ bridge.exports.restoreAlbum('c-1','Nearby Places — Tokyo',['asset-A'],()=>{},()=>{});
  assert.deepEqual(calls[0],{service:'NearbyPhotos',method:'addToAlbum',args:['c-1','Nearby Places — Tokyo',['asset-A']]});
  assert.deepEqual(calls[1],{service:'NearbyPhotos',method:'renameAlbum',args:['c-1','Nearby Places — Tokyo 2026']});
+ assert.deepEqual(calls[2],{service:'NearbyPhotos',method:'addToAlbum',args:['c-1','Nearby Places — Tokyo',['asset-A'],true]},
+  'only explicit restoration passes a native opt-in flag');
  const native=fs.readFileSync('local-plugins/cordova-plugin-nearby-photos/src/ios/NearbyPhotos.m','utf8');
  assert.match(native,/NSMutableOrderedSet<NSString/,'PHPicker deduplicates selected local identifiers');
  assert.match(native,/@"selectedCount"/,'PHPicker reports total selected items');
@@ -200,6 +203,14 @@ const state={
  assert.doesNotMatch(native,/assets\.count!=identifiers\.count/,'a single missing asset must never reject all valid photos');
 
  assert.doesNotMatch(native,/deleteAssetCollections/,'never delete photo albums automatically');
+ const albumAdd=native.split('- (void)addToAlbum:(CDVInvokedUrlCommand *)cmd {')[1].split('- (void)listAlbumAssets:')[0];
+ const albumRename=native.split('- (void)renameAlbum:(CDVInvokedUrlCommand *)cmd {')[1];
+ assert.match(albumAdd,/BOOL allowRestore=cmd\.arguments\.count>3/,'normal album writes do not opt in to restoration');
+ assert.match(albumAdd,/previousAlbumId\.length && !allowRestore/,'deleted albums cannot be recreated on resume');
+ assert.ok(albumAdd.indexOf('previousAlbumId.length && !allowRestore') < albumAdd.indexOf('performChanges:'),
+  'restore gate runs before PhotoKit album creation');
+ assert.doesNotMatch(albumRename,/storeAlbum:nil/,'renaming never discards a deleted album mapping');
+ assert.match(albumRename,/@"missing":@YES/,'missing albums are reported without erasing identity');
  assert.match(native,/if\(!\[self albumLinks\]\[collectionId\]\)/,'rename of never-created albums is a native no-op');
  assert.match(native,/if\(!\[self albumLinks\]\[collectionId\]\)[\s\S]*?withAlbumAuthorization/,'no album means no permission request or empty-album creation');
 
@@ -306,7 +317,8 @@ const state={
  // an empty album or remove any original/association.
  values.set('nearby-collections-v2',JSON.stringify(state));
  const recoveryWrites=[],recoveryLinks=localStorage.getItem('nearby-place-photo-links-v1');
- window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>{
+ window.NearbyPhotos.addToAlbum=()=>{throw Error('regular sync must not be used by explicit recovery');};
+ window.NearbyPhotos.restoreAlbum=(id,title,assetIds,ok)=>{
   recoveryWrites.push({id,title,ids:Array.from(assetIds)});
   ok({collectionId:id,albumId:'restored-'+id,count:assetIds.length,unavailableCount:0});
  };
@@ -318,9 +330,9 @@ const state={
   'restore only the requested album using deduplicated stable PHAsset IDs');
  await assert.rejects(window.NearbyPlacePhotos.restoreCollectionAlbum('c-3'),/Aucune photo associée/);
  assert.equal(recoveryWrites.length,1,'empty albums are never created by restore');
- window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>ok({albumId:'',unavailableCount:assetIds.length,count:0});
+ window.NearbyPhotos.restoreAlbum=(id,title,assetIds,ok)=>ok({albumId:'',unavailableCount:assetIds.length,count:0});
  await assert.rejects(window.NearbyPlacePhotos.restoreCollectionAlbum('c-1'),/Aucune photo associée actuellement accessible/);
- window.NearbyPhotos.addToAlbum=(id,title,assetIds,ok)=>ok({albumId:'restored-c-1',unavailableCount:1,count:1});
+ window.NearbyPhotos.restoreAlbum=(id,title,assetIds,ok)=>ok({albumId:'restored-c-1',unavailableCount:1,count:1});
  const partialRestore=await window.NearbyPlacePhotos.restoreCollectionAlbum('c-1');
  assert.equal(partialRestore.unavailableCount,1,'recover available originals while reporting missing photos');
  assert.equal(localStorage.getItem('nearby-place-photo-links-v1'),recoveryLinks,
