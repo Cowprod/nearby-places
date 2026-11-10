@@ -146,6 +146,29 @@ const state={
  assert.match(albumAuth,/Les associations aux lieux sont conservées/,
    'permission transition reports that links are retained');
 
+ // Authorization can finish after the user backgrounds the app or revokes
+ // access in Settings. Native operations must be gated again when queued on
+ // the main thread; errors retain JS associations for foreground retry.
+ const replyImpl=native.split('- (void)replyTo:')[1].split('- (void)capture:')[0];
+ assert.match(replyImpl,/if\(\[NSThread isMainThread\]\)deliver\(\)/,
+  'immediate Cordova delivery on the UIKit main thread');
+ assert.match(replyImpl,/else dispatch_async\(dispatch_get_main_queue\(\),deliver\)/,
+  'background PhotoKit results return to the UIKit main thread');
+ assert.match(replyImpl,/if\(\[callback isEqualToString:self\.pending\]\)self\.pending=nil/,
+  'late results cannot release a newer native operation');
+ assert.match(albumAuth,/void \(\^runIfStillAuthorized\)\(void\)=\^\{\s*dispatch_async\(dispatch_get_main_queue\(\),\^\{/,
+  'the final authorization check always executes on the main queue');
+ assert.match(albumAuth,/dispatch_async\(dispatch_get_main_queue\(\),\^\{\s*if\(\[UIApplication sharedApplication\]\.applicationState!=UIApplicationStateActive\)/,
+  'a backgrounded app never starts an authorization prompt or a new album write');
+ assert.ok(albumAuth.indexOf('applicationState!=UIApplicationStateActive')<albumAuth.indexOf('PHAuthorizationStatus current='),
+  'foreground is checked before authorization is re-evaluated');
+ assert.ok(albumAuth.indexOf('PHAuthorizationStatus current=')<albumAuth.indexOf('if(current==PHAuthorizationStatusAuthorized){work();return;}'),
+  'PhotoKit writes only follow a fresh permission check');
+ assert.match(albumAuth,/synchronisation Photos reportée au retour\. Les associations aux lieux sont conservées/,
+  'interrupted synchronization is reported without dropping photo-place links');
+ assert.doesNotMatch(albumAuth,/deleteAssets|deleteAssetCollections|storeAlbum:nil/,
+  'authorization errors cannot delete original photos or album mappings');
+
  assert.match(native,/fetchAssetsInAssetCollection:existing/,'native sync inspects existing album membership before adding');
  assert.match(native,/if\(!assetsToAdd\.count&&!needsRename\)/,'repeated reconciliation is a no-op');
  assert.match(native,/if\(needsRename\)change\.title=title/,'reconciliation repairs a missed rename');
