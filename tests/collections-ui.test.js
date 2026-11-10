@@ -141,4 +141,15 @@ assert.equal(typeof lifecycleEvents.resume,'function','Cordova resume handler re
 lifecycleEvents.deviceready();
 lifecycleEvents.resume();
 assert.equal(albumResyncs,2,'startup and resume each retry pending PhotoKit album changes');
-console.log('PASS collections UI: description, open editor, persistence rollback, legacy data and public parity');
+// An unreadable collection store must not cause a stale cached membership
+// snapshot to be applied to PhotoKit on resume. Recovery should permit retry.
+const intactCollections=storage.getItem('nearby-collections-v2');
+storage.setItem('nearby-collections-v2','{invalid-json');
+lifecycleEvents.resume();
+assert.equal(albumResyncs,2,'corrupt collection data blocks stale PhotoKit reconciliation');
+assert.match(feedback.textContent,/Actualisation impossible/,'UI reports unreadable collection data');
+assert.equal(storage.getItem('nearby-collections-v2'),'{invalid-json','resume preserves invalid bytes');
+storage.setItem('nearby-collections-v2',intactCollections);
+lifecycleEvents.resume();
+assert.equal(albumResyncs,3,'PhotoKit reconciliation resumes after local collection recovery');
+console.log('PASS collections UI: description, open editor, persistence rollback, PhotoKit resume guard and public parity');
