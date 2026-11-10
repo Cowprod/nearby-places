@@ -79,6 +79,9 @@
     themeSelect.onchange=function(){try{localStorage.setItem('nearby-appearance-mode',themeSelect.value);}catch(_){}applyAppearance();};
     if(themeMedia){if(themeMedia.addEventListener)themeMedia.addEventListener('change',applyAppearance);else if(themeMedia.addListener)themeMedia.addListener(applyAppearance);}
     applyAppearance();
+    // The settings host is created here; navigator.js runs earlier so its
+    // DOMContentLoaded handler cannot reliably find it.
+    if(window.NearbyNavigator&&window.NearbyNavigator.setup)window.NearbyNavigator.setup();
     var status = document.getElementById('status');
     if (status) {
       status.insertAdjacentElement('afterend',nav);
